@@ -56,6 +56,20 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE',
     })
+
+    User.hasMany(models.Trip, {
+      foreignKey: 'userId',
+      as: 'trips',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.TripParticipant, {
+      foreignKey: 'userId',
+      as: 'tripParticipation',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
   }
 
   return User
