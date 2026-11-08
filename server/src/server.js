@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 const env = require('./config/env')
 const sequelize = require('./config/db')
 const { client, connectRedis } = require('./config/redis')

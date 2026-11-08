@@ -9,7 +9,8 @@
     "db:create": "sequelize-cli db:create",
     "db:drop": "sequelize-cli db:drop",
     "db:migrate": "sequelize-cli db:migrate",
-    "db:migrate:undo": "sequelize-cli db:migrate:undo:all",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:migrate:status": "sequelize-cli db:migrate:status",
     "db:seed": "sequelize-cli db:seed:all",
     "db:seed:undo": "sequelize-cli db:seed:undo:all"
   },

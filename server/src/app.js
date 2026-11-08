@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 const express = require('express')
 const helmet = require('helmet')
 const cors = require('cors')
