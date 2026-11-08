@@ -119,6 +119,34 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE',
     })
+
+    User.hasMany(models.Notification, {
+      foreignKey: 'userId',
+      as: 'notifications',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.Notification, {
+      foreignKey: 'actorId',
+      as: 'triggeredNotifications',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.Report, {
+      foreignKey: 'reporterId',
+      as: 'submittedReports',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.Report, {
+      foreignKey: 'reviewedBy',
+      as: 'reviewedReports',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
+    })
   }
 
   return User
