@@ -16,8 +16,16 @@ client.on('error', (err) => {
 })
 
 const connectRedis = async () => {
-  if (!client.isOpen) {
+  if (client.isOpen) return
+
+  try {
     await client.connect()
+  } catch (err) {
+    const reason = err && err.message ? ` (${err.message})` : ''
+    throw new Error(
+      `Redis is unavailable${reason}. Redis is required for session storage and rate limiting; start Redis and restart the API.`,
+      { cause: err },
+    )
   }
 }
 

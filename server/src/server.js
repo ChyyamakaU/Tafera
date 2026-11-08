@@ -13,9 +13,17 @@ const start = async () => {
 
   try {
     await connectRedis()
+    await client.ping()
     console.log('Redis connected')
   } catch (err) {
     console.error('Redis connection failed:', err.message)
+    console.error(
+      'Tafera cannot start without Redis because sessions use the Redis store. Start Redis and restart the API.',
+    )
+    if (client.isOpen) {
+      client.destroy()
+    }
+    process.exit(1)
   }
 
   // Loaded after Redis is connected so the rate-limit store initializes correctly.
