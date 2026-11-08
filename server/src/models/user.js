@@ -70,6 +70,55 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE',
     })
+
+    User.hasMany(models.Post, {
+      foreignKey: 'userId',
+      as: 'posts',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.Comment, {
+      foreignKey: 'userId',
+      as: 'comments',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.Follow, {
+      foreignKey: 'followerId',
+      as: 'following',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.Follow, {
+      foreignKey: 'followingId',
+      as: 'followers',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.PostLike, {
+      foreignKey: 'userId',
+      as: 'postLikes',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.SavedPost, {
+      foreignKey: 'userId',
+      as: 'savedPosts',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
+    User.hasMany(models.SavedDestination, {
+      foreignKey: 'userId',
+      as: 'savedDestinations',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
   }
 
   return User
