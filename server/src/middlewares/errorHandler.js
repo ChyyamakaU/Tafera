@@ -137,6 +137,17 @@ const normalizeError = (err) => {
   const rawStatus = err.status ?? err.statusCode
   const status = normalizeStatus(Number(rawStatus))
 
+  // Operational overload responses are safe to expose, but never include
+  // stack traces or internal details for them.
+  if (err.code === 'PASSWORD_SERVICE_BUSY' && status === 503) {
+    return {
+      status: 503,
+      code: 'PASSWORD_SERVICE_BUSY',
+      message: 'The password service is temporarily busy. Please try again later.',
+      isPublicServiceError: true,
+    }
+  }
+
   if (err.expose && status < 500) {
     return {
       status,
@@ -212,6 +223,7 @@ const errorHandler = (err, req, res, next) => {
     } else if (
       !normalized.isDatabaseError &&
       !normalized.isBodyParserError &&
+      !normalized.isPublicServiceError &&
       err.details
     ) {
       body.error.details = err.details
@@ -221,7 +233,8 @@ const errorHandler = (err, req, res, next) => {
   if (
     !isProduction &&
     !normalized.isDatabaseError &&
-    !normalized.isBodyParserError
+    !normalized.isBodyParserError &&
+    !normalized.isPublicServiceError
   ) {
     body.error.stack = err.stack
   }

@@ -1,5 +1,7 @@
 'use strict'
 
+const { toSafeUser } = require('../utils/safeUser')
+
 module.exports = (sequelize, DataTypes) => {
   const User = sequelize.define(
     'User',
@@ -46,8 +48,28 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'users',
       underscored: true,
       timestamps: true,
+      // Ordinary queries never load the password hash. Authentication code
+      // must opt in explicitly with User.scope('withPassword').
+      defaultScope: {
+        attributes: {
+          exclude: ['passwordHash'],
+        },
+      },
+      scopes: {
+        withPassword: {
+          attributes: {
+            include: ['passwordHash'],
+          },
+        },
+      },
     },
   )
+
+  // Defence in depth: even an instance loaded through the authentication
+  // scope cannot leak the hash through JSON serialisation.
+  User.prototype.toJSON = function toJSON() {
+    return toSafeUser(this)
+  }
 
   User.associate = (models) => {
     User.hasMany(models.Destination, {

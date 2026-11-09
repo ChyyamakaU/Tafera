@@ -1,6 +1,10 @@
 require('dotenv').config({ quiet: true })
 
 const { z } = require('zod')
+const {
+  ARGON2_AGGREGATE_MEMORY_BUDGET_KIB,
+  ARGON2_CONFIG_LIMITS,
+} = require('./argon2Policy')
 
 const NODE_ENVIRONMENTS = ['development', 'test', 'production']
 const MIN_SECRET_LENGTH = 32
@@ -52,6 +56,23 @@ const optionalPort = (defaultPort) =>
       .refine(
         (value) => value >= 1 && value <= 65535,
         'must be between 1 and 65535',
+      ),
+  )
+
+const boundedInteger = (defaultValue, min, max) =>
+  z.preprocess(
+    (value) => (isPresent(value) ? value : String(defaultValue)),
+    z
+      .string()
+      .trim()
+      .regex(
+        /^\d+$/,
+        `must be an integer between ${min} and ${max}`,
+      )
+      .transform(Number)
+      .refine(
+        (value) => Number.isSafeInteger(value) && value >= min && value <= max,
+        `must be between ${min} and ${max}`,
       ),
   )
 
@@ -170,6 +191,31 @@ const schema = z
     CLOUDINARY_CLOUD_NAME: optionalString('must not be empty'),
     CLOUDINARY_API_KEY: optionalString('must not be empty'),
     CLOUDINARY_API_SECRET: optionalString('must not be empty'),
+    ARGON2_MEMORY_KIB: boundedInteger(
+      19456,
+      ARGON2_CONFIG_LIMITS.memoryMinKib,
+      ARGON2_CONFIG_LIMITS.memoryMaxKib,
+    ),
+    ARGON2_TIME_COST: boundedInteger(
+      2,
+      ARGON2_CONFIG_LIMITS.timeMin,
+      ARGON2_CONFIG_LIMITS.timeMax,
+    ),
+    ARGON2_PARALLELISM: boundedInteger(
+      1,
+      ARGON2_CONFIG_LIMITS.parallelismMin,
+      ARGON2_CONFIG_LIMITS.parallelismMax,
+    ),
+    ARGON2_MAX_CONCURRENCY: boundedInteger(
+      2,
+      ARGON2_CONFIG_LIMITS.concurrencyMin,
+      ARGON2_CONFIG_LIMITS.concurrencyMax,
+    ),
+    ARGON2_MAX_QUEUE: boundedInteger(
+      ARGON2_CONFIG_LIMITS.maxQueueDefault,
+      ARGON2_CONFIG_LIMITS.maxQueueMin,
+      ARGON2_CONFIG_LIMITS.maxQueueMax,
+    ),
   })
   .superRefine((value, ctx) => {
     const usesDatabaseUrl = isPresent(value.DATABASE_URL)
@@ -233,6 +279,28 @@ const schema = z
         }
       }
     }
+
+    if (value.ARGON2_MEMORY_KIB < 8 * value.ARGON2_PARALLELISM) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ARGON2_MEMORY_KIB'],
+        message: 'must be at least 8 KiB per unit of Argon2 parallelism',
+      })
+    }
+
+    const aggregateMemoryKib =
+      value.ARGON2_MEMORY_KIB * value.ARGON2_MAX_CONCURRENCY
+
+    if (aggregateMemoryKib > ARGON2_AGGREGATE_MEMORY_BUDGET_KIB) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ARGON2_MAX_CONCURRENCY'],
+        message:
+          `would exceed the ${ARGON2_AGGREGATE_MEMORY_BUDGET_KIB} KiB ` +
+          'aggregate Argon2 memory budget ' +
+          '(ARGON2_MEMORY_KIB × ARGON2_MAX_CONCURRENCY)',
+      })
+    }
   })
 
 const result = schema.safeParse(process.env)
@@ -278,6 +346,18 @@ module.exports = {
   },
 
   SESSION_SECRET: parsed.SESSION_SECRET,
+
+  PASSWORD: {
+    minLength: 12,
+    maxLength: 128,
+    argon2: {
+      memoryKib: parsed.ARGON2_MEMORY_KIB,
+      timeCost: parsed.ARGON2_TIME_COST,
+      parallelism: parsed.ARGON2_PARALLELISM,
+      maxConcurrency: parsed.ARGON2_MAX_CONCURRENCY,
+      maxQueue: parsed.ARGON2_MAX_QUEUE,
+    },
+  },
 
   CLOUDINARY: {
     cloudName: parsed.CLOUDINARY_CLOUD_NAME || '',
