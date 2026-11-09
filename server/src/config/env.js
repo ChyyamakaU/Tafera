@@ -29,6 +29,18 @@ const isRedisUrl = (value) =>
 const optionalString = (message) =>
   z.preprocess(emptyToUndefined, z.string().trim().min(1, message).optional())
 
+const parseTrustProxy = (value) => {
+  if (!isPresent(value)) return false
+
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === '') return false
+  if (normalized === 'false') return false
+  if (normalized === 'true') return true
+  if (/^\d+$/.test(normalized)) return Number(normalized)
+
+  return value
+}
+
 const optionalPort = (defaultPort) =>
   z.preprocess(
     (value) => (isPresent(value) ? value : String(defaultPort)),
@@ -77,6 +89,25 @@ const schema = z
         .default('development'),
     ),
     PORT: optionalPort(5001),
+    TRUST_PROXY: z.preprocess(
+      parseTrustProxy,
+      z.union(
+        [
+          z.boolean(),
+          z
+            .number()
+            .int()
+            .min(
+              0,
+              'must be false, true, or a non-negative integer hop count',
+            ),
+        ],
+        {
+          message:
+            'must be false, true, or a non-negative integer hop count',
+        },
+      ),
+    ),
     CLIENT_URL: z.preprocess(
       emptyToUndefined,
       z.string().trim().url('must be a valid URL').optional(),
@@ -223,6 +254,7 @@ const parsed = result.data
 module.exports = {
   NODE_ENV: parsed.NODE_ENV,
   PORT: parsed.PORT,
+  TRUST_PROXY: parsed.TRUST_PROXY,
   CLIENT_URL: parsed.CLIENT_URL || 'http://localhost:5173',
 
   DB: {
