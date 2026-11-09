@@ -20,6 +20,20 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
+        set(value) {
+          if (typeof value === 'string') {
+            this.setDataValue('email', value.trim().toLowerCase())
+            return
+          }
+
+          // Let validation reject non-string values rather than coercing them
+          // into a valid-looking address.
+          this.setDataValue('email', value)
+        },
+        validate: {
+          notEmpty: true,
+          isEmail: true,
+        },
       },
       passwordHash: {
         type: DataTypes.STRING,
@@ -42,6 +56,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('active', 'suspended'),
         allowNull: false,
         defaultValue: 'active',
+      },
+      authVersion: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+      },
+      emailVerifiedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null,
       },
     },
     {
