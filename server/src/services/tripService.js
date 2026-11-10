@@ -18,6 +18,8 @@ const {
 const {
   TripDatesConflictError,
   TripNotFoundError,
+  TripParticipantLimitConflictError,
+  TripParticipationStateConflictError,
   TripStopExistsError,
   TripStopNotFoundError,
   TripStopOrderConflictError,
@@ -82,6 +84,7 @@ const validateStopDates = (trip, { arrivalDate, departureDate }) => {
 const createTripService = ({
   Trip,
   TripDestination,
+  TripParticipant,
   Destination,
   DestinationImage,
   sequelize,
@@ -89,6 +92,8 @@ const createTripService = ({
   const tripModel = Trip || require('../models').Trip
   const stopModel =
     TripDestination || require('../models').TripDestination
+  const participantModel =
+    TripParticipant || require('../models').TripParticipant
   const destinationModel =
     Destination || require('../models').Destination
   const imageModel =
@@ -277,6 +282,42 @@ const createTripService = ({
 
         if (conflictingStop) {
           throw new TripDatesConflictError()
+        }
+      }
+
+      // Capacity is defined by approved joiners only. The owner has no
+      // participation row, so ownership never consumes a slot.
+      if (
+        input.maxParticipants !== undefined &&
+        input.maxParticipants !== null
+      ) {
+        const approvedCount = await participantModel.count({
+          where: { tripId, status: 'approved' },
+          transaction,
+        })
+
+        if (Number(approvedCount) > Number(input.maxParticipants)) {
+          throw new TripParticipantLimitConflictError()
+        }
+      }
+
+      // Pending requests are active membership intent, so they also block a
+      // group trip from becoming personal. Rejected and cancelled history does
+      // not.
+      if (
+        input.tripType === 'personal' &&
+        trip.tripType === 'group'
+      ) {
+        const activeCount = await participantModel.count({
+          where: {
+            tripId,
+            status: { [Op.in]: ['pending', 'approved'] },
+          },
+          transaction,
+        })
+
+        if (Number(activeCount) > 0) {
+          throw new TripParticipationStateConflictError()
         }
       }
 

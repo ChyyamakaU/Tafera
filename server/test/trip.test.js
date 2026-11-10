@@ -28,6 +28,8 @@ const {
 const {
   TripDatesConflictError,
   TripNotFoundError,
+  TripParticipantLimitConflictError,
+  TripParticipationStateConflictError,
   TripStopExistsError,
   TripStopNotFoundError,
   TripStopOrderConflictError,
@@ -168,11 +170,17 @@ const createService = (overrides = {}) => {
       return { id: '30000000-0000-4000-8000-000000000001' }
     },
   }
+  const TripParticipant = overrides.TripParticipant || {
+    async count() {
+      assert.fail('TripParticipant.count was not expected')
+    },
+  }
 
   return {
     service: createTripService({
       Trip,
       TripDestination,
+      TripParticipant,
       Destination,
       DestinationImage: {},
       sequelize: fakeSequelize,
@@ -669,6 +677,277 @@ test('updateTrip writes validated fields through the owner scope', async () => {
     userId: 'owner-1',
   })
 })
+
+const createUpdateGuardService = ({
+  trip = {},
+  participants = [],
+} = {}) => {
+  const calls = {
+    tripFindOne: [],
+    counts: [],
+    updates: [],
+  }
+  const { service, fakeSequelize } = createService({
+    Trip: {
+      async findOne(options) {
+        calls.tripFindOne.push(options)
+        if (options.include) {
+          return buildTrip({ ...trip, destinations: [] })
+        }
+        return buildTrip(trip)
+      },
+      async update(values, options) {
+        calls.updates.push({ values, options })
+      },
+    },
+    TripDestination: {
+      async findOne() {
+        return null
+      },
+    },
+    TripParticipant: {
+      async count(options) {
+        calls.counts.push(options)
+        const { where } = options
+
+        if (where.status === 'approved') {
+          return participants.filter(
+            (participant) => participant.status === 'approved',
+          ).length
+        }
+
+        if (where.status && Array.isArray(where.status[Op.in])) {
+          return participants.filter((participant) =>
+            where.status[Op.in].includes(participant.status),
+          ).length
+        }
+
+        return participants.length
+      },
+    },
+  })
+
+  return { service, calls, fakeSequelize }
+}
+
+test('updateTrip rejects a maxParticipants limit below the approved count', async () => {
+  const { service, calls, fakeSequelize } = createUpdateGuardService({
+    trip: { tripType: 'group', maxParticipants: 5 },
+    participants: [
+      { status: 'approved' },
+      { status: 'approved' },
+      { status: 'approved' },
+      { status: 'pending' },
+    ],
+  })
+
+  await assert.rejects(
+    service.updateTrip('owner-1', 'trip-1', { maxParticipants: 2 }),
+    (error) => {
+      assert.ok(error instanceof TripParticipantLimitConflictError)
+      assert.equal(error.code, 'TRIP_PARTICIPANT_LIMIT_CONFLICT')
+      assert.equal(error.status, 409)
+      assert.equal(error.expose, true)
+      return true
+    },
+  )
+
+  assert.equal(calls.updates.length, 0)
+  assert.equal(calls.counts.length, 1)
+  assert.deepEqual(calls.counts[0].where, {
+    tripId: 'trip-1',
+    status: 'approved',
+  })
+  assert.equal(calls.tripFindOne[0].lock, 'UPDATE')
+  assert.equal(
+    calls.counts[0].transaction,
+    fakeSequelize.transactions[0],
+  )
+})
+
+test('updateTrip allows a maxParticipants limit equal to the approved count', async () => {
+  const { service, calls, fakeSequelize } = createUpdateGuardService({
+    trip: { tripType: 'group', maxParticipants: 5 },
+    participants: [
+      { status: 'approved' },
+      { status: 'approved' },
+      { status: 'approved' },
+    ],
+  })
+
+  await service.updateTrip('owner-1', 'trip-1', {
+    maxParticipants: 3,
+  })
+
+  assert.deepEqual(calls.updates[0].values, { maxParticipants: 3 })
+  assert.equal(
+    calls.updates[0].options.transaction,
+    fakeSequelize.transactions[0],
+  )
+  assert.equal(calls.counts.length, 1)
+})
+
+test('updateTrip allows increasing maxParticipants', async () => {
+  const { service, calls } = createUpdateGuardService({
+    trip: { tripType: 'group', maxParticipants: 5 },
+    participants: [
+      { status: 'approved' },
+      { status: 'approved' },
+      { status: 'approved' },
+    ],
+  })
+
+  await service.updateTrip('owner-1', 'trip-1', {
+    maxParticipants: 10,
+  })
+
+  assert.deepEqual(calls.updates[0].values, { maxParticipants: 10 })
+})
+
+test('updateTrip treats a null maxParticipants as unlimited', async () => {
+  const { service, calls } = createUpdateGuardService({
+    trip: { tripType: 'group', maxParticipants: 2 },
+    participants: [
+      { status: 'approved' },
+      { status: 'approved' },
+      { status: 'approved' },
+    ],
+  })
+
+  await service.updateTrip('owner-1', 'trip-1', {
+    maxParticipants: null,
+  })
+
+  assert.deepEqual(calls.updates[0].values, { maxParticipants: null })
+  assert.equal(calls.counts.length, 0)
+})
+
+test('updateTrip capacity ignores pending, rejected, cancelled and the owner', async () => {
+  const { service, calls } = createUpdateGuardService({
+    trip: { tripType: 'group', maxParticipants: 5 },
+    participants: [
+      { status: 'approved' },
+      { status: 'pending' },
+      { status: 'rejected' },
+      { status: 'cancelled' },
+    ],
+  })
+
+  await service.updateTrip('owner-1', 'trip-1', {
+    maxParticipants: 1,
+  })
+
+  assert.deepEqual(calls.updates[0].values, { maxParticipants: 1 })
+  assert.deepEqual(calls.counts[0].where, {
+    tripId: 'trip-1',
+    status: 'approved',
+  })
+  assert.equal(Object.hasOwn(calls.counts[0].where, 'userId'), false)
+})
+
+test('updateTrip blocks group-to-personal changes with pending participants', async () => {
+  const { service, calls, fakeSequelize } = createUpdateGuardService({
+    trip: { tripType: 'group' },
+    participants: [{ status: 'pending' }],
+  })
+
+  await assert.rejects(
+    service.updateTrip('owner-1', 'trip-1', { tripType: 'personal' }),
+    (error) => {
+      assert.ok(error instanceof TripParticipationStateConflictError)
+      assert.equal(
+        error.code,
+        'TRIP_PARTICIPATION_STATE_CONFLICT',
+      )
+      assert.equal(error.status, 409)
+      return true
+    },
+  )
+
+  assert.equal(calls.updates.length, 0)
+  assert.deepEqual(calls.counts[0].where, {
+    tripId: 'trip-1',
+    status: { [Op.in]: ['pending', 'approved'] },
+  })
+  assert.equal(
+    calls.counts[0].transaction,
+    fakeSequelize.transactions[0],
+  )
+})
+
+test('updateTrip blocks group-to-personal changes with approved participants', async () => {
+  const { service, calls } = createUpdateGuardService({
+    trip: { tripType: 'group' },
+    participants: [{ status: 'approved' }],
+  })
+
+  await assert.rejects(
+    service.updateTrip('owner-1', 'trip-1', { tripType: 'personal' }),
+    (error) => {
+      assert.ok(error instanceof TripParticipationStateConflictError)
+      assert.equal(
+        error.code,
+        'TRIP_PARTICIPATION_STATE_CONFLICT',
+      )
+      return true
+    },
+  )
+
+  assert.equal(calls.updates.length, 0)
+})
+
+test('updateTrip allows group-to-personal changes with only rejected or cancelled history', async () => {
+  const { service, calls } = createUpdateGuardService({
+    trip: { tripType: 'group' },
+    participants: [
+      { status: 'rejected' },
+      { status: 'cancelled' },
+    ],
+  })
+
+  await service.updateTrip('owner-1', 'trip-1', {
+    tripType: 'personal',
+  })
+
+  assert.deepEqual(calls.updates[0].values, { tripType: 'personal' })
+  assert.deepEqual(calls.counts[0].where, {
+    tripId: 'trip-1',
+    status: { [Op.in]: ['pending', 'approved'] },
+  })
+})
+
+test('updateTrip preserves existing personal trip changes', async () => {
+  const personal = createUpdateGuardService({
+    trip: { tripType: 'personal' },
+    participants: [{ status: 'pending' }],
+  })
+
+  await personal.service.updateTrip('owner-1', 'trip-1', {
+    tripType: 'personal',
+    title: 'Still personal',
+  })
+
+  assert.deepEqual(personal.calls.updates[0].values, {
+    tripType: 'personal',
+    title: 'Still personal',
+  })
+  assert.equal(personal.calls.counts.length, 0)
+
+  const toGroup = createUpdateGuardService({
+    trip: { tripType: 'personal' },
+    participants: [{ status: 'pending' }],
+  })
+
+  await toGroup.service.updateTrip('owner-1', 'trip-1', {
+    tripType: 'group',
+  })
+
+  assert.deepEqual(toGroup.calls.updates[0].values, {
+    tripType: 'group',
+  })
+  assert.equal(toGroup.calls.counts.length, 0)
+})
+
 
 test('addStop assigns the next order and stores normalized dates', async () => {
   let created = null

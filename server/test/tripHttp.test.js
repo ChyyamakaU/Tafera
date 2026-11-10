@@ -599,6 +599,7 @@ const createHarness = async () => {
       tripService: createTripService({
         Trip,
         TripDestination,
+        TripParticipant,
         Destination,
         DestinationImage,
         sequelize: scoped,
