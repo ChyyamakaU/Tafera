@@ -94,6 +94,18 @@ class ValidationError extends AuthError {
   }
 }
 
+class EmailVerificationRequiredError extends AuthError {
+  constructor() {
+    super({
+      message:
+        'Please verify your email address before performing this action.',
+      code: 'EMAIL_VERIFICATION_REQUIRED',
+      status: 403,
+    })
+    this.name = 'EmailVerificationRequiredError'
+  }
+}
+
 class VerificationTokenInvalidError extends AuthError {
   constructor() {
     super({
@@ -126,6 +138,7 @@ module.exports = {
   EmailInUseError,
   CsrfError,
   ValidationError,
+  EmailVerificationRequiredError,
   VerificationTokenInvalidError,
   VerificationResendRateLimitedError,
 }

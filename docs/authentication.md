@@ -249,6 +249,81 @@ A decision is required on the email provider and its credentials before
 production verification emails can be delivered. No provider was installed or
 configured in this stage.
 
+## Verified-account enforcement
+
+Unverified accounts can register, sign in, read `/api/auth/me`, request another
+verification email, verify their email and browse public content. State-changing
+community actions require a verified email.
+
+The reusable guard lives in
+`server/src/middlewares/requireVerifiedEmail.js`:
+
+```js
+const {
+  createRequireVerifiedEmail,
+} = require('../middlewares/requireVerifiedEmail')
+
+const requireVerifiedEmail = createRequireVerifiedEmail({ User })
+
+router.post(
+  '/posts',
+  authenticate,
+  csrfProtection,
+  requireVerifiedEmail,
+  controller.createPost,
+)
+```
+
+The guard must run **after** `authenticate`. It never authenticates a request
+by itself: a request without `req.auth.userId` is rejected with
+`401 AUTH_REQUIRED`. It re-reads the user's `email_verified_at` from PostgreSQL
+on every request, so:
+
+- A newly verified user can perform protected actions immediately, without
+  logging out and back in.
+- A revoked verification blocks the same session on its next request.
+- An `emailVerified` value in the request body, a custom header or the session
+  is never trusted.
+
+Unverified requests receive a consistent response:
+
+```json
+{
+  "error": {
+    "code": "EMAIL_VERIFICATION_REQUIRED",
+    "message": "Please verify your email address before performing this action.",
+    "status": 403
+  }
+}
+```
+
+Recommended ordering for protected write routes:
+`authenticate` → `csrfProtection` → `requireVerifiedEmail` → controller. This
+keeps authentication and CSRF failures unchanged and applies verification only
+after both have passed.
+
+### Current route coverage
+
+The backend currently exposes only the authentication and health routes. It
+does **not** yet implement community HTTP routers for posts, comments, follows
+or trips. Once those routers are added, the guard must be attached to their
+write actions, including at minimum:
+
+| Action | Intended route |
+|---|---|
+| Create a post | `POST /api/posts` |
+| Comment on a post | `POST /api/posts/:postId/comments` |
+| Follow a user | `POST /api/users/:userId/follow` |
+| Create a trip | `POST /api/trips` |
+| Join a trip | `POST /api/trips/:tripId/join` |
+
+Public reads (feed, profiles, destinations, post and trip detail) must remain
+unauthenticated unless they already require a session for another reason.
+Because the community routers do not exist yet, there is no production route to
+guard in this stage. The middleware and its integration contract are ready; the
+enforcement tests exercise the real authentication, CSRF and verified-email
+stack against representative routes.
+
 ## CSRF flow
 
 Tafera uses a session-bound synchroniser token:
@@ -348,6 +423,7 @@ cleanup cannot leave a usable authenticated session behind.
 | 401 | `INVALID_CREDENTIALS` | Unknown email or wrong password |
 | 403 | `ACCOUNT_INACTIVE` | Suspended account |
 | 403 | `CSRF_TOKEN_INVALID` | Missing/invalid CSRF token |
+| 403 | `EMAIL_VERIFICATION_REQUIRED` | Verified email required for this community action |
 | 409 | `EMAIL_IN_USE` | Email already registered |
 | 429 | `EMAIL_VERIFICATION_RATE_LIMITED` | Resend cooldown or rate limit exceeded |
 | 503 | `EMAIL_DELIVERY_UNAVAILABLE` | No transport configured or delivery failed |

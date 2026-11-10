@@ -35,6 +35,15 @@ const {
 const {
   createSessionPolicy,
 } = require('../src/middlewares/sessionPolicy')
+const {
+  createAuthenticate,
+} = require('../src/middlewares/authenticate')
+const {
+  createCsrfProtection,
+} = require('../src/middlewares/csrfProtection')
+const {
+  createRequireVerifiedEmail,
+} = require('../src/middlewares/requireVerifiedEmail')
 const { createAuthService } = require('../src/services/authService')
 const { createAuthRouter } = require('../src/routes/auth')
 const { createEmailService } = require('../src/services/emailService')
@@ -399,6 +408,7 @@ const createHarness = async ({
   const index = createSessionIndex({ client: redisClient, namespace })
   const nodeEnv = 'development'
   const sentEmails = []
+  const actionCalls = []
   const transport =
     emailTransport === undefined
       ? {
@@ -453,6 +463,47 @@ const createHarness = async ({
   )
   app.use(createSessionPolicy({ nodeEnv, index }))
 
+  // Representative community routes. The production API does not expose
+  // community endpoints yet; this test-only router exercises the real
+  // authenticate, CSRF and verified-email middleware stack that every
+  // protected community write route must use.
+  const authenticate = createAuthenticate({ User, sessions, nodeEnv })
+  const csrfProtection = createCsrfProtection()
+  const requireVerifiedEmail = createRequireVerifiedEmail({ User })
+  const community = express.Router()
+
+  community.get('/feed', (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .status(200)
+      .json({ data: { items: [] } })
+  })
+
+  const protectedAction = (action) => (req, res) => {
+    actionCalls.push(action)
+    res
+      .set('Cache-Control', 'no-store')
+      .status(201)
+      .json({ data: { action, userId: req.user.id } })
+  }
+
+  const protect = (path, action) =>
+    community.post(
+      path,
+      authenticate,
+      csrfProtection,
+      requireVerifiedEmail,
+      protectedAction(action),
+    )
+
+  protect('/posts', 'create_post')
+  protect('/posts/:postId/comments', 'comment')
+  protect('/users/:userId/follow', 'follow')
+  protect('/trips', 'create_trip')
+  protect('/trips/:tripId/join', 'join_trip')
+
+  app.use('/api/community', community)
+
   const authService = createAuthService({
     User,
     sessions,
@@ -484,6 +535,7 @@ const createHarness = async ({
     namespace,
     index,
     sentEmails,
+    actionCalls,
     verificationService,
     port: server.address().port,
     client: () => createHttpClient(server.address().port),
@@ -1495,6 +1547,359 @@ test('resend reports unavailable when no email provider is configured', async (t
     assert.equal(resend.status, 503)
     assert.equal(resend.body.error.code, 'EMAIL_DELIVERY_UNAVAILABLE')
     assert.equal(harness.sentEmails.length, 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+// Mirrors the protected community actions listed for verified-account
+// enforcement. The production API has no community routers yet, so these
+// paths are mounted by the test harness with the real authenticate, CSRF and
+// requireVerifiedEmail middleware.
+const PROTECTED_COMMUNITY_ACTIONS = [
+  ['/api/community/posts', { content: 'A new post' }, 'create_post'],
+  [
+    '/api/community/posts/00000000-0000-0000-0000-000000000001/comments',
+    { content: 'A comment' },
+    'comment',
+  ],
+  [
+    '/api/community/users/00000000-0000-0000-0000-000000000002/follow',
+    {},
+    'follow',
+  ],
+  ['/api/community/trips', { title: 'A trip' }, 'create_trip'],
+  [
+    '/api/community/trips/00000000-0000-0000-0000-000000000003/join',
+    {},
+    'join_trip',
+  ],
+]
+
+test('verified users can perform every protected community action', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+    assert.equal(response.status, 201)
+
+    const token = verificationTokenFrom(harness.sentEmails[0])
+    assert.equal((await verifyEmail(harness.client(), token)).status, 200)
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.ok(user.emailVerifiedAt instanceof Date)
+
+    for (const [path, body, action] of PROTECTED_COMMUNITY_ACTIONS) {
+      const result = await client.post(path, body)
+
+      assert.equal(
+        result.status,
+        201,
+        `${action} failed: ${JSON.stringify(result.body)}`,
+      )
+      assert.equal(result.body.data.action, action)
+      assert.equal(result.body.data.userId, user.id)
+    }
+
+    // Protected actions do not create additional sessions.
+    assert.equal(await harness.index.countSessions(user.id), 1)
+    assert.deepEqual(
+      harness.actionCalls,
+      PROTECTED_COMMUNITY_ACTIONS.map(([, , action]) => action),
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('unverified users are blocked from every protected action with a consistent error', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.user.emailVerified, false)
+
+    const errors = []
+
+    for (const [path, body, action] of PROTECTED_COMMUNITY_ACTIONS) {
+      const result = await client.post(path, body)
+
+      assert.equal(result.status, 403, `${action} was not blocked`)
+      errors.push({
+        code: result.body.error.code,
+        message: result.body.error.message,
+        status: result.body.error.status,
+      })
+    }
+
+    for (const error of errors) {
+      assert.deepEqual(error, {
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message:
+          'Please verify your email address before performing this action.',
+        status: 403,
+      })
+    }
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.equal(user.emailVerifiedAt, null)
+    assert.equal(harness.actionCalls.length, 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('unverified users can register, log in, read their account and browse public content', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.user.emailVerified, false)
+
+    const feed = await client.get('/api/community/feed')
+    assert.equal(feed.status, 200)
+
+    const me = await client.get('/api/auth/me')
+    assert.equal(me.status, 200)
+    assert.equal(me.body.data.user.emailVerified, false)
+
+    // An unverified account may still request another verification email.
+    const resend = await resendVerification(client)
+    assert.equal(resend.status, 202)
+
+    const logout = await client.post('/api/auth/logout')
+    assert.equal(logout.status, 204)
+
+    // Logging in again is allowed while still unverified.
+    const login = await loginUser(client, 'ada@example.com')
+    assert.equal(login.response.status, 200)
+    assert.equal(login.response.body.data.user.emailVerified, false)
+
+    const afterLoginMe = await client.get('/api/auth/me')
+    assert.equal(afterLoginMe.status, 200)
+    assert.equal(afterLoginMe.body.data.user.emailVerified, false)
+
+    const afterLoginFeed = await client.get('/api/community/feed')
+    assert.equal(afterLoginFeed.status, 200)
+
+    const blocked = await client.post('/api/community/posts', {
+      content: 'Still unverified',
+    })
+    assert.equal(blocked.status, 403)
+    assert.equal(
+      blocked.body.error.code,
+      'EMAIL_VERIFICATION_REQUIRED',
+    )
+
+    // The verification endpoint remains available to the unverified account.
+    const latestToken = verificationTokenFrom(
+      harness.sentEmails[harness.sentEmails.length - 1],
+    )
+    const verified = await verifyEmail(harness.client(), latestToken)
+    assert.equal(verified.status, 200)
+
+    const meAfterVerification = await client.get('/api/auth/me')
+    assert.equal(meAfterVerification.status, 200)
+    assert.equal(meAfterVerification.body.data.user.emailVerified, true)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('verification changes take effect immediately from the database without re-login', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+
+    const token = verificationTokenFrom(harness.sentEmails[0])
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+
+    const before = await client.post('/api/community/posts', {
+      content: 'Before verification',
+    })
+    assert.equal(before.status, 403)
+    assert.equal(before.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
+
+    // Verified through a separate client that has no session. The original
+    // session must pick up the change without logging in again.
+    assert.equal((await verifyEmail(harness.client(), token)).status, 200)
+
+    const after = await client.post('/api/community/posts', {
+      content: 'After verification',
+    })
+    assert.equal(after.status, 201)
+
+    // Revoking the verification directly in PostgreSQL must block the same
+    // session on its very next request.
+    await User.update(
+      { emailVerifiedAt: null },
+      { where: { id: user.id } },
+    )
+
+    const revoked = await client.post('/api/community/posts', {
+      content: 'Verification revoked',
+    })
+    assert.equal(revoked.status, 403)
+    assert.equal(revoked.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
+
+    // Restoring it (for example by a verification completed elsewhere) must
+    // grant access immediately as well.
+    await User.update(
+      { emailVerifiedAt: new Date() },
+      { where: { id: user.id } },
+    )
+
+    const restored = await client.post('/api/community/posts', {
+      content: 'Verification restored',
+    })
+    assert.equal(restored.status, 201)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('unauthenticated users receive AUTH_REQUIRED for protected actions', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const anonymous = harness.client()
+
+    for (const [path, body, action] of PROTECTED_COMMUNITY_ACTIONS) {
+      const result = await anonymous.post(path, body, { csrf: false })
+
+      assert.equal(result.status, 401, `${action} was not rejected`)
+      assert.equal(result.body.error.code, 'AUTH_REQUIRED')
+    }
+
+    assert.equal(harness.actionCalls.length, 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('frontend-supplied verification status is never trusted', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+
+    const forgedTimestamp = new Date().toISOString()
+    const response = await request({
+      port: harness.port,
+      method: 'POST',
+      path: '/api/community/posts',
+      headers: {
+        Cookie: client.cookie,
+        'X-CSRF-Token': client.csrfToken,
+        'X-Email-Verified': 'true',
+        'X-Email-Verified-At': forgedTimestamp,
+      },
+      body: {
+        content: 'Forged verification',
+        emailVerified: true,
+        emailVerifiedAt: forgedTimestamp,
+      },
+    })
+
+    assert.equal(response.status, 403)
+    assert.equal(
+      response.body.error.code,
+      'EMAIL_VERIFICATION_REQUIRED',
+    )
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.equal(user.emailVerifiedAt, null)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('protected actions still require CSRF and a valid session', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+
+    const token = verificationTokenFrom(harness.sentEmails[0])
+    assert.equal((await verifyEmail(harness.client(), token)).status, 200)
+
+    const missingCsrf = await client.post(
+      '/api/community/posts',
+      { content: 'No CSRF' },
+      { csrf: false },
+    )
+    assert.equal(missingCsrf.status, 403)
+    assert.equal(missingCsrf.body.error.code, 'CSRF_TOKEN_INVALID')
+
+    const invalidCsrf = await client.post(
+      '/api/community/posts',
+      { content: 'Wrong CSRF' },
+      { csrf: 'not-the-real-token' },
+    )
+    assert.equal(invalidCsrf.status, 403)
+    assert.equal(invalidCsrf.body.error.code, 'CSRF_TOKEN_INVALID')
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    await User.update({ authVersion: 77 }, { where: { id: user.id } })
+
+    const revoked = await client.post('/api/community/posts', {
+      content: 'Revoked session',
+    })
+    assert.equal(revoked.status, 401)
+    assert.equal(revoked.body.error.code, 'SESSION_INVALID')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the verified-email guard does not authenticate requests by itself', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const app = express()
+    app.use(express.json())
+    app.use(cookieParser())
+    app.use(
+      createRequireVerifiedEmail({ User }),
+    )
+    app.post('/api/community/posts', (req, res) => {
+      res.status(201).json({ data: { userId: req.user.id } })
+    })
+    app.use(errorHandler)
+
+    const server = await startServer(app)
+
+    try {
+      const response = await request({
+        port: server.address().port,
+        method: 'POST',
+        path: '/api/community/posts',
+        body: { content: 'No session', emailVerified: true },
+      })
+
+      assert.equal(response.status, 401)
+      assert.equal(response.body.error.code, 'AUTH_REQUIRED')
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   } finally {
     await harness.close()
   }
