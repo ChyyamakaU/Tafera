@@ -46,6 +46,8 @@ const {
 } = require('../src/middlewares/requireVerifiedEmail')
 const { createAuthService } = require('../src/services/authService')
 const { createAuthRouter } = require('../src/routes/auth')
+const { createUsersRouter } = require('../src/routes/users')
+const { createProfileService } = require('../src/services/profileService')
 const { createEmailService } = require('../src/services/emailService')
 const {
   createEmailVerificationService,
@@ -363,6 +365,8 @@ const createHttpClient = (port) => {
   return {
     get: (path, options) => send('GET', path, options),
     post: (path, body, options = {}) => send('POST', path, { ...options, body }),
+    patch: (path, body, options = {}) =>
+      send('PATCH', path, { ...options, body }),
     get cookie() {
       return cookie
     },
@@ -525,6 +529,15 @@ const createHarness = async ({
         limit: 3,
         ...resendRateLimit,
       },
+    }),
+  )
+  app.use(
+    '/api/users',
+    createUsersRouter({
+      profileService: createProfileService({ User }),
+      sessions,
+      nodeEnv,
+      User,
     }),
   )
   app.use(errorHandler)
@@ -1900,6 +1913,424 @@ test('the verified-email guard does not authenticate requests by itself', async 
     } finally {
       await new Promise((resolve) => server.close(resolve))
     }
+  } finally {
+    await harness.close()
+  }
+})
+
+test('authenticated users can retrieve their own profile', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      fullName: 'Ada Lovelace',
+      bio: 'Mathematician',
+      profileImage: 'https://example.com/ada.png',
+      emailVerifiedAt: new Date(),
+    })
+    const client = harness.client()
+    const login = await loginUser(client, user.email)
+    assert.equal(login.response.status, 200)
+
+    const response = await client.get('/api/users/me')
+
+    assert.equal(response.status, 200)
+    const profile = response.body.data.user
+    assert.equal(profile.id, user.id)
+    assert.equal(profile.email, 'ada@example.com')
+    assert.equal(profile.fullName, 'Ada Lovelace')
+    assert.equal(profile.bio, 'Mathematician')
+    assert.equal(profile.profileImage, 'https://example.com/ada.png')
+    assert.equal(profile.role, 'user')
+    assert.equal(profile.status, 'active')
+    assert.equal(profile.emailVerified, true)
+
+    assert.deepEqual(
+      Object.keys(profile).sort(),
+      [
+        'bio',
+        'createdAt',
+        'email',
+        'emailVerified',
+        'fullName',
+        'id',
+        'profileImage',
+        'role',
+        'status',
+        'updatedAt',
+      ].sort(),
+    )
+
+    for (const sensitive of [
+      'passwordHash',
+      'password_hash',
+      'authVersion',
+      'emailVerifiedAt',
+    ]) {
+      assert.equal(Object.hasOwn(profile, sensitive), false)
+    }
+  } finally {
+    await harness.close()
+  }
+})
+
+test('authenticated users can update their own profile with permitted fields only', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      fullName: 'Ada Lovelace',
+      emailVerifiedAt: new Date(),
+    })
+    const client = harness.client()
+    await loginUser(client, user.email)
+
+    const update = await client.patch('/api/users/me', {
+      fullName: '  Ada Byron  ',
+      bio: '  Poet and mathematician  ',
+      profileImage: 'https://example.com/ada-new.png',
+    })
+
+    assert.equal(update.status, 200)
+    assert.equal(update.body.data.user.fullName, 'Ada Byron')
+    assert.equal(update.body.data.user.bio, 'Poet and mathematician')
+    assert.equal(
+      update.body.data.user.profileImage,
+      'https://example.com/ada-new.png',
+    )
+
+    const reloaded = await User.findByPk(user.id)
+    assert.equal(reloaded.fullName, 'Ada Byron')
+    assert.equal(reloaded.bio, 'Poet and mathematician')
+    assert.equal(
+      reloaded.profileImage,
+      'https://example.com/ada-new.png',
+    )
+    assert.equal(await harness.index.countSessions(user.id), 1)
+
+    const cleared = await client.patch('/api/users/me', {
+      bio: null,
+      profileImage: '',
+    })
+
+    assert.equal(cleared.status, 200)
+    assert.equal(cleared.body.data.user.bio, null)
+    assert.equal(cleared.body.data.user.profileImage, null)
+    assert.equal(cleared.body.data.user.fullName, 'Ada Byron')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('profile endpoints reject unauthenticated access', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const anonymous = harness.client()
+
+    const me = await anonymous.get('/api/users/me')
+    assert.equal(me.status, 401)
+    assert.equal(me.body.error.code, 'AUTH_REQUIRED')
+
+    const update = await anonymous.patch(
+      '/api/users/me',
+      { fullName: 'Anonymous' },
+      { csrf: false },
+    )
+    assert.equal(update.status, 401)
+    assert.equal(update.body.error.code, 'AUTH_REQUIRED')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('invalid profile updates are rejected without changing the account', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      emailVerifiedAt: new Date(),
+    })
+    const client = harness.client()
+    await loginUser(client, user.email)
+
+    const cases = [
+      [{ fullName: 'A' }, 'fullName'],
+      [{ fullName: 42 }, 'fullName'],
+      [{ fullName: 'x'.repeat(101) }, 'fullName'],
+      [{ bio: 'x'.repeat(501) }, 'bio'],
+      [{ bio: 42 }, 'bio'],
+      [{ profileImage: 'not-a-url' }, 'profileImage'],
+      [{ profileImage: 'ftp://example.com/a.png' }, 'profileImage'],
+      [{ role: 'admin' }, 'request'],
+      [{}, 'request'],
+    ]
+
+    for (const [body, field] of cases) {
+      const response = await client.patch('/api/users/me', body)
+
+      assert.equal(response.status, 400)
+      assert.equal(response.body.error.code, 'VALIDATION_ERROR')
+      assert.equal(
+        response.body.error.details.some(
+          (detail) => detail.field === field,
+        ),
+        true,
+        `expected a ${field} error for ${JSON.stringify(body)}`,
+      )
+    }
+
+    const reloaded = await User.findByPk(user.id)
+    assert.equal(reloaded.fullName, 'Ada Lovelace')
+    assert.equal(reloaded.role, 'user')
+    assert.equal(reloaded.status, 'active')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('protected fields and other users cannot be modified through a profile update', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      fullName: 'Ada Lovelace',
+      authVersion: 4,
+      emailVerifiedAt: new Date(),
+    })
+    const other = await createUser({
+      email: 'grace@example.com',
+      fullName: 'Other User',
+    })
+    const before = await User.scope('withPassword').findByPk(user.id)
+
+    const client = harness.client()
+    await loginUser(client, user.email)
+
+    const response = await client.patch('/api/users/me', {
+      fullName: 'Ada Byron',
+      role: 'admin',
+      status: 'suspended',
+      email: 'attacker@example.com',
+      emailVerifiedAt: null,
+      authVersion: 999,
+      passwordHash: 'replaced',
+      id: other.id,
+      userId: other.id,
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.user.fullName, 'Ada Byron')
+
+    const after = await User.scope('withPassword').findByPk(user.id)
+    assert.equal(after.fullName, 'Ada Byron')
+    assert.equal(after.role, 'user')
+    assert.equal(after.status, 'active')
+    assert.equal(after.email, 'ada@example.com')
+    assert.ok(after.emailVerifiedAt instanceof Date)
+    assert.equal(after.authVersion, 4)
+    assert.equal(after.passwordHash, before.passwordHash)
+
+    const otherAfter = await User.findByPk(other.id)
+    assert.equal(otherAfter.fullName, 'Other User')
+    assert.equal(otherAfter.email, 'grace@example.com')
+
+    const onlyProtected = await client.patch('/api/users/me', {
+      role: 'admin',
+      email: 'attacker@example.com',
+    })
+    assert.equal(onlyProtected.status, 400)
+    assert.equal(
+      onlyProtected.body.error.code,
+      'VALIDATION_ERROR',
+    )
+
+    // There is deliberately no route for updating another user's profile.
+    const otherUpdate = await client.patch(`/api/users/${other.id}`, {
+      fullName: 'Hijacked',
+    })
+    assert.equal(otherUpdate.status, 404)
+
+    const otherFinal = await User.findByPk(other.id)
+    assert.equal(otherFinal.fullName, 'Other User')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('public profiles expose only public fields to anonymous callers', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      fullName: 'Ada Lovelace',
+      profileImage: 'https://example.com/ada.png',
+      bio: 'Mathematician',
+      emailVerifiedAt: new Date(),
+    })
+    const anonymous = harness.client()
+
+    const response = await anonymous.get(`/api/users/${user.id}`)
+
+    assert.equal(response.status, 200)
+    const profile = response.body.data.user
+    assert.deepEqual(
+      Object.keys(profile).sort(),
+      ['bio', 'createdAt', 'fullName', 'id', 'profileImage'].sort(),
+    )
+    assert.equal(profile.id, user.id)
+    assert.equal(profile.fullName, 'Ada Lovelace')
+    assert.equal(profile.profileImage, 'https://example.com/ada.png')
+    assert.equal(profile.bio, 'Mathematician')
+
+    const serialized = JSON.stringify(response.body)
+    for (const sensitive of [
+      'ada@example.com',
+      'passwordHash',
+      'authVersion',
+      'emailVerified',
+      'emailVerifiedAt',
+      '"role"',
+      '"status"',
+      'updatedAt',
+    ]) {
+      assert.equal(serialized.includes(sensitive), false)
+    }
+  } finally {
+    await harness.close()
+  }
+})
+
+test('public profile lookup handles missing, suspended and malformed identifiers safely', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const anonymous = harness.client()
+
+    const missing = await anonymous.get(
+      '/api/users/00000000-0000-0000-0000-000000000099',
+    )
+    assert.equal(missing.status, 404)
+    assert.equal(missing.body.error.code, 'PROFILE_NOT_FOUND')
+
+    const suspended = await createUser({
+      email: 'suspended@example.com',
+      status: 'suspended',
+    })
+    const suspendedResponse = await anonymous.get(
+      `/api/users/${suspended.id}`,
+    )
+    assert.equal(suspendedResponse.status, 404)
+    assert.equal(
+      suspendedResponse.body.error.code,
+      'PROFILE_NOT_FOUND',
+    )
+
+    const malformed = await anonymous.get('/api/users/not-a-uuid')
+    assert.equal(malformed.status, 400)
+    assert.equal(malformed.body.error.code, 'VALIDATION_ERROR')
+    assert.equal(
+      malformed.body.error.details[0].field,
+      'userId',
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('profile updates require CSRF and a valid session', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      emailVerifiedAt: new Date(),
+    })
+    const client = harness.client()
+    await loginUser(client, user.email)
+
+    const missingCsrf = await client.patch(
+      '/api/users/me',
+      { fullName: 'No CSRF' },
+      { csrf: false },
+    )
+    assert.equal(missingCsrf.status, 403)
+    assert.equal(
+      missingCsrf.body.error.code,
+      'CSRF_TOKEN_INVALID',
+    )
+
+    const invalidCsrf = await client.patch(
+      '/api/users/me',
+      { fullName: 'Wrong CSRF' },
+      { csrf: 'not-the-real-token' },
+    )
+    assert.equal(invalidCsrf.status, 403)
+    assert.equal(
+      invalidCsrf.body.error.code,
+      'CSRF_TOKEN_INVALID',
+    )
+
+    await User.update(
+      { authVersion: user.authVersion + 1 },
+      { where: { id: user.id } },
+    )
+
+    const revoked = await client.patch('/api/users/me', {
+      fullName: 'Revoked session',
+    })
+    assert.equal(revoked.status, 401)
+    assert.equal(revoked.body.error.code, 'SESSION_INVALID')
+
+    const reloaded = await User.findByPk(user.id)
+    assert.equal(reloaded.fullName, 'Ada Lovelace')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('unverified users can view and update their own profile', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const user = await createUser({
+      email: 'ada@example.com',
+      emailVerifiedAt: null,
+    })
+    const client = harness.client()
+    await loginUser(client, user.email)
+
+    const me = await client.get('/api/users/me')
+    assert.equal(me.status, 200)
+    assert.equal(me.body.data.user.emailVerified, false)
+
+    const update = await client.patch('/api/users/me', {
+      fullName: 'Ada Unverified',
+      bio: 'Still setting up my profile',
+    })
+    assert.equal(update.status, 200)
+    assert.equal(update.body.data.user.fullName, 'Ada Unverified')
+    assert.equal(update.body.data.user.emailVerified, false)
+
+    const publicProfile = await harness
+      .client()
+      .get(`/api/users/${user.id}`)
+    assert.equal(publicProfile.status, 200)
+    assert.equal(publicProfile.body.data.user.fullName, 'Ada Unverified')
   } finally {
     await harness.close()
   }

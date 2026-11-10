@@ -79,6 +79,7 @@ module.exports = {
   loginSchema,
   verificationTokenSchema,
   verifyEmailSchema,
+  parseWith,
   parseRegistration,
   parseLogin,
   parseVerifyEmail,

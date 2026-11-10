@@ -6,3 +6,4 @@ API and a React/Vite client.
 ## Documentation
 
 - [Authentication API](docs/authentication.md)
+- [User Profiles API](docs/profiles.md)

@@ -47,8 +47,38 @@ const toPublicUser = (user) => {
   return safeUser
 }
 
+// Public profiles are read by anyone, so they use a much smaller allowlist than
+// the authenticated user representation. Email, role, status, verification
+// state, authVersion and activity timestamps are deliberately excluded.
+const PUBLIC_PROFILE_FIELDS = Object.freeze([
+  'id',
+  'fullName',
+  'profileImage',
+  'bio',
+  'createdAt',
+])
+
+const toPublicProfile = (user) => {
+  if (!user || typeof user !== 'object') return null
+
+  const source =
+    typeof user.get === 'function' ? user.get({ plain: true }) : user
+
+  const profile = {}
+
+  for (const field of PUBLIC_PROFILE_FIELDS) {
+    if (source[field] !== undefined) {
+      profile[field] = source[field]
+    }
+  }
+
+  return profile
+}
+
 module.exports = {
   SAFE_USER_FIELDS,
+  PUBLIC_PROFILE_FIELDS,
   toSafeUser,
   toPublicUser,
+  toPublicProfile,
 }
