@@ -7,3 +7,4 @@ API and a React/Vite client.
 
 - [Authentication API](docs/authentication.md)
 - [User Profiles API](docs/profiles.md)
+- [Destinations API](docs/destinations.md)
