@@ -59,9 +59,95 @@ class TripDatesConflictError extends AuthError {
   }
 }
 
+class TripParticipationNotFoundError extends AuthError {
+  constructor() {
+    super({
+      message: 'Trip participation not found.',
+      code: 'TRIP_PARTICIPATION_NOT_FOUND',
+      status: 404,
+    })
+    this.name = 'TripParticipationNotFoundError'
+  }
+}
+
+class TripParticipationExistsError extends AuthError {
+  constructor() {
+    super({
+      message: 'A participation request already exists for this trip.',
+      code: 'TRIP_PARTICIPATION_EXISTS',
+      status: 409,
+    })
+    this.name = 'TripParticipationExistsError'
+  }
+}
+
+class TripNotJoinableError extends AuthError {
+  constructor() {
+    super({
+      message: 'This trip cannot be joined.',
+      code: 'TRIP_NOT_JOINABLE',
+      status: 409,
+    })
+    this.name = 'TripNotJoinableError'
+  }
+}
+
+class TripOwnerCannotJoinError extends AuthError {
+  constructor() {
+    super({
+      message: 'The trip owner cannot join their own trip.',
+      code: 'TRIP_OWNER_CANNOT_JOIN',
+      status: 409,
+    })
+    this.name = 'TripOwnerCannotJoinError'
+  }
+}
+
+class TripFullError extends AuthError {
+  constructor() {
+    super({
+      message: 'This trip is full.',
+      code: 'TRIP_FULL',
+      status: 409,
+    })
+    this.name = 'TripFullError'
+  }
+}
+
+class TripParticipationStateConflictError extends AuthError {
+  constructor() {
+    super({
+      message:
+        'The participation status cannot be changed from its current state.',
+      code: 'TRIP_PARTICIPATION_STATE_CONFLICT',
+      status: 409,
+    })
+    this.name = 'TripParticipationStateConflictError'
+  }
+}
+
+class TripParticipantLimitConflictError extends AuthError {
+  constructor() {
+    super({
+      message:
+        'The participant limit cannot be lower than the current approved participants.',
+      code: 'TRIP_PARTICIPANT_LIMIT_CONFLICT',
+      status: 409,
+    })
+    this.name = 'TripParticipantLimitConflictError'
+  }
+}
+
 module.exports = {
   TripDatesConflictError,
+  TripFullError,
   TripNotFoundError,
+  TripNotJoinableError,
+  TripOwnerCannotJoinError,
+  TripParticipantLimitConflictError,
+  TripParticipationExistsError,
+  TripParticipationNotFoundError,
+  TripParticipationStateConflictError,
   TripStopExistsError,
   TripStopNotFoundError,
   TripStopOrderConflictError,
