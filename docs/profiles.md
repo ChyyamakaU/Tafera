@@ -121,10 +121,10 @@ enumerate moderation state.
 
 Profile reads and updates are account-management actions, not protected
 community actions. Unverified accounts may therefore view and update their own
-profile and view public profiles. Trip writes already use
-`requireVerifiedEmail`. Creating posts, commenting, following users and joining
-trips remain guarded by the same middleware once those community routes are
-implemented.
+profile and view public profiles. Trip writes, including joining, leaving and
+participant moderation, already use `requireVerifiedEmail`. Creating posts,
+commenting and following users remain guarded by the same middleware once those
+community routes are implemented.
 
 ## Error codes
 

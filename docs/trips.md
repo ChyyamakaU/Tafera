@@ -1,14 +1,17 @@
 # Trips and Itineraries API
 
 Trips use the existing `trips`, `trip_destinations`, `trip_itineraries` and
-`trip_participants` schema. No migration is required for this feature. The
-`trip_itineraries` and `trip_participants` tables remain intact but are not
-exposed by this phase: itinerary activities, trip joining, participant
-management and admin functionality are out of scope.
+`trip_participants` schema. No migration is required for this feature.
 
 A trip stores its overall travel dates. Each stop references a published
 destination, carries a 1-based order and may have arrival and departure dates.
 Those stop dates must fall within the trip's inclusive date range.
+
+Group-trip participation is implemented by the same trips router. Join requests,
+owner approval and rejection, leaving, capacity rules, the owner roster and
+moderation are documented in
+[Group-Trip Participation API](trip-participation.md). Itinerary activity CRUD
+and admin trip management remain out of scope.
 
 ## Authorization
 
@@ -23,6 +26,11 @@ Those stop dates must fall within the trip's inclusive date range.
 | `PATCH` | `/api/trips/:tripId/stops/:stopId` | Auth + CSRF + verified email |
 | `DELETE` | `/api/trips/:tripId/stops/:stopId` | Auth + CSRF + verified email |
 | `PUT` | `/api/trips/:tripId/stops/reorder` | Auth + CSRF + verified email |
+| `POST` | `/api/trips/:tripId/join` | Auth + CSRF + verified email |
+| `DELETE` | `/api/trips/:tripId/join` | Auth + CSRF + verified email |
+| `GET` | `/api/trips/:tripId/participation` | Auth |
+| `GET` | `/api/trips/:tripId/participants` | Auth |
+| `PATCH` | `/api/trips/:tripId/participants/:participantId` | Auth + CSRF + verified email |
 
 All writes use:
 
@@ -37,12 +45,17 @@ Ownership rules:
   owner. A missing trip and a trip owned by someone else return the same
   `404 TRIP_NOT_FOUND`.
 - Stop lookups are scoped by both the authorized `tripId` and `stopId`.
-- `userId` is never accepted from a request body.
+- `userId` is never accepted from a request body or query string.
 - Trip detail is public for trips whose status is not `draft`.
 - An authenticated owner can read their own trip in any status, including
   `draft`.
 - A draft requested by an anonymous or non-owner caller returns
   `404 TRIP_NOT_FOUND`.
+- Join and leave act on the authenticated caller's own participation. The
+  roster and moderation actions are owner-only; a missing trip and a trip owned
+  by someone else return the same `404 TRIP_NOT_FOUND`.
+- Participant lookups are scoped by both the authorized `tripId` and
+  `participantId`.
 
 ## GET /api/trips
 
@@ -184,12 +197,25 @@ Supplied fields follow the create rules.
 
 If either date changes, all existing stop dates must still fall inside the new
 inclusive range. Otherwise the request returns `409 TRIP_DATES_CONFLICT`.
+
+Participation-related guards run in the same transaction and under the same
+trip row lock as the update:
+
+- Lowering `maxParticipants` below the current approved participant count
+  returns `409 TRIP_PARTICIPANT_LIMIT_CONFLICT`. A value equal to the approved
+  count, an increase, or `null` (unlimited) is allowed. Only approved
+  participants count; the owner and pending/rejected/cancelled records do not.
+- Changing `tripType` from `group` to `personal` is rejected with
+  `409 TRIP_PARTICIPATION_STATE_CONFLICT` while any pending or approved
+  participation exists. Rejected and cancelled history does not block the
+  change. Already-personal trips and personal-to-group changes are unchanged.
+
 Returns `200` with the updated trip detail.
 
 ## DELETE /api/trips/:tripId
 
-Deletes an owned trip. Stops and itineraries cascade through the existing
-foreign keys. Returns `204` with no response body.
+Deletes an owned trip. Stops, itineraries and participation records cascade
+through the existing foreign keys. Returns `204` with no response body.
 
 ## POST /api/trips/:tripId/stops
 
@@ -259,6 +285,24 @@ Rules:
 
 Returns `200` with the reordered trip detail.
 
+## Participation endpoints
+
+Group-trip participation is available under the same router:
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/trips/:tripId/join` | Request to join a published group trip |
+| `DELETE` | `/api/trips/:tripId/join` | Cancel a request or leave an approved trip |
+| `GET` | `/api/trips/:tripId/participation` | Read the caller's own participation |
+| `GET` | `/api/trips/:tripId/participants` | Owner-only participant roster |
+| `PATCH` | `/api/trips/:tripId/participants/:participantId` | Owner moderation decision |
+
+Only published group trips are joinable, the owner cannot join their own trip,
+and capacity counts approved participants only. Participation writes require
+CSRF and a verified email; the two reads require authentication only. See
+[Group-Trip Participation API](trip-participation.md) for full request,
+response, pagination, privacy and error details.
+
 ## Serialization and privacy
 
 Trip responses use an explicit allowlist:
@@ -283,6 +327,12 @@ Nested destinations reuse the existing public destination serializer, so
 destination privacy rules are enforced in one place. `DATEONLY` values are
 returned as `YYYY-MM-DD` strings. Responses use `Cache-Control: no-store`.
 
+Participation responses use a separate allowlist: participant `id`, `status`,
+`joinedAt`, `createdAt`, `updatedAt` and a nested `user` public profile.
+Participant user data never includes email, role, account status,
+`emailVerifiedAt`, `authVersion` or password material. See
+[Group-Trip Participation API](trip-participation.md#serialization-and-privacy).
+
 ## Error codes
 
 | Status | Code | Meaning |
@@ -293,15 +343,23 @@ returned as `YYYY-MM-DD` strings. Responses use `Cache-Control: no-store`.
 | `403` | `EMAIL_VERIFICATION_REQUIRED` | Authenticated but email is unverified |
 | `404` | `TRIP_NOT_FOUND` | Missing trip, non-owned trip, or private draft |
 | `404` | `TRIP_STOP_NOT_FOUND` | Stop does not belong to the authorized trip |
+| `404` | `TRIP_PARTICIPATION_NOT_FOUND` | Participation does not exist or belongs to another trip |
 | `404` | `DESTINATION_NOT_FOUND` | Referenced destination is missing or unpublished |
 | `409` | `TRIP_STOP_EXISTS` | Destination is already a stop on this trip |
 | `409` | `TRIP_STOP_ORDER_CONFLICT` | Reorder list does not match current stops |
 | `409` | `TRIP_DATES_CONFLICT` | New trip dates exclude an existing stop |
+| `409` | `TRIP_PARTICIPATION_EXISTS` | Pending or approved participation already exists |
+| `409` | `TRIP_NOT_JOINABLE` | Trip is not a published group trip |
+| `409` | `TRIP_OWNER_CANNOT_JOIN` | Owner cannot join or leave their own trip |
+| `409` | `TRIP_FULL` | Approved participants reached `maxParticipants` |
+| `409` | `TRIP_PARTICIPATION_STATE_CONFLICT` | Invalid participation transition or group-to-personal with active participants |
+| `409` | `TRIP_PARTICIPANT_LIMIT_CONFLICT` | New `maxParticipants` is below the approved count |
 
 ## Out of scope
 
 - Itinerary activity CRUD (`trip_itineraries`)
-- Trip joining and participant management (`trip_participants`)
 - Public trip feeds or discovery beyond detail reads
 - Admin trip management
+- Frontend trip-participation UI (the backend API is implemented)
+- Invitations, waitlists or automatic approval
 - New migrations or dependencies

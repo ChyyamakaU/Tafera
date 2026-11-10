@@ -9,3 +9,4 @@ API and a React/Vite client.
 - [User Profiles API](docs/profiles.md)
 - [Destinations API](docs/destinations.md)
 - [Trips and Itineraries API](docs/trips.md)
+- [Group-Trip Participation API](docs/trip-participation.md)
