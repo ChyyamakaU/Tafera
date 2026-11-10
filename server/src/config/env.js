@@ -164,6 +164,20 @@ const schema = z
         .optional(),
     ),
     SESSION_SECRET: requiredSecret,
+    // Redis session keys are namespaced so several deployments can share one
+    // Redis instance without collisions. Keep the character set narrow because
+    // the value becomes part of Redis key names.
+    SESSION_NAMESPACE: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .regex(
+          /^[A-Za-z0-9_-]{1,64}$/,
+          'must be 1-64 characters using only letters, digits, underscore or hyphen',
+        )
+        .default('tafera'),
+    ),
     JWT_ACCESS_SECRET: optionalSecret,
     JWT_REFRESH_SECRET: optionalSecret,
     JWT_ACCESS_EXPIRES_IN: z.preprocess(
@@ -346,6 +360,7 @@ module.exports = {
   },
 
   SESSION_SECRET: parsed.SESSION_SECRET,
+  SESSION_NAMESPACE: parsed.SESSION_NAMESPACE,
 
   PASSWORD: {
     minLength: 12,
