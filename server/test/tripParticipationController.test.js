@@ -408,3 +408,52 @@ test('service errors are forwarded to the error middleware', async () => {
   assert.equal(res.statusCode, null)
   assert.equal(res.body, undefined)
 })
+
+test('listParticipants ignores identity and unknown values from the query', async () => {
+  const { calls, service } = createService()
+  const controller = controllerFor(service)
+
+  await invoke(
+    controller.listParticipants,
+    createRequest({
+      query: {
+        userId: OWNER_ID,
+        tripId: TRIP_ID,
+        status: 'pending',
+        page: '1',
+      },
+    }),
+  )
+
+  assert.deepEqual(calls.listParticipants, [
+    [USER_ID, TRIP_ID, { status: 'pending', page: 1, limit: 20 }],
+  ])
+})
+
+test('getOwnParticipation uses only the authenticated identity', async () => {
+  const { calls, service } = createService()
+  const controller = controllerFor(service)
+
+  await invoke(
+    controller.getOwnParticipation,
+    createRequest({
+      body: { userId: OWNER_ID, tripId: TRIP_ID },
+      query: { userId: OWNER_ID },
+    }),
+  )
+
+  assert.deepEqual(calls.getOwnParticipation, [[USER_ID, TRIP_ID]])
+})
+
+test('requestJoin accepts a request without a parsed body', async () => {
+  const { calls, service } = createService()
+  const controller = controllerFor(service)
+  const req = createRequest()
+  delete req.body
+
+  const { res, errors } = await invoke(controller.requestJoin, req)
+
+  assert.deepEqual(errors, [])
+  assert.equal(res.statusCode, 201)
+  assert.deepEqual(calls.requestJoin, [[USER_ID, TRIP_ID]])
+})

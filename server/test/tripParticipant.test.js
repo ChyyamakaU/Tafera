@@ -377,3 +377,51 @@ test('participant serialization normalizes missing joinedAt to null', () => {
 
   assert.equal(participant.joinedAt, null)
 })
+
+test('participant list query strips unknown keys and rejects array values', () => {
+  assert.deepEqual(
+    parseParticipantListQuery({
+      userId: '90000000-0000-4000-8000-000000000009',
+      tripId: '10000000-0000-4000-8000-000000000001',
+      page: '1',
+      limit: '20',
+    }),
+    { page: DEFAULT_PAGE, limit: DEFAULT_LIMIT },
+  )
+
+  for (const input of [
+    { status: ['pending'] },
+    { page: ['1'] },
+    { limit: ['20'] },
+  ]) {
+    const field = Object.keys(input)[0]
+    assert.equal(
+      hasField(detailsFor(() => parseParticipantListQuery(input)), field),
+      true,
+      `expected a ${field} error for ${JSON.stringify(input)}`,
+    )
+  }
+})
+
+test('moderation strips participant identifiers and rejects non-string statuses', () => {
+  assert.deepEqual(
+    parseParticipantModeration({
+      status: 'approved',
+      tripId: '10000000-0000-4000-8000-000000000001',
+      participantId: '20000000-0000-4000-8000-000000000001',
+      userId: '90000000-0000-4000-8000-000000000009',
+    }),
+    { status: 'approved' },
+  )
+
+  for (const status of ['APPROVED', ['approved'], 1]) {
+    assert.equal(
+      hasField(
+        detailsFor(() => parseParticipantModeration({ status })),
+        'status',
+      ),
+      true,
+      `expected a status error for ${JSON.stringify(status)}`,
+    )
+  }
+})

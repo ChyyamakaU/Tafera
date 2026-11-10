@@ -28,6 +28,7 @@ const DestinationImageModel = require('../src/models/destinationImage')
 const TripModel = require('../src/models/trip')
 const TripDestinationModel = require('../src/models/tripDestination')
 const TripItineraryModel = require('../src/models/tripItinerary')
+const TripParticipantModel = require('../src/models/tripParticipant')
 const passwordService = require('../src/services/passwordService')
 const sessionService = require('../src/services/sessionService')
 const {
@@ -53,9 +54,16 @@ const {
   createTripService,
 } = require('../src/services/tripService')
 const {
+  createTripParticipationService,
+} = require('../src/services/tripParticipationService')
+const {
   PUBLIC_TRIP_FIELDS,
   PUBLIC_TRIP_STOP_FIELDS,
 } = require('../src/utils/safeTrip')
+const {
+  PUBLIC_TRIP_PARTICIPANT_FIELDS,
+} = require('../src/utils/safeTripParticipant')
+const { PUBLIC_PROFILE_FIELDS } = require('../src/utils/safeUser')
 const errorHandler = require('../src/middlewares/errorHandler')
 
 const TEST_SECRET = 'test-only-session-secret-0123456789abcdef'
@@ -70,6 +78,7 @@ let DestinationImage = null
 let Trip = null
 let TripDestination = null
 let TripItinerary = null
+let TripParticipant = null
 let schema = null
 let databaseAvailable = false
 let redisClient = null
@@ -119,6 +128,9 @@ before(async () => {
     )
     await base.query(
       `CREATE TYPE "${schema}".enum_trips_status AS ENUM ('draft', 'published', 'cancelled', 'completed')`,
+    )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_trip_participants_status AS ENUM ('pending', 'approved', 'rejected', 'cancelled')`,
     )
     await base.query(
       `CREATE TABLE "${schema}".users (
@@ -245,6 +257,34 @@ before(async () => {
            )
        )`,
     )
+    await base.query(
+      `CREATE TABLE "${schema}".trip_participants (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         trip_id uuid NOT NULL REFERENCES "${schema}".trips(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         user_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         status "${schema}".enum_trip_participants_status
+           NOT NULL DEFAULT 'pending',
+         joined_at timestamptz,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         updated_at timestamptz NOT NULL DEFAULT now(),
+         CONSTRAINT trip_participants_trip_id_user_id_unique
+           UNIQUE (trip_id, user_id)
+       )`,
+    )
+    await base.query(
+      `CREATE INDEX trip_participants_trip_id_idx
+       ON "${schema}".trip_participants (trip_id)`,
+    )
+    await base.query(
+      `CREATE INDEX trip_participants_user_id_idx
+       ON "${schema}".trip_participants (user_id)`,
+    )
+    await base.query(
+      `CREATE INDEX trip_participants_status_idx
+       ON "${schema}".trip_participants (status)`,
+    )
 
     scoped = new Sequelize(
       config.database,
@@ -268,6 +308,7 @@ before(async () => {
     Trip = TripModel(scoped, DataTypes)
     TripDestination = TripDestinationModel(scoped, DataTypes)
     TripItinerary = TripItineraryModel(scoped, DataTypes)
+    TripParticipant = TripParticipantModel(scoped, DataTypes)
 
     Destination.hasMany(DestinationImage, {
       foreignKey: 'destinationId',
@@ -292,6 +333,22 @@ before(async () => {
     Destination.hasMany(TripDestination, {
       foreignKey: 'destinationId',
       as: 'tripDestinations',
+    })
+    Trip.hasMany(TripParticipant, {
+      foreignKey: 'tripId',
+      as: 'participants',
+    })
+    TripParticipant.belongsTo(Trip, {
+      foreignKey: 'tripId',
+      as: 'trip',
+    })
+    TripParticipant.belongsTo(User, {
+      foreignKey: 'userId',
+      as: 'participant',
+    })
+    User.hasMany(TripParticipant, {
+      foreignKey: 'userId',
+      as: 'tripParticipation',
     })
 
     databaseAvailable = true
@@ -339,7 +396,8 @@ after(async () => {
 beforeEach(async () => {
   if (databaseAvailable) {
     await base.query(
-      `TRUNCATE TABLE "${schema}".trip_itineraries,
+      `TRUNCATE TABLE "${schema}".trip_participants,
+         "${schema}".trip_itineraries,
          "${schema}".trip_destinations,
          "${schema}".trips,
          "${schema}".destination_images,
@@ -545,6 +603,12 @@ const createHarness = async () => {
         DestinationImage,
         sequelize: scoped,
       }),
+      tripParticipationService: createTripParticipationService({
+        Trip,
+        TripParticipant,
+        User,
+        sequelize: scoped,
+      }),
       sessions,
       nodeEnv,
       User,
@@ -646,6 +710,67 @@ const addStop = (client, tripId, destinationId, overrides = {}) =>
     destinationId,
     ...overrides,
   })
+
+const createGroupTrip = async (client, overrides = {}) => {
+  const response = await createTrip(client, {
+    tripType: 'group',
+    status: 'published',
+    maxParticipants: 10,
+    ...overrides,
+  })
+
+  assert.equal(response.status, 201)
+  return response.body.data.trip
+}
+
+const joinTrip = (client, tripId, body = {}) =>
+  client.post(`/api/trips/${tripId}/join`, body)
+
+const leaveTrip = (client, tripId) =>
+  client.delete(`/api/trips/${tripId}/join`)
+
+const getParticipation = (client, tripId) =>
+  client.get(`/api/trips/${tripId}/participation`)
+
+const getParticipants = (client, tripId, query = '') =>
+  client.get(`/api/trips/${tripId}/participants${query}`)
+
+const moderateParticipant = (client, tripId, participantId, status) =>
+  client.patch(
+    `/api/trips/${tripId}/participants/${participantId}`,
+    { status },
+  )
+
+const participantKeys = [
+  ...PUBLIC_TRIP_PARTICIPANT_FIELDS,
+  'user',
+].sort()
+const participantUserKeys = [...PUBLIC_PROFILE_FIELDS].sort()
+
+const assertPublicParticipant = (participant) => {
+  assert.deepEqual(Object.keys(participant).sort(), participantKeys)
+  assert.deepEqual(
+    Object.keys(participant.user).sort(),
+    participantUserKeys,
+  )
+
+  const serialized = JSON.stringify(participant)
+  for (const sensitive of [
+    'userId',
+    'tripId',
+    'passwordHash',
+    'authVersion',
+    'emailVerifiedAt',
+    'email',
+    '"role"',
+  ]) {
+    assert.equal(
+      serialized.includes(sensitive),
+      false,
+      `expected ${sensitive} not to be serialized`,
+    )
+  }
+}
 
 const tripKeys = [...PUBLIC_TRIP_FIELDS, 'stops'].sort()
 const stopKeys = [...PUBLIC_TRIP_STOP_FIELDS, 'destination'].sort()
@@ -1575,6 +1700,1031 @@ test('unverified users can read trips but cannot modify them', async (t) => {
 
     const remove = await client.delete(`/api/trips/${trip.id}`)
     assert.equal(remove.status, 403)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('participation endpoints require authentication, CSRF and a verified email', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const anonymousRequests = [
+      ['POST', `/api/trips/${tripId}/join`, {}],
+      ['DELETE', `/api/trips/${tripId}/join`, undefined],
+      ['GET', `/api/trips/${tripId}/participation`, undefined],
+      ['GET', `/api/trips/${tripId}/participants`, undefined],
+      [
+        'PATCH',
+        `/api/trips/${tripId}/participants/${crypto.randomUUID()}`,
+        { status: 'approved' },
+      ],
+    ]
+
+    for (const [method, path, body] of anonymousRequests) {
+      const response = await request({
+        port: harness.port,
+        method,
+        path,
+        body,
+      })
+
+      assert.equal(response.status, 401, `${method} ${path}`)
+      assert.equal(response.body.error.code, 'AUTH_REQUIRED')
+    }
+
+    const missingCsrf = await request({
+      port: harness.port,
+      method: 'POST',
+      path: `/api/trips/${tripId}/join`,
+      headers: { Cookie: joinerClient.cookie },
+      body: {},
+    })
+    assert.equal(missingCsrf.status, 403)
+    assert.equal(missingCsrf.body.error.code, 'CSRF_TOKEN_INVALID')
+
+    const invalidCsrf = await request({
+      port: harness.port,
+      method: 'POST',
+      path: `/api/trips/${tripId}/join`,
+      headers: {
+        Cookie: joinerClient.cookie,
+        'X-CSRF-Token': 'not-a-valid-token',
+      },
+      body: {},
+    })
+    assert.equal(invalidCsrf.status, 403)
+    assert.equal(invalidCsrf.body.error.code, 'CSRF_TOKEN_INVALID')
+
+    const join = await joinTrip(joinerClient, tripId)
+    assert.equal(join.status, 201)
+    const participantId = join.body.data.participation.id
+
+    const missingDeleteCsrf = await request({
+      port: harness.port,
+      method: 'DELETE',
+      path: `/api/trips/${tripId}/join`,
+      headers: { Cookie: joinerClient.cookie },
+    })
+    assert.equal(missingDeleteCsrf.status, 403)
+    assert.equal(
+      missingDeleteCsrf.body.error.code,
+      'CSRF_TOKEN_INVALID',
+    )
+
+    const missingPatchCsrf = await request({
+      port: harness.port,
+      method: 'PATCH',
+      path: `/api/trips/${tripId}/participants/${participantId}`,
+      headers: { Cookie: ownerClient.cookie },
+      body: { status: 'approved' },
+    })
+    assert.equal(missingPatchCsrf.status, 403)
+
+    const unverified = await createUser({ emailVerifiedAt: null })
+    const unverifiedClient = harness.client()
+    const login = await loginUser(unverifiedClient, unverified.email)
+    assert.equal(login.status, 200)
+
+    const unverifiedJoin = await joinTrip(unverifiedClient, tripId)
+    assert.equal(unverifiedJoin.status, 403)
+    assert.equal(
+      unverifiedJoin.body.error.code,
+      'EMAIL_VERIFICATION_REQUIRED',
+    )
+
+    const unverifiedLeave = await leaveTrip(unverifiedClient, tripId)
+    assert.equal(unverifiedLeave.status, 403)
+
+    const unverifiedModerate = await moderateParticipant(
+      unverifiedClient,
+      tripId,
+      participantId,
+      'approved',
+    )
+    assert.equal(unverifiedModerate.status, 403)
+    assert.equal(
+      unverifiedModerate.body.error.code,
+      'EMAIL_VERIFICATION_REQUIRED',
+    )
+
+    const unverifiedStatus = await getParticipation(
+      unverifiedClient,
+      tripId,
+    )
+    assert.equal(unverifiedStatus.status, 200)
+    assert.equal(unverifiedStatus.body.data.participation, null)
+
+    const stored = await TripParticipant.findOne({
+      where: { tripId, userId: joiner.id },
+    })
+    assert.equal(stored.status, 'pending')
+    assert.equal(stored.joinedAt, null)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('joining creates a pending participation with a public shape', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient, {
+      maxParticipants: 5,
+    })
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId, {
+      userId: owner.id,
+      tripId: '10000000-0000-4000-8000-000000000099',
+      participantId: '20000000-0000-4000-8000-000000000099',
+      status: 'approved',
+      joinedAt: '2026-11-11T00:00:00.000Z',
+    })
+
+    assert.equal(joined.status, 201)
+    assert.equal(joined.headers['cache-control'], 'no-store')
+    const participation = joined.body.data.participation
+    assertPublicParticipant(participation)
+    assert.equal(participation.status, 'pending')
+    assert.equal(participation.joinedAt, null)
+    assert.equal(participation.user.id, joiner.id)
+    assert.equal(participation.user.fullName, 'Ada Lovelace')
+
+    const stored = await TripParticipant.findByPk(participation.id)
+    assert.equal(stored.userId, joiner.id)
+    assert.equal(stored.tripId, tripId)
+    assert.equal(stored.status, 'pending')
+    assert.equal(stored.joinedAt, null)
+
+    const duplicatePending = await joinTrip(joinerClient, tripId)
+    assert.equal(duplicatePending.status, 409)
+    assert.equal(
+      duplicatePending.body.error.code,
+      'TRIP_PARTICIPATION_EXISTS',
+    )
+
+    const own = await getParticipation(joinerClient, tripId)
+    assert.equal(own.status, 200)
+    assert.equal(own.headers['cache-control'], 'no-store')
+    assert.equal(own.body.data.participation.id, participation.id)
+    assertPublicParticipant(own.body.data.participation)
+
+    const approved = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participation.id,
+      'approved',
+    )
+    assert.equal(approved.status, 200)
+    assert.notEqual(approved.body.data.participation.joinedAt, null)
+
+    const duplicateApproved = await joinTrip(joinerClient, tripId)
+    assert.equal(duplicateApproved.status, 409)
+    assert.equal(
+      duplicateApproved.body.error.code,
+      'TRIP_PARTICIPATION_EXISTS',
+    )
+    assert.equal(
+      await TripParticipant.count({ where: { tripId, userId: joiner.id } }),
+      1,
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('rejoining reuses rejected and cancelled participation rows', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const first = await joinTrip(joinerClient, tripId)
+    assert.equal(first.status, 201)
+    const participantId = first.body.data.participation.id
+
+    const rejected = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'rejected',
+    )
+    assert.equal(rejected.status, 200)
+    assert.equal(rejected.body.data.participation.status, 'rejected')
+    assert.equal(rejected.body.data.participation.joinedAt, null)
+
+    const afterRejection = await joinTrip(joinerClient, tripId)
+    assert.equal(afterRejection.status, 200)
+    assert.equal(afterRejection.body.data.participation.id, participantId)
+    assert.equal(afterRejection.body.data.participation.status, 'pending')
+    assert.equal(afterRejection.body.data.participation.joinedAt, null)
+
+    const cancelled = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'cancelled',
+    )
+    assert.equal(cancelled.status, 200)
+
+    const afterModerationCancellation = await joinTrip(
+      joinerClient,
+      tripId,
+    )
+    assert.equal(afterModerationCancellation.status, 200)
+    assert.equal(
+      afterModerationCancellation.body.data.participation.id,
+      participantId,
+    )
+    assert.equal(
+      afterModerationCancellation.body.data.participation.status,
+      'pending',
+    )
+
+    const left = await leaveTrip(joinerClient, tripId)
+    assert.equal(left.status, 200)
+    assert.equal(left.body.data.participation.status, 'cancelled')
+
+    const afterLeave = await joinTrip(joinerClient, tripId)
+    assert.equal(afterLeave.status, 200)
+    assert.equal(afterLeave.body.data.participation.id, participantId)
+    assert.equal(afterLeave.body.data.participation.status, 'pending')
+
+    assert.equal(
+      await TripParticipant.count({ where: { tripId, userId: joiner.id } }),
+      1,
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('join restrictions cover owners, trip type, status and visibility', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { client: otherClient } = await createVerifiedClient(harness)
+
+    const published = await createGroupTrip(ownerClient)
+    const ownerJoin = await joinTrip(ownerClient, published.id)
+    assert.equal(ownerJoin.status, 409)
+    assert.equal(
+      ownerJoin.body.error.code,
+      'TRIP_OWNER_CANNOT_JOIN',
+    )
+
+    const personal = await createGroupTrip(ownerClient, {
+      tripType: 'personal',
+    })
+    const personalJoin = await joinTrip(otherClient, personal.id)
+    assert.equal(personalJoin.status, 409)
+    assert.equal(personalJoin.body.error.code, 'TRIP_NOT_JOINABLE')
+
+    for (const status of ['cancelled', 'completed']) {
+      const closed = await createGroupTrip(ownerClient, { status })
+      const closedJoin = await joinTrip(otherClient, closed.id)
+      assert.equal(closedJoin.status, 409, status)
+      assert.equal(
+        closedJoin.body.error.code,
+        'TRIP_NOT_JOINABLE',
+        status,
+      )
+    }
+
+    const draft = await createGroupTrip(ownerClient, {
+      status: 'draft',
+    })
+    const draftJoin = await joinTrip(otherClient, draft.id)
+    assert.equal(draftJoin.status, 404)
+    assert.equal(draftJoin.body.error.code, 'TRIP_NOT_FOUND')
+
+    const ownerDraftJoin = await joinTrip(ownerClient, draft.id)
+    assert.equal(ownerDraftJoin.status, 409)
+    assert.equal(
+      ownerDraftJoin.body.error.code,
+      'TRIP_OWNER_CANNOT_JOIN',
+    )
+
+    const missingJoin = await joinTrip(
+      otherClient,
+      '00000000-0000-4000-8000-000000000099',
+    )
+    assert.equal(missingJoin.status, 404)
+    assert.equal(missingJoin.body.error.code, 'TRIP_NOT_FOUND')
+
+    const malformedJoin = await joinTrip(otherClient, 'not-a-uuid')
+    assert.equal(malformedJoin.status, 400)
+    assert.equal(malformedJoin.body.error.code, 'VALIDATION_ERROR')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('a full trip rejects new joins and counts approved participants only', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { client: firstClient } = await createVerifiedClient(harness)
+    const { client: secondClient } = await createVerifiedClient(harness)
+    const { client: thirdClient } = await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient, {
+      maxParticipants: 1,
+    })
+    const tripId = trip.id
+
+    const firstJoin = await joinTrip(firstClient, tripId)
+    assert.equal(firstJoin.status, 201)
+
+    const secondPending = await joinTrip(secondClient, tripId)
+    assert.equal(secondPending.status, 201)
+
+    const approval = await moderateParticipant(
+      ownerClient,
+      tripId,
+      firstJoin.body.data.participation.id,
+      'approved',
+    )
+    assert.equal(approval.status, 200)
+
+    const full = await joinTrip(thirdClient, tripId)
+    assert.equal(full.status, 409)
+    assert.equal(full.body.error.code, 'TRIP_FULL')
+
+    const stillPending = await TripParticipant.findByPk(
+      secondPending.body.data.participation.id,
+    )
+    assert.equal(stillPending.status, 'pending')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('leaving cancels pending and approved participation and retains the row', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { client: pendingClient } = await createVerifiedClient(harness)
+    const { client: approvedClient } = await createVerifiedClient(harness)
+    const { client: missingClient } = await createVerifiedClient(harness)
+    const { client: rejectedClient } = await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const pendingJoin = await joinTrip(pendingClient, tripId)
+    const pendingId = pendingJoin.body.data.participation.id
+
+    const cancelled = await leaveTrip(pendingClient, tripId)
+    assert.equal(cancelled.status, 200)
+    assert.equal(cancelled.headers['cache-control'], 'no-store')
+    assert.equal(cancelled.body.data.participation.id, pendingId)
+    assert.equal(cancelled.body.data.participation.status, 'cancelled')
+    assert.equal(cancelled.body.data.participation.joinedAt, null)
+    assertPublicParticipant(cancelled.body.data.participation)
+
+    const storedPending = await TripParticipant.findByPk(pendingId)
+    assert.equal(storedPending.status, 'cancelled')
+    assert.equal(storedPending.joinedAt, null)
+
+    const repeated = await leaveTrip(pendingClient, tripId)
+    assert.equal(repeated.status, 409)
+    assert.equal(
+      repeated.body.error.code,
+      'TRIP_PARTICIPATION_STATE_CONFLICT',
+    )
+
+    const approvedJoin = await joinTrip(approvedClient, tripId)
+    const approvedId = approvedJoin.body.data.participation.id
+    const approval = await moderateParticipant(
+      ownerClient,
+      tripId,
+      approvedId,
+      'approved',
+    )
+    assert.equal(approval.status, 200)
+
+    const leftApproved = await leaveTrip(approvedClient, tripId)
+    assert.equal(leftApproved.status, 200)
+    assert.equal(leftApproved.body.data.participation.status, 'cancelled')
+    assert.equal(leftApproved.body.data.participation.joinedAt, null)
+
+    const storedApproved = await TripParticipant.findByPk(approvedId)
+    assert.equal(storedApproved.status, 'cancelled')
+    assert.equal(storedApproved.joinedAt, null)
+
+    const missing = await leaveTrip(missingClient, tripId)
+    assert.equal(missing.status, 404)
+    assert.equal(
+      missing.body.error.code,
+      'TRIP_PARTICIPATION_NOT_FOUND',
+    )
+
+    const ownerLeave = await leaveTrip(ownerClient, tripId)
+    assert.equal(ownerLeave.status, 409)
+    assert.equal(
+      ownerLeave.body.error.code,
+      'TRIP_OWNER_CANNOT_JOIN',
+    )
+
+    const rejectedJoin = await joinTrip(rejectedClient, tripId)
+    await moderateParticipant(
+      ownerClient,
+      tripId,
+      rejectedJoin.body.data.participation.id,
+      'rejected',
+    )
+    const rejectedLeave = await leaveTrip(rejectedClient, tripId)
+    assert.equal(rejectedLeave.status, 409)
+    assert.equal(
+      rejectedLeave.body.error.code,
+      'TRIP_PARTICIPATION_STATE_CONFLICT',
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('own participation returns null when absent and preserves visibility', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { client: otherClient } = await createVerifiedClient(harness)
+    const published = await createGroupTrip(ownerClient)
+
+    const none = await getParticipation(otherClient, published.id)
+    assert.equal(none.status, 200)
+    assert.equal(none.headers['cache-control'], 'no-store')
+    assert.equal(none.body.data.participation, null)
+
+    const ownerNone = await getParticipation(ownerClient, published.id)
+    assert.equal(ownerNone.status, 200)
+    assert.equal(ownerNone.body.data.participation, null)
+
+    const join = await joinTrip(otherClient, published.id)
+    assert.equal(join.status, 201)
+
+    const own = await getParticipation(otherClient, published.id)
+    assert.equal(own.status, 200)
+    assert.equal(own.body.data.participation.status, 'pending')
+    assert.equal(own.body.data.participation.id, join.body.data.participation.id)
+
+    const draft = await createGroupTrip(ownerClient, {
+      status: 'draft',
+    })
+    const draftOther = await getParticipation(otherClient, draft.id)
+    assert.equal(draftOther.status, 404)
+    assert.equal(draftOther.body.error.code, 'TRIP_NOT_FOUND')
+
+    const draftOwner = await getParticipation(ownerClient, draft.id)
+    assert.equal(draftOwner.status, 200)
+    assert.equal(draftOwner.body.data.participation, null)
+
+    const missing = await getParticipation(
+      otherClient,
+      '00000000-0000-4000-8000-000000000099',
+    )
+    assert.equal(missing.status, 404)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('owner roster is owner-only, filtered, paginated and public', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const joiners = []
+
+    for (let index = 0; index < 3; index += 1) {
+      joiners.push(await createVerifiedClient(harness))
+    }
+
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+    const participantIds = []
+
+    for (const joiner of joiners) {
+      const join = await joinTrip(joiner.client, tripId)
+      assert.equal(join.status, 201)
+      participantIds.push(join.body.data.participation.id)
+    }
+
+    const expectedOrder = await TripParticipant.findAll({
+      where: { tripId },
+      order: [
+        ['createdAt', 'ASC'],
+        ['id', 'ASC'],
+      ],
+    })
+
+    const roster = await getParticipants(ownerClient, tripId)
+    assert.equal(roster.status, 200)
+    assert.equal(roster.headers['cache-control'], 'no-store')
+    assert.deepEqual(
+      roster.body.data.participants.map((participant) => participant.id),
+      expectedOrder.map((participant) => participant.id),
+    )
+    assert.deepEqual(roster.body.data.pagination, {
+      page: 1,
+      limit: 20,
+      total: 3,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    })
+
+    for (const participant of roster.body.data.participants) {
+      assertPublicParticipant(participant)
+    }
+
+    const nonOwner = await getParticipants(joiners[0].client, tripId)
+    assert.equal(nonOwner.status, 404)
+    assert.equal(nonOwner.body.error.code, 'TRIP_NOT_FOUND')
+
+    const missing = await getParticipants(
+      ownerClient,
+      '00000000-0000-4000-8000-000000000099',
+    )
+    assert.equal(missing.status, 404)
+
+    await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantIds[0],
+      'approved',
+    )
+    await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantIds[1],
+      'rejected',
+    )
+
+    const approved = await getParticipants(
+      ownerClient,
+      tripId,
+      '?status=approved',
+    )
+    assert.equal(approved.status, 200)
+    assert.deepEqual(
+      approved.body.data.participants.map(
+        (participant) => participant.id,
+      ),
+      [participantIds[0]],
+    )
+
+    const pending = await getParticipants(
+      ownerClient,
+      tripId,
+      '?status=pending',
+    )
+    assert.deepEqual(
+      pending.body.data.participants.map(
+        (participant) => participant.id,
+      ),
+      [participantIds[2]],
+    )
+
+    const cancelled = await getParticipants(
+      ownerClient,
+      tripId,
+      '?status=cancelled',
+    )
+    assert.equal(cancelled.body.data.participants.length, 0)
+    assert.equal(cancelled.body.data.pagination.total, 0)
+    assert.equal(cancelled.body.data.pagination.totalPages, 0)
+
+    const firstPage = await getParticipants(
+      ownerClient,
+      tripId,
+      '?limit=2&page=1',
+    )
+    assert.equal(firstPage.body.data.participants.length, 2)
+    assert.deepEqual(firstPage.body.data.pagination, {
+      page: 1,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+      hasNextPage: true,
+      hasPreviousPage: false,
+    })
+
+    const secondPage = await getParticipants(
+      ownerClient,
+      tripId,
+      '?limit=2&page=2',
+    )
+    assert.equal(secondPage.body.data.participants.length, 1)
+    assert.equal(secondPage.body.data.pagination.hasPreviousPage, true)
+    assert.equal(secondPage.body.data.pagination.hasNextPage, false)
+
+    const invalidStatus = await getParticipants(
+      ownerClient,
+      tripId,
+      '?status=joined',
+    )
+    assert.equal(invalidStatus.status, 400)
+    assert.equal(
+      invalidStatus.body.error.code,
+      'VALIDATION_ERROR',
+    )
+
+    const invalidLimit = await getParticipants(
+      ownerClient,
+      tripId,
+      '?limit=51',
+    )
+    assert.equal(invalidLimit.status, 400)
+
+    const injected = await getParticipants(
+      ownerClient,
+      tripId,
+      '?status=approved&userId=00000000-0000-4000-8000-000000000099',
+    )
+    assert.equal(injected.status, 200)
+    assert.deepEqual(
+      injected.body.data.participants.map(
+        (participant) => participant.id,
+      ),
+      [participantIds[0]],
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('owner moderation enforces transitions, trip scope and capacity', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { client: otherClient } = await createVerifiedClient(harness)
+    const joiners = []
+
+    for (let index = 0; index < 4; index += 1) {
+      joiners.push(await createVerifiedClient(harness))
+    }
+
+    const trip = await createGroupTrip(ownerClient, {
+      maxParticipants: 2,
+    })
+    const tripId = trip.id
+
+    const ids = []
+    for (const joiner of joiners) {
+      const join = await joinTrip(joiner.client, tripId)
+      assert.equal(join.status, 201)
+      ids.push(join.body.data.participation.id)
+    }
+
+    const approved = await moderateParticipant(
+      ownerClient,
+      tripId,
+      ids[0],
+      'approved',
+    )
+    assert.equal(approved.status, 200)
+    assert.equal(approved.headers['cache-control'], 'no-store')
+    assert.equal(approved.body.data.participation.status, 'approved')
+    assert.notEqual(approved.body.data.participation.joinedAt, null)
+    assertPublicParticipant(approved.body.data.participation)
+
+    const rejected = await moderateParticipant(
+      ownerClient,
+      tripId,
+      ids[1],
+      'rejected',
+    )
+    assert.equal(rejected.status, 200)
+    assert.equal(rejected.body.data.participation.status, 'rejected')
+    assert.equal(rejected.body.data.participation.joinedAt, null)
+
+    const cancelledPending = await moderateParticipant(
+      ownerClient,
+      tripId,
+      ids[2],
+      'cancelled',
+    )
+    assert.equal(cancelledPending.status, 200)
+    assert.equal(
+      cancelledPending.body.data.participation.status,
+      'cancelled',
+    )
+    assert.equal(
+      cancelledPending.body.data.participation.joinedAt,
+      null,
+    )
+
+    const approvedFourth = await moderateParticipant(
+      ownerClient,
+      tripId,
+      ids[3],
+      'approved',
+    )
+    assert.equal(approvedFourth.status, 200)
+
+    const removeApproved = await moderateParticipant(
+      ownerClient,
+      tripId,
+      ids[3],
+      'cancelled',
+    )
+    assert.equal(removeApproved.status, 200)
+    assert.equal(
+      removeApproved.body.data.participation.status,
+      'cancelled',
+    )
+    assert.equal(removeApproved.body.data.participation.joinedAt, null)
+
+    for (const [participantId, status] of [
+      [ids[0], 'approved'],
+      [ids[0], 'rejected'],
+      [ids[1], 'approved'],
+      [ids[2], 'approved'],
+      [ids[3], 'approved'],
+    ]) {
+      const conflict = await moderateParticipant(
+        ownerClient,
+        tripId,
+        participantId,
+        status,
+      )
+      assert.equal(conflict.status, 409, `${participantId} ${status}`)
+      assert.equal(
+        conflict.body.error.code,
+        'TRIP_PARTICIPATION_STATE_CONFLICT',
+      )
+    }
+
+    const invalidTarget = await moderateParticipant(
+      ownerClient,
+      tripId,
+      ids[1],
+      'pending',
+    )
+    assert.equal(invalidTarget.status, 400)
+    assert.equal(
+      invalidTarget.body.error.code,
+      'VALIDATION_ERROR',
+    )
+
+    const missing = await moderateParticipant(
+      ownerClient,
+      tripId,
+      '20000000-0000-4000-8000-000000000099',
+      'approved',
+    )
+    assert.equal(missing.status, 404)
+    assert.equal(
+      missing.body.error.code,
+      'TRIP_PARTICIPATION_NOT_FOUND',
+    )
+
+    const otherTrip = await createGroupTrip(ownerClient)
+    const otherJoin = await joinTrip(otherClient, otherTrip.id)
+    const wrongTrip = await moderateParticipant(
+      ownerClient,
+      tripId,
+      otherJoin.body.data.participation.id,
+      'approved',
+    )
+    assert.equal(wrongTrip.status, 404)
+    assert.equal(
+      wrongTrip.body.error.code,
+      'TRIP_PARTICIPATION_NOT_FOUND',
+    )
+
+    const nonOwner = await moderateParticipant(
+      otherClient,
+      tripId,
+      ids[1],
+      'cancelled',
+    )
+    assert.equal(nonOwner.status, 404)
+    assert.equal(nonOwner.body.error.code, 'TRIP_NOT_FOUND')
+
+    const stored = await TripParticipant.findByPk(ids[1])
+    assert.equal(stored.status, 'rejected')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('moderation rechecks capacity inside the transaction', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { client: firstClient } = await createVerifiedClient(harness)
+    const { client: secondClient } = await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient, {
+      maxParticipants: 1,
+    })
+
+    const first = await joinTrip(firstClient, trip.id)
+    const second = await joinTrip(secondClient, trip.id)
+
+    const approval = await moderateParticipant(
+      ownerClient,
+      trip.id,
+      first.body.data.participation.id,
+      'approved',
+    )
+    assert.equal(approval.status, 200)
+
+    const full = await moderateParticipant(
+      ownerClient,
+      trip.id,
+      second.body.data.participation.id,
+      'approved',
+    )
+    assert.equal(full.status, 409)
+    assert.equal(full.body.error.code, 'TRIP_FULL')
+
+    const stored = await TripParticipant.findByPk(
+      second.body.data.participation.id,
+    )
+    assert.equal(stored.status, 'pending')
+    assert.equal(stored.joinedAt, null)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('participation responses are private and never cached', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+
+    const join = await joinTrip(joinerClient, trip.id)
+    const participantId = join.body.data.participation.id
+    const own = await getParticipation(joinerClient, trip.id)
+    const roster = await getParticipants(ownerClient, trip.id)
+    const moderation = await moderateParticipant(
+      ownerClient,
+      trip.id,
+      participantId,
+      'approved',
+    )
+    const leave = await leaveTrip(joinerClient, trip.id)
+
+    for (const response of [join, own, roster, moderation, leave]) {
+      assert.equal(response.headers['cache-control'], 'no-store')
+    }
+
+    const bodies = [
+      join.body.data.participation,
+      own.body.data.participation,
+      moderation.body.data.participation,
+      leave.body.data.participation,
+      ...roster.body.data.participants,
+    ]
+
+    for (const participant of bodies) {
+      assertPublicParticipant(participant)
+    }
+
+    const serialized = JSON.stringify([
+      join.body,
+      own.body,
+      roster.body,
+      moderation.body,
+      leave.body,
+    ])
+    assert.equal(serialized.includes(joiner.email), false)
+    assert.equal(serialized.includes(PASSWORD), false)
+    assert.equal(serialized.includes('passwordHash'), false)
+    assert.equal(serialized.includes('authVersion'), false)
+    assert.equal(serialized.includes('emailVerifiedAt'), false)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the unique trip and user participation constraint is enforced', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { client: ownerClient } = await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+
+    const join = await joinTrip(joinerClient, trip.id)
+    assert.equal(join.status, 201)
+
+    await assert.rejects(
+      () =>
+        TripParticipant.create({
+          tripId: trip.id,
+          userId: joiner.id,
+          status: 'pending',
+        }),
+      (error) => {
+        assert.equal(error.name, 'SequelizeUniqueConstraintError')
+        return true
+      },
+    )
+
+    assert.equal(
+      await TripParticipant.count({
+        where: { tripId: trip.id, userId: joiner.id },
+      }),
+      1,
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+// Two authenticated owner sessions dispatch approvals together. The service
+// locks the trip row and recounts approved participants inside the same
+// transaction, so regardless of which request wins, the database must end with
+// exactly one approved participant and the other request must see TRIP_FULL.
+test('concurrent approvals cannot exceed maxParticipants', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const concurrentOwner = harness.client()
+    const ownerLogin = await loginUser(concurrentOwner, owner.email)
+    assert.equal(ownerLogin.status, 200)
+
+    const { client: firstClient } = await createVerifiedClient(harness)
+    const { client: secondClient } = await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient, {
+      maxParticipants: 1,
+    })
+
+    const first = await joinTrip(firstClient, trip.id)
+    const second = await joinTrip(secondClient, trip.id)
+
+    const responses = await Promise.all([
+      moderateParticipant(
+        ownerClient,
+        trip.id,
+        first.body.data.participation.id,
+        'approved',
+      ),
+      moderateParticipant(
+        concurrentOwner,
+        trip.id,
+        second.body.data.participation.id,
+        'approved',
+      ),
+    ])
+
+    const statuses = responses.map((response) => response.status).sort()
+    assert.deepEqual(statuses, [200, 409])
+
+    const conflict = responses.find(
+      (response) => response.status === 409,
+    )
+    assert.equal(conflict.body.error.code, 'TRIP_FULL')
+
+    assert.equal(
+      await TripParticipant.count({
+        where: { tripId: trip.id, status: 'approved' },
+      }),
+      1,
+    )
   } finally {
     await harness.close()
   }

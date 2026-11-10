@@ -658,3 +658,85 @@ test('moderateParticipant rejects missing participants and non-owners', async ()
   )
   assert.equal(nonOwner.calls.participantFindOne.length, 0)
 })
+
+test('requestJoin does not reuse a rejected record when the trip is full', async () => {
+  const existing = buildParticipant({ status: 'rejected' })
+  const { calls, service } = createService({
+    approvedCount: 3,
+    participantFindOneResults: [existing],
+  })
+
+  await rejectsWith(
+    service.requestJoin(USER_ID, TRIP_ID),
+    TripFullError,
+  )
+  assert.equal(calls.participantUpdate.length, 0)
+  assert.equal(calls.participantCreate.length, 0)
+})
+
+test('listParticipants omits the status filter and handles an empty page', async () => {
+  const { calls, service } = createService({
+    rows: [],
+    count: 0,
+  })
+
+  const result = await service.listParticipants(OWNER_ID, TRIP_ID, {
+    page: 1,
+    limit: 20,
+  })
+
+  assert.deepEqual(calls.participantFindAndCountAll[0].where, {
+    tripId: TRIP_ID,
+  })
+  assert.deepEqual(result.participants, [])
+  assert.deepEqual(result.pagination, {
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  })
+})
+
+test('participation writes use the transaction for every mutation', async () => {
+  const pending = buildParticipant({ status: 'pending' })
+
+  const leaving = createService({
+    participantFindOneResults: [
+      pending,
+      buildParticipant({ status: 'cancelled' }),
+    ],
+  })
+  await leaving.service.leaveTrip(USER_ID, TRIP_ID)
+  assert.equal(
+    leaving.calls.participantUpdate[0].options.transaction,
+    leaving.sequelize.transactions[0],
+  )
+
+  const moderating = createService({
+    participantFindOneResults: [
+      pending,
+      buildParticipant({ status: 'approved' }),
+    ],
+  })
+  await moderating.service.moderateParticipant(
+    OWNER_ID,
+    TRIP_ID,
+    PARTICIPANT_ID,
+    { status: 'approved' },
+  )
+  assert.equal(
+    moderating.calls.participantUpdate[0].options.transaction,
+    moderating.sequelize.transactions[0],
+  )
+
+  const joining = createService({
+    participantFindOneResults: [null, buildParticipant()],
+  })
+  await joining.service.requestJoin(USER_ID, TRIP_ID)
+  assert.equal(
+    joining.calls.participantCreate[0].options.transaction,
+    joining.sequelize.transactions[0],
+  )
+})
