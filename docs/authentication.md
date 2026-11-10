@@ -304,25 +304,35 @@ after both have passed.
 
 ### Current route coverage
 
-The backend currently exposes only the authentication and health routes. It
-does **not** yet implement community HTTP routers for posts, comments, follows
-or trips. Once those routers are added, the guard must be attached to their
-write actions, including at minimum:
+The backend exposes authentication, user-profile, destination and trip routes,
+plus health and readiness checks. It does **not** yet implement community HTTP
+routers for posts, comments or follows, and trip joining is not implemented.
 
-| Action | Intended route |
-|---|---|
-| Create a post | `POST /api/posts` |
-| Comment on a post | `POST /api/posts/:postId/comments` |
-| Follow a user | `POST /api/users/:userId/follow` |
-| Create a trip | `POST /api/trips` |
-| Join a trip | `POST /api/trips/:tripId/join` |
+All trip writes use the full guard:
 
-Public reads (feed, profiles, destinations, post and trip detail) must remain
-unauthenticated unless they already require a session for another reason.
-Because the community routers do not exist yet, there is no production route to
-guard in this stage. The middleware and its integration contract are ready; the
-enforcement tests exercise the real authentication, CSRF and verified-email
-stack against representative routes.
+```text
+authenticate → csrfProtection → requireVerifiedEmail → controller
+```
+
+| Action | Route | Guard |
+|---|---|---|
+| Create a trip | `POST /api/trips` | Auth + CSRF + verified email |
+| Update a trip | `PATCH /api/trips/:tripId` | Auth + CSRF + verified email |
+| Delete a trip | `DELETE /api/trips/:tripId` | Auth + CSRF + verified email |
+| Add a stop | `POST /api/trips/:tripId/stops` | Auth + CSRF + verified email |
+| Update a stop | `PATCH /api/trips/:tripId/stops/:stopId` | Auth + CSRF + verified email |
+| Remove a stop | `DELETE /api/trips/:tripId/stops/:stopId` | Auth + CSRF + verified email |
+| Reorder stops | `PUT /api/trips/:tripId/stops/reorder` | Auth + CSRF + verified email |
+| List own trips | `GET /api/trips` | Auth only |
+| Trip detail | `GET /api/trips/:tripId` | Optional auth |
+
+Public reads (feed, profiles, destinations and trip detail) do not require
+verified email. Trip detail is publicly readable for non-draft trips; an
+authenticated owner can also read their own drafts. The optional-authentication
+middleware resolves a valid session without rejecting anonymous readers.
+
+The middleware contract is exercised by the real authentication integration
+tests and the trip HTTP integration tests.
 
 ## CSRF flow
 
