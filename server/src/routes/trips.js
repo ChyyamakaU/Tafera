@@ -8,6 +8,9 @@ const {
   createTripController,
 } = require('../controllers/tripController')
 const {
+  createTripParticipationController,
+} = require('../controllers/tripParticipationController')
+const {
   createAuthenticate,
 } = require('../middlewares/authenticate')
 const {
@@ -22,12 +25,18 @@ const {
 
 const createTripsRouter = ({
   tripService,
+  tripParticipationService,
   sessions = sessionService,
   nodeEnv = env.NODE_ENV,
   User,
 } = {}) => {
   const service = tripService || createTripService()
   const controller = createTripController({ tripService: service })
+  // The participation controller defaults to the shared service singleton;
+  // an explicitly injected service is only needed by tests.
+  const participationController = createTripParticipationController(
+    tripParticipationService ? { tripParticipationService } : {},
+  )
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
   const optionalAuthenticate = createOptionalAuthenticate({
     User,
@@ -69,6 +78,35 @@ const createTripsRouter = ({
     '/:tripId/stops/:stopId',
     ...protectWrite,
     controller.removeStop,
+  )
+
+  // Participation routes are all multi-segment, so they cannot shadow the
+  // single-segment `GET /:tripId` trip detail route.
+  router.post(
+    '/:tripId/join',
+    ...protectWrite,
+    participationController.requestJoin,
+  )
+  // Leaving or cancelling one's own participation is a write.
+  router.delete(
+    '/:tripId/join',
+    ...protectWrite,
+    participationController.leaveTrip,
+  )
+  router.get(
+    '/:tripId/participation',
+    authenticate,
+    participationController.getOwnParticipation,
+  )
+  router.get(
+    '/:tripId/participants',
+    authenticate,
+    participationController.listParticipants,
+  )
+  router.patch(
+    '/:tripId/participants/:participantId',
+    ...protectWrite,
+    participationController.moderateParticipant,
   )
 
   return router
