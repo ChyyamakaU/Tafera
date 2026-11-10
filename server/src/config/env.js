@@ -5,10 +5,14 @@ const {
   ARGON2_AGGREGATE_MEMORY_BUDGET_KIB,
   ARGON2_CONFIG_LIMITS,
 } = require('./argon2Policy')
+const {
+  DURATION_PATTERN,
+  parseDurationMs,
+} = require('../utils/duration')
 
 const NODE_ENVIRONMENTS = ['development', 'test', 'production']
 const MIN_SECRET_LENGTH = 32
-const DURATION_PATTERN = /^\d+(ms|[smhdwy])?$/i
+const MAX_EMAIL_VERIFICATION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 const isPresent = (value) => value !== undefined && value !== null && value !== ''
 
@@ -177,6 +181,27 @@ const schema = z
           'must be 1-64 characters using only letters, digits, underscore or hyphen',
         )
         .default('tafera'),
+    ),
+    // Email verification links expire after this duration. The value uses the
+    // same syntax as the JWT duration settings; a bare number means seconds.
+    EMAIL_VERIFICATION_TOKEN_TTL: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .regex(
+          DURATION_PATTERN,
+          'must be a duration such as 1h, 24h, 7d, or a number of seconds',
+        )
+        .default('24h')
+        .refine((value) => {
+          try {
+            const duration = parseDurationMs(value)
+            return duration > 0 && duration <= MAX_EMAIL_VERIFICATION_TTL_MS
+          } catch {
+            return false
+          }
+        }, 'must be between 1ms and 30 days'),
     ),
     JWT_ACCESS_SECRET: optionalSecret,
     JWT_REFRESH_SECRET: optionalSecret,
@@ -361,6 +386,10 @@ module.exports = {
 
   SESSION_SECRET: parsed.SESSION_SECRET,
   SESSION_NAMESPACE: parsed.SESSION_NAMESPACE,
+
+  EMAIL_VERIFICATION: {
+    tokenTtlMs: parseDurationMs(parsed.EMAIL_VERIFICATION_TOKEN_TTL),
+  },
 
   PASSWORD: {
     minLength: 12,

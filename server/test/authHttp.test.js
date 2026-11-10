@@ -23,6 +23,7 @@ const { createClient } = require('redis')
 
 const { runtimeConfig } = require('../src/config/database')
 const UserModel = require('../src/models/user')
+const EmailVerificationTokenModel = require('../src/models/emailVerificationToken')
 const passwordService = require('../src/services/passwordService')
 const sessionService = require('../src/services/sessionService')
 const {
@@ -36,6 +37,10 @@ const {
 } = require('../src/middlewares/sessionPolicy')
 const { createAuthService } = require('../src/services/authService')
 const { createAuthRouter } = require('../src/routes/auth')
+const { createEmailService } = require('../src/services/emailService')
+const {
+  createEmailVerificationService,
+} = require('../src/services/emailVerificationService')
 const errorHandler = require('../src/middlewares/errorHandler')
 
 const TEST_SECRET = 'test-only-session-secret-0123456789abcdef'
@@ -47,6 +52,7 @@ const DAY = 24 * 60 * MINUTE
 let base = null
 let scoped = null
 let User = null
+let EmailVerificationToken = null
 let schema = null
 let databaseAvailable = false
 let redisClient = null
@@ -97,6 +103,26 @@ before(async () => {
       `CREATE UNIQUE INDEX users_email_lower_unique
        ON "${schema}".users (lower(email))`,
     )
+    await base.query(
+      `CREATE TABLE "${schema}".email_verification_tokens (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         token_hash varchar(64) NOT NULL,
+         expires_at timestamptz NOT NULL,
+         consumed_at timestamptz,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         updated_at timestamptz NOT NULL DEFAULT now()
+       )`,
+    )
+    await base.query(
+      `CREATE UNIQUE INDEX email_verification_tokens_token_hash_unique
+       ON "${schema}".email_verification_tokens (token_hash)`,
+    )
+    await base.query(
+      `CREATE INDEX email_verification_tokens_user_created_at_idx
+       ON "${schema}".email_verification_tokens (user_id, created_at)`,
+    )
 
     scoped = new Sequelize(
       config.database,
@@ -117,6 +143,10 @@ before(async () => {
 
     await scoped.authenticate()
     User = UserModel(scoped, DataTypes)
+    EmailVerificationToken = EmailVerificationTokenModel(
+      scoped,
+      DataTypes,
+    )
     databaseAvailable = true
   } catch {
     databaseAvailable = false
@@ -359,10 +389,35 @@ const cleanupNamespace = async (namespace) => {
   }
 }
 
-const createHarness = async () => {
+const createHarness = async ({
+  emailTransport,
+  resendCooldownMs = 0,
+  tokenTtlMs = DAY,
+  resendRateLimit = {},
+} = {}) => {
   const namespace = `tafera-auth-test-${crypto.randomUUID()}`
   const index = createSessionIndex({ client: redisClient, namespace })
   const nodeEnv = 'development'
+  const sentEmails = []
+  const transport =
+    emailTransport === undefined
+      ? {
+          async send(message) {
+            sentEmails.push(message)
+          },
+        }
+      : emailTransport
+  const emailService = createEmailService({
+    transport,
+    clientUrl: 'http://localhost:5173',
+  })
+  const verificationService = createEmailVerificationService({
+    User,
+    EmailVerificationToken,
+    emails: emailService,
+    tokenTtlMs,
+    resendCooldownMs,
+  })
 
   const sessions = {
     createAuthenticatedSession: (req, user, options = {}) =>
@@ -398,10 +453,28 @@ const createHarness = async () => {
   )
   app.use(createSessionPolicy({ nodeEnv, index }))
 
-  const authService = createAuthService({ User, sessions, nodeEnv })
+  const authService = createAuthService({
+    User,
+    sessions,
+    nodeEnv,
+    verifications: verificationService,
+  })
   app.use(
     '/api/auth',
-    createAuthRouter({ authService, sessions, nodeEnv, User }),
+    createAuthRouter({
+      authService,
+      sessions,
+      nodeEnv,
+      User,
+      verificationService,
+      redisClient,
+      rateLimitPrefix: `${namespace}:email-verification:`,
+      resendRateLimit: {
+        windowMs: 15 * MINUTE,
+        limit: 3,
+        ...resendRateLimit,
+      },
+    }),
   )
   app.use(errorHandler)
 
@@ -410,6 +483,8 @@ const createHarness = async () => {
   return {
     namespace,
     index,
+    sentEmails,
+    verificationService,
     port: server.address().port,
     client: () => createHttpClient(server.address().port),
     close: async () => {
@@ -459,6 +534,22 @@ const loginUser = async (client, email, password = PASSWORD) => {
   const response = await client.post('/api/auth/login', { email, password })
   return { csrf, response }
 }
+
+const verificationTokenFrom = (message) => {
+  const match = /verify-email\?token=([A-Za-z0-9_-]+)/.exec(
+    message && message.text ? message.text : '',
+  )
+  return match ? match[1] : null
+}
+
+const sha256 = (value) =>
+  crypto.createHash('sha256').update(value, 'utf8').digest('hex')
+
+const verifyEmail = (client, token) =>
+  client.post('/api/auth/verify-email', { token })
+
+const resendVerification = (client) =>
+  client.post('/api/auth/verify-email/resend')
 
 const assertSafeUser = (user) => {
   assert.equal(typeof user.id, 'string')
@@ -1061,6 +1152,349 @@ test('authVersion changes revoke existing sessions', async (t) => {
       ),
       0,
     )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('registration creates an unverified account and emails a hashed verification token', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.user.emailVerified, false)
+    assert.equal(harness.sentEmails.length, 1)
+
+    const stored = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.ok(stored)
+    assert.equal(stored.emailVerifiedAt, null)
+
+    const message = harness.sentEmails[0]
+    assert.equal(message.to, 'ada@example.com')
+    assert.match(message.subject, /verify/i)
+    assert.match(
+      message.text,
+      /http:\/\/localhost:5173\/verify-email\?token=/,
+    )
+
+    const token = verificationTokenFrom(message)
+    assert.ok(token)
+    assert.equal(JSON.stringify(response.body).includes(token), false)
+
+    const tokenRow = await EmailVerificationToken.findOne({
+      where: { userId: stored.id },
+    })
+    assert.ok(tokenRow)
+    assert.equal(tokenRow.tokenHash, undefined)
+    assert.equal(tokenRow.consumedAt, null)
+    assert.ok(tokenRow.expiresAt.getTime() > Date.now())
+
+    const withHash = await EmailVerificationToken.scope(
+      'withTokenHash',
+    ).findOne({ where: { userId: stored.id } })
+    assert.equal(withHash.tokenHash, sha256(token))
+    assert.notEqual(withHash.tokenHash, token)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('a valid verification token marks the user verified and cannot be reused', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+    assert.equal(response.status, 201)
+
+    const token = verificationTokenFrom(harness.sentEmails[0])
+    assert.ok(token)
+
+    // Verification uses the emailed token, not the session cookie.
+    const verifier = harness.client()
+    const verified = await verifyEmail(verifier, token)
+
+    assert.equal(verified.status, 200)
+    assert.equal(verified.body.data.user.emailVerified, true)
+    assert.equal(
+      Object.hasOwn(verified.body.data.user, 'emailVerifiedAt'),
+      false,
+    )
+    assert.equal(JSON.stringify(verified.body).includes(token), false)
+
+    const stored = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.ok(stored.emailVerifiedAt instanceof Date)
+
+    const tokenRow = await EmailVerificationToken.scope(
+      'withTokenHash',
+    ).findOne({ where: { userId: stored.id } })
+    assert.ok(tokenRow.consumedAt instanceof Date)
+
+    const reused = await verifyEmail(harness.client(), token)
+    assert.equal(reused.status, 400)
+    assert.equal(reused.body.error.code, 'VERIFICATION_TOKEN_INVALID')
+
+    const me = await client.get('/api/auth/me')
+    assert.equal(me.status, 200)
+    assert.equal(me.body.data.user.emailVerified, true)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('invalid, missing and expired verification tokens are rejected safely', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+    const token = verificationTokenFrom(harness.sentEmails[0])
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+
+    const invalid = await verifyEmail(harness.client(), 'A'.repeat(43))
+    assert.equal(invalid.status, 400)
+    assert.equal(invalid.body.error.code, 'VERIFICATION_TOKEN_INVALID')
+
+    const missing = await harness.client().post('/api/auth/verify-email', {})
+    assert.equal(missing.status, 400)
+    assert.equal(missing.body.error.code, 'VALIDATION_ERROR')
+
+    await EmailVerificationToken.update(
+      { expiresAt: new Date(Date.now() - 1000) },
+      { where: { userId: user.id } },
+    )
+
+    const expired = await verifyEmail(harness.client(), token)
+    assert.equal(expired.status, 400)
+    assert.equal(expired.body.error.code, 'VERIFICATION_TOKEN_INVALID')
+
+    await user.reload()
+    assert.equal(user.emailVerifiedAt, null)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('concurrent verification requests consume the token only once', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+    const token = verificationTokenFrom(harness.sentEmails[0])
+
+    const [first, second] = await Promise.all([
+      verifyEmail(harness.client(), token),
+      verifyEmail(harness.client(), token),
+    ])
+
+    assert.deepEqual(
+      [first.status, second.status].sort((a, b) => a - b),
+      [200, 400],
+    )
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.ok(user.emailVerifiedAt instanceof Date)
+
+    const tokens = await EmailVerificationToken.findAll({
+      where: { userId: user.id },
+    })
+    assert.equal(tokens.length, 1)
+    assert.ok(tokens[0].consumedAt instanceof Date)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('resend invalidates the previous token and sends a new link', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+    assert.equal(harness.sentEmails.length, 1)
+    const firstToken = verificationTokenFrom(harness.sentEmails[0])
+
+    const resend = await resendVerification(client)
+    assert.equal(resend.status, 202)
+    assert.equal(resend.body.data.sent, true)
+    assert.equal(harness.sentEmails.length, 2)
+
+    const secondToken = verificationTokenFrom(harness.sentEmails[1])
+    assert.ok(secondToken)
+    assert.notEqual(secondToken, firstToken)
+
+    const oldTokenResponse = await verifyEmail(
+      harness.client(),
+      firstToken,
+    )
+    assert.equal(oldTokenResponse.status, 400)
+
+    const newTokenResponse = await verifyEmail(
+      harness.client(),
+      secondToken,
+    )
+    assert.equal(newTokenResponse.status, 200)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('resend requires authentication and CSRF and is rate limited', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const anonymous = harness.client()
+    const unauthenticated = await resendVerification(anonymous)
+    assert.equal(unauthenticated.status, 401)
+    assert.equal(unauthenticated.body.error.code, 'AUTH_REQUIRED')
+
+    const client = harness.client()
+    await registerUser(client)
+
+    const missingCsrf = await client.post(
+      '/api/auth/verify-email/resend',
+      undefined,
+      { csrf: false },
+    )
+    assert.equal(missingCsrf.status, 403)
+    assert.equal(missingCsrf.body.error.code, 'CSRF_TOKEN_INVALID')
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await resendVerification(client)
+      assert.equal(response.status, 202)
+    }
+
+    const limited = await resendVerification(client)
+    assert.equal(limited.status, 429)
+    assert.equal(
+      limited.body.error.code,
+      'EMAIL_VERIFICATION_RATE_LIMITED',
+    )
+    assert.equal(typeof limited.headers['retry-after'], 'string')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('resend applies a per-account cooldown without invalidating the current token', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness({ resendCooldownMs: 60 * 1000 })
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+    const firstToken = verificationTokenFrom(harness.sentEmails[0])
+
+    const limited = await resendVerification(client)
+    assert.equal(limited.status, 429)
+    assert.equal(
+      limited.body.error.code,
+      'EMAIL_VERIFICATION_RATE_LIMITED',
+    )
+    assert.equal(typeof limited.headers['retry-after'], 'string')
+    assert.equal(harness.sentEmails.length, 1)
+
+    const verified = await verifyEmail(harness.client(), firstToken)
+    assert.equal(verified.status, 200)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('already-verified accounts do not receive another email', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const client = harness.client()
+    await registerUser(client)
+    const token = verificationTokenFrom(harness.sentEmails[0])
+    assert.equal((await verifyEmail(harness.client(), token)).status, 200)
+    assert.equal(harness.sentEmails.length, 1)
+
+    const resend = await resendVerification(client)
+    assert.equal(resend.status, 200)
+    assert.equal(resend.body.data.alreadyVerified, true)
+    assert.equal(resend.body.data.sent, false)
+    assert.equal(harness.sentEmails.length, 1)
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.equal(
+      await EmailVerificationToken.count({ where: { userId: user.id } }),
+      1,
+    )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('registration survives email delivery failure without inconsistent state', async (t) => {
+  if (skip(t)) return
+  const attempts = []
+  const harness = await createHarness({
+    emailTransport: {
+      async send(message) {
+        attempts.push(message.to)
+        throw new Error('provider unavailable')
+      },
+    },
+  })
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.user.emailVerified, false)
+    assert.deepEqual(attempts, ['ada@example.com'])
+    assert.equal(harness.sentEmails.length, 0)
+
+    const user = await User.findOne({ where: { email: 'ada@example.com' } })
+    assert.ok(user)
+    assert.equal(user.emailVerifiedAt, null)
+    assert.equal(
+      await EmailVerificationToken.count({ where: { userId: user.id } }),
+      1,
+    )
+
+    const me = await client.get('/api/auth/me')
+    assert.equal(me.status, 200)
+    assert.equal(me.body.data.user.emailVerified, false)
+
+    const resend = await resendVerification(client)
+    assert.equal(resend.status, 503)
+    assert.equal(resend.body.error.code, 'EMAIL_DELIVERY_UNAVAILABLE')
+    assert.equal(JSON.stringify(resend.body).includes('provider unavailable'), false)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('resend reports unavailable when no email provider is configured', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness({ emailTransport: null })
+
+  try {
+    const client = harness.client()
+    const { response } = await registerUser(client)
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.user.emailVerified, false)
+
+    const resend = await resendVerification(client)
+    assert.equal(resend.status, 503)
+    assert.equal(resend.body.error.code, 'EMAIL_DELIVERY_UNAVAILABLE')
+    assert.equal(harness.sentEmails.length, 0)
   } finally {
     await harness.close()
   }

@@ -4,9 +4,9 @@ Tafera uses Redis-backed, cookie-based sessions. Authentication state is never
 returned in a response body; the browser holds an opaque, signed session cookie
 and the server stores the session payload in Redis.
 
-This document covers the Stage 3 authentication endpoints. Session policy,
-Redis indexing and expiry rules are implemented by the Stage 2 session
-infrastructure.
+This document covers the Stage 3 authentication endpoints and the Stage 4 email
+verification flow. Session policy, Redis indexing and expiry rules are
+implemented by the Stage 2 session infrastructure.
 
 ## Endpoints
 
@@ -20,6 +20,8 @@ envelope; errors use `{ "error": { "code", "message", "status" } }`.
 | `POST` | `/api/auth/login` | No | Yes | `200` |
 | `POST` | `/api/auth/logout` | No | Yes, when a session exists | `204` |
 | `GET` | `/api/auth/me` | Yes | No | `200` |
+| `POST` | `/api/auth/verify-email` | No | No | `200` |
+| `POST` | `/api/auth/verify-email/resend` | Yes | Yes | `202` or `200` |
 
 ### GET /api/auth/csrf
 
@@ -68,6 +70,7 @@ Success (`201`):
       "bio": null,
       "role": "user",
       "status": "active",
+      "emailVerified": false,
       "createdAt": "2026-01-01T00:00:00.000Z",
       "updatedAt": "2026-01-01T00:00:00.000Z"
     },
@@ -124,6 +127,7 @@ Requires a valid authenticated session. Returns:
       "bio": null,
       "role": "user",
       "status": "active",
+      "emailVerified": false,
       "createdAt": "2026-01-01T00:00:00.000Z",
       "updatedAt": "2026-01-01T00:00:00.000Z"
     }
@@ -135,6 +139,115 @@ The middleware re-reads the user from PostgreSQL and rejects the request when
 the user is missing, the account is not active, or the session's `authVersion`
 does not match the database value. Rejected sessions are destroyed and the
 cookie is cleared.
+
+## Email verification
+
+New accounts start with `email_verified_at = NULL`. Authentication responses
+include an additive `emailVerified` boolean so the frontend can prompt the user
+without exposing the raw timestamp.
+
+Verification tokens are:
+
+- 32 random bytes encoded as base64url (43 characters, 256 bits of entropy).
+- Stored only as a SHA-256 hash in `email_verification_tokens.token_hash`.
+- Bound to one user and expiring after `EMAIL_VERIFICATION_TOKEN_TTL`
+  (default `24h`, maximum 30 days).
+- Single-use: successful verification sets `consumed_at`, and all other
+  outstanding tokens for the user are consumed at the same time.
+- Superseded when a new token is issued. Only one outstanding token per account
+  is usable.
+
+### POST /api/auth/verify-email
+
+Request:
+
+```json
+{
+  "token": "the-token-from-the-email-link"
+}
+```
+
+The verification email links to
+`${CLIENT_URL}/verify-email?token=<token>`. The frontend extracts the token and
+sends it in the JSON body. Tokens are deliberately not accepted in a URL on the
+API so they do not appear in API access logs.
+
+Success (`200`):
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "fullName": "Ada Lovelace",
+      "email": "ada@example.com",
+      "profileImage": null,
+      "bio": null,
+      "role": "user",
+      "status": "active",
+      "emailVerified": true,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  }
+}
+```
+
+Invalid, expired and already-used tokens all return
+`400 VERIFICATION_TOKEN_INVALID` with the same message. Missing tokens return
+`400 VALIDATION_ERROR`. Verification does not require a session or CSRF token
+because the emailed token is the credential; it also cannot be used to perform
+any other action.
+
+Concurrent requests are safe: the user row and token row are locked in a
+database transaction, and the conditional `consumed_at IS NULL` check ensures
+only one request can consume a token.
+
+### POST /api/auth/verify-email/resend
+
+Requires an authenticated session and the normal CSRF token. It accepts no
+email address, so it cannot be used to probe whether an account exists.
+
+- `202 Accepted` when a new token was issued and an email was sent:
+  `{ "data": { "alreadyVerified": false, "sent": true } }`
+- `200 OK` when the account is already verified:
+  `{ "data": { "alreadyVerified": true, "sent": false } }`
+- `429 EMAIL_VERIFICATION_RATE_LIMITED` with `Retry-After` when the per-account
+  cooldown or HTTP rate limit is exceeded.
+- `503 EMAIL_DELIVERY_UNAVAILABLE` when no approved transport is configured or
+  the transport fails.
+
+A successful resend consumes the previous outstanding token, so only the newest
+link works. The per-account cooldown is 60 seconds and the Redis-backed limit is
+3 requests per 15 minutes per authenticated account.
+
+### Email delivery decision
+
+No email provider, SDK or credentials exist in the repository. Stage 4
+therefore implements a provider-independent transport boundary in
+`server/src/services/emailService.js`:
+
+```js
+const emailService = createEmailService({
+  transport: {
+    async send({ to, subject, text, html }) {
+      // Provider-specific integration goes here after approval.
+    },
+  },
+})
+```
+
+Until an approved provider is wired in, delivery is reported as unavailable:
+
+- Registration still succeeds, creates a hashed token, and leaves the account
+  unverified. The delivery failure is logged without the token or recipient
+  address.
+- Resend returns `503 EMAIL_DELIVERY_UNAVAILABLE` without invalidating the
+  current token.
+
+A decision is required on the email provider and its credentials before
+production verification emails can be delivered. No provider was installed or
+configured in this stage.
 
 ## CSRF flow
 
@@ -213,24 +326,29 @@ cleanup cannot leave a usable authenticated session behind.
 
 ## Environment variables
 
-No new variables are required for Stage 3.
-
 - `SESSION_SECRET` (required): signs session cookies.
 - `SESSION_NAMESPACE` (optional, default `tafera`): Redis key namespace.
-- `CLIENT_URL`: allowed CORS origin for credentialed frontend requests.
+- `CLIENT_URL`: allowed CORS origin and base URL for verification links.
 - `TRUST_PROXY`: controls secure-cookie detection behind a reverse proxy.
-- `REDIS_URL`: session and session-index storage.
+- `REDIS_URL`: session, session-index and rate-limit storage.
+- `EMAIL_VERIFICATION_TOKEN_TTL` (optional, default `24h`): verification link
+  lifetime. Accepts `ms`, `s`, `m`, `h`, `d`, `w`, `y`, or a bare number of
+  seconds; maximum 30 days. No email provider credentials are defined because
+  no provider has been approved yet.
 
 ## Error codes
 
 | Status | Code | Meaning |
 |---:|---|---|
-| 400 | `VALIDATION_ERROR` | Invalid registration/login input |
+| 400 | `VALIDATION_ERROR` | Invalid registration/login/verification input |
 | 400 | `INVALID_PASSWORD` | Password does not meet policy |
+| 400 | `VERIFICATION_TOKEN_INVALID` | Verification token is invalid, expired or already used |
 | 401 | `AUTH_REQUIRED` | No authenticated session |
 | 401 | `SESSION_INVALID` | Session expired, revoked or no longer valid |
 | 401 | `INVALID_CREDENTIALS` | Unknown email or wrong password |
 | 403 | `ACCOUNT_INACTIVE` | Suspended account |
 | 403 | `CSRF_TOKEN_INVALID` | Missing/invalid CSRF token |
 | 409 | `EMAIL_IN_USE` | Email already registered |
+| 429 | `EMAIL_VERIFICATION_RATE_LIMITED` | Resend cooldown or rate limit exceeded |
+| 503 | `EMAIL_DELIVERY_UNAVAILABLE` | No transport configured or delivery failed |
 | 503 | `SERVICE_UNAVAILABLE` / `SESSION_STORE_UNAVAILABLE` | Redis/session store failure |

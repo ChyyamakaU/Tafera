@@ -30,7 +30,25 @@ const toSafeUser = (user) => {
   return safeUser
 }
 
+// Adds a derived, non-sensitive verification flag for API responses. The raw
+// emailVerifiedAt timestamp is still never exposed.
+const toPublicUser = (user) => {
+  const safeUser = toSafeUser(user)
+
+  if (!safeUser) return null
+
+  const source =
+    typeof user.get === 'function' ? user.get({ plain: true }) : user
+
+  if (source.emailVerifiedAt !== undefined) {
+    safeUser.emailVerified = source.emailVerifiedAt !== null
+  }
+
+  return safeUser
+}
+
 module.exports = {
   SAFE_USER_FIELDS,
   toSafeUser,
+  toPublicUser,
 }

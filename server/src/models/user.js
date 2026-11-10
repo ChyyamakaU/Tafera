@@ -166,6 +166,13 @@ module.exports = (sequelize, DataTypes) => {
       onUpdate: 'CASCADE',
     })
 
+    User.hasMany(models.EmailVerificationToken, {
+      foreignKey: 'userId',
+      as: 'emailVerificationTokens',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+
     User.hasMany(models.Notification, {
       foreignKey: 'userId',
       as: 'notifications',

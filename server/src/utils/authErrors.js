@@ -94,6 +94,29 @@ class ValidationError extends AuthError {
   }
 }
 
+class VerificationTokenInvalidError extends AuthError {
+  constructor() {
+    super({
+      message: 'This verification link is invalid or has expired.',
+      code: 'VERIFICATION_TOKEN_INVALID',
+      status: 400,
+    })
+    this.name = 'VerificationTokenInvalidError'
+  }
+}
+
+class VerificationResendRateLimitedError extends AuthError {
+  constructor(retryAfterSeconds) {
+    super({
+      message: 'Please wait before requesting another verification email.',
+      code: 'EMAIL_VERIFICATION_RATE_LIMITED',
+      status: 429,
+    })
+    this.name = 'VerificationResendRateLimitedError'
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
 module.exports = {
   AuthError,
   AuthenticationRequiredError,
@@ -103,4 +126,6 @@ module.exports = {
   EmailInUseError,
   CsrfError,
   ValidationError,
+  VerificationTokenInvalidError,
+  VerificationResendRateLimitedError,
 }

@@ -3,8 +3,15 @@
 const env = require('../config/env')
 const sessionService = require('../services/sessionService')
 const { createAuthService } = require('../services/authService')
-const { parseRegistration, parseLogin } = require('../validators/auth')
-const { toSafeUser } = require('../utils/safeUser')
+const {
+  emailVerificationService,
+} = require('../services/emailVerificationService')
+const {
+  parseRegistration,
+  parseLogin,
+  parseVerifyEmail,
+} = require('../validators/auth')
+const { toPublicUser } = require('../utils/safeUser')
 const { getCsrfToken } = require('../utils/csrf')
 
 const asyncHandler = (handler) => (req, res, next) => {
@@ -16,10 +23,11 @@ const noStore = (res) => res.set('Cache-Control', 'no-store')
 const createAuthController = ({
   authService,
   sessions = sessionService,
+  verifications = emailVerificationService,
   nodeEnv = env.NODE_ENV,
 } = {}) => {
   const service =
-    authService || createAuthService({ sessions, nodeEnv })
+    authService || createAuthService({ sessions, verifications, nodeEnv })
 
   return {
     register: asyncHandler(async (req, res) => {
@@ -44,9 +52,33 @@ const createAuthController = ({
 
     me: (req, res) => {
       noStore(res).status(200).json({
-        data: { user: toSafeUser(req.user) },
+        data: { user: toPublicUser(req.user) },
       })
     },
+
+    verifyEmail: asyncHandler(async (req, res) => {
+      const { token } = parseVerifyEmail(req.body)
+      const { user } = await verifications.verify(token)
+
+      noStore(res).status(200).json({
+        data: { user: toPublicUser(user) },
+      })
+    }),
+
+    resendVerification: asyncHandler(async (req, res) => {
+      const result = await verifications.resend(req.auth.userId)
+
+      if (result.alreadyVerified) {
+        noStore(res).status(200).json({
+          data: { alreadyVerified: true, sent: false },
+        })
+        return
+      }
+
+      noStore(res).status(202).json({
+        data: { alreadyVerified: false, sent: true },
+      })
+    }),
 
     csrf: asyncHandler(async (req, res) => {
       if (!req.session || typeof req.session.csrfSecret !== 'string') {

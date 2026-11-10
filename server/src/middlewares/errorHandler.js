@@ -148,6 +148,18 @@ const normalizeError = (err) => {
     }
   }
 
+  // Email delivery is unavailable but the API itself is healthy. Expose only
+  // the safe operational status, never transport/provider details.
+  if (err.code === 'EMAIL_DELIVERY_UNAVAILABLE' && status === 503) {
+    return {
+      status: 503,
+      code: 'EMAIL_DELIVERY_UNAVAILABLE',
+      message:
+        'Email delivery is not available right now. Please try again later.',
+      isPublicServiceError: true,
+    }
+  }
+
   if (err.expose && status < 500) {
     return {
       status,
@@ -237,6 +249,10 @@ const errorHandler = (err, req, res, next) => {
     !normalized.isPublicServiceError
   ) {
     body.error.stack = err.stack
+  }
+
+  if (Number.isInteger(err.retryAfterSeconds) && err.retryAfterSeconds > 0) {
+    res.set('Retry-After', String(err.retryAfterSeconds))
   }
 
   res.set('Cache-Control', 'no-store').status(status).json(body)

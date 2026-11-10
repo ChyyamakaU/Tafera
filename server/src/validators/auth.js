@@ -38,6 +38,18 @@ const loginSchema = z.object({
   password: loginPasswordSchema,
 })
 
+// Format validation is deliberately permissive: malformed or unknown tokens
+// all receive the same generic verification error from the service.
+const verificationTokenSchema = z
+  .string({ message: 'Verification token must be a string.' })
+  .trim()
+  .min(1, 'Verification token is required.')
+  .max(512, 'Verification token is invalid.')
+
+const verifyEmailSchema = z.object({
+  token: verificationTokenSchema,
+})
+
 const formatIssues = (issues) =>
   issues.map((issue) => ({
     field: issue.path.join('.') || 'request',
@@ -58,12 +70,16 @@ const parseWith = (schema, input) => {
 
 const parseRegistration = (input) => parseWith(registrationSchema, input)
 const parseLogin = (input) => parseWith(loginSchema, input)
+const parseVerifyEmail = (input) => parseWith(verifyEmailSchema, input)
 
 module.exports = {
   emailSchema,
   fullNameSchema,
   registrationSchema,
   loginSchema,
+  verificationTokenSchema,
+  verifyEmailSchema,
   parseRegistration,
   parseLogin,
+  parseVerifyEmail,
 }

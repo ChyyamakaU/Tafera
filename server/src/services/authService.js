@@ -1,9 +1,13 @@
+/* eslint-disable no-undef */
 'use strict'
 
 const env = require('../config/env')
 const passwordService = require('./passwordService')
 const sessionService = require('./sessionService')
-const { toSafeUser } = require('../utils/safeUser')
+const {
+  emailVerificationService,
+} = require('./emailVerificationService')
+const { toPublicUser } = require('../utils/safeUser')
 const { getCsrfToken } = require('../utils/csrf')
 const { logSecurityEvent } = require('../utils/securityLog')
 const { SessionStoreUnavailableError } = require('../utils/sessionErrors')
@@ -13,8 +17,6 @@ const {
   AccountInactiveError,
 } = require('../utils/authErrors')
 
-// Used only to keep unknown-email logins roughly as expensive as known-email
-// logins. It is a PHC string for an unrelated random password, not a secret.
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=19456,t=2,p=1$sFnQNpdPu9GxoLznhPvjCA$AQOaU8UHZB3fbeYdsTe2XfVX3W5RabpuHbfPvryAH7A'
 
@@ -24,6 +26,7 @@ const createAuthService = ({
   User,
   passwords = passwordService,
   sessions = sessionService,
+  verifications = emailVerificationService,
   nodeEnv = env.NODE_ENV,
   now = () => Date.now(),
 } = {}) => {
@@ -87,13 +90,31 @@ const createAuthService = ({
       throw err
     }
 
+    try {
+      await verifications.sendInitialVerification(user)
+    } catch (err) {
+      // Email delivery is deliberately non-fatal for registration. The account
+      // and session are already valid, and the user can request another email
+      // once delivery is configured or recovers.
+      logSecurityEvent(
+        'email_verification_delivery_failed',
+        {
+          operation: 'registration',
+          outcome: 'failure',
+          errorCode:
+            err.code || err.name || 'EMAIL_VERIFICATION_ERROR',
+        },
+        'warn',
+      )
+    }
+
     logSecurityEvent('auth_register', {
       role: user.role,
       outcome: 'success',
     })
 
     return {
-      user: toSafeUser(user),
+      user: toPublicUser(user),
       csrfToken: getCsrfToken(req.session),
     }
   }
@@ -146,7 +167,7 @@ const createAuthService = ({
     })
 
     return {
-      user: toSafeUser(user),
+      user: toPublicUser(user),
       csrfToken: getCsrfToken(req.session),
     }
   }

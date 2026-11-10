@@ -1,5 +1,7 @@
-const rateLimit = require('express-rate-limit')
+const { ipKeyGenerator, rateLimit } = require('express-rate-limit')
 const { RedisStore } = require('rate-limit-redis')
+const env = require('./env')
+const EMAIL_VERIFICATION = require('./emailVerification')
 const { client } = require('./redis')
 
 const WINDOW_MS = 15 * 60 * 1000
@@ -55,4 +57,52 @@ const createApiLimiter = () => {
   })
 }
 
+// Verification-email requests are limited per authenticated account (not just
+// per IP) so shared networks cannot exhaust another user's allowance and a
+// single account cannot trigger unlimited mail. The database cooldown in the
+// verification service remains the authoritative per-account throttle.
+const createEmailVerificationLimiter = ({
+  client: redisClient = client,
+  prefix = `${env.SESSION_NAMESPACE}:email-verification:`,
+  windowMs = EMAIL_VERIFICATION.resendWindowMs,
+  limit = EMAIL_VERIFICATION.resendMaxRequests,
+} = {}) =>
+  rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    passOnStoreError: false,
+    validate: { trustProxy: false },
+    keyGenerator: (req) =>
+      req.auth && req.auth.userId
+        ? `user:${req.auth.userId}`
+        : ipKeyGenerator(req.ip),
+    store: new RedisStore({
+      prefix,
+      sendCommand: (...args) => redisClient.sendCommand(args),
+    }),
+    handler: (req, res, next, options) => {
+      const resetTime = req.rateLimit && req.rateLimit.resetTime
+      const retryAfter =
+        resetTime instanceof Date
+          ? Math.max(0, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+          : Math.ceil(options.windowMs / 1000)
+
+      res.set('Retry-After', String(retryAfter))
+      res.set('Cache-Control', 'no-store')
+      res.status(429).json({
+        error: {
+          code: 'EMAIL_VERIFICATION_RATE_LIMITED',
+          message:
+            'Too many verification email requests. Please try again later.',
+          status: 429,
+        },
+      })
+    },
+  })
+
 module.exports = createApiLimiter
+module.exports.createApiLimiter = createApiLimiter
+module.exports.createEmailVerificationLimiter =
+  createEmailVerificationLimiter
