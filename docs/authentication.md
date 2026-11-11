@@ -304,12 +304,12 @@ after both have passed.
 
 ### Current route coverage
 
-The backend exposes authentication, user-profile, destination and trip routes,
-plus health and readiness checks. It does **not** yet implement community HTTP
-routers for posts, comments or follows. Group-trip participation is implemented
-under the trips router.
+The backend exposes authentication, user-profile, destination, trip and social
+routes, plus health and readiness checks. Group-trip participation is
+implemented under the trips router. The complete social endpoint contract is
+documented in [Social Features API](social.md).
 
-All trip and participation writes use the full guard:
+All trip, participation and social writes use the full guard:
 
 ```text
 authenticate → csrfProtection → requireVerifiedEmail → controller
@@ -327,22 +327,32 @@ authenticate → csrfProtection → requireVerifiedEmail → controller
 | Request to join a trip | `POST /api/trips/:tripId/join` | Auth + CSRF + verified email |
 | Leave or cancel participation | `DELETE /api/trips/:tripId/join` | Auth + CSRF + verified email |
 | Moderate a participant | `PATCH /api/trips/:tripId/participants/:participantId` | Auth + CSRF + verified email |
+| Create a post | `POST /api/posts` | Auth + CSRF + verified email |
+| Update a post | `PATCH /api/posts/:postId` | Auth + CSRF + verified email |
+| Delete a post | `DELETE /api/posts/:postId` | Auth + CSRF + verified email |
+| Create a comment | `POST /api/posts/:postId/comments` | Auth + CSRF + verified email |
+| Update a comment | `PATCH /api/posts/:postId/comments/:commentId` | Auth + CSRF + verified email |
+| Delete a comment | `DELETE /api/posts/:postId/comments/:commentId` | Auth + CSRF + verified email |
+| Follow a user | `POST /api/users/:userId/follow` | Auth + CSRF + verified email |
+| Unfollow a user | `DELETE /api/users/:userId/follow` | Auth + CSRF + verified email |
 | Read own participation | `GET /api/trips/:tripId/participation` | Auth only |
 | Read participant roster | `GET /api/trips/:tripId/participants` | Auth only |
 | List own trips | `GET /api/trips` | Auth only |
+| Following feed | `GET /api/posts/following` | Auth only |
 | Trip detail | `GET /api/trips/:tripId` | Optional auth |
 
-Public reads (feed, profiles, destinations and trip detail) do not require
-verified email. Trip detail is publicly readable for non-draft trips; an
-authenticated owner can also read their own drafts. The optional-authentication
-middleware resolves a valid session without rejecting anonymous readers.
-Participation status and roster reads still require an authenticated session,
-but do not require a verified email. Participation-specific errors and
-behaviour are documented in
+Public reads (post feed, post detail, comments, user-post listings,
+followers/following, profiles and destinations) require neither authentication
+nor a verified email.
+The following feed, participation status/roster reads and own-trip listings
+require authentication but not a verified email. Trip detail uses optional
+authentication: non-draft trips are publicly readable without a session or
+verified email, while an authenticated owner can also read their own drafts.
+Participation-specific errors and behaviour are documented in
 [Group-Trip Participation API](trip-participation.md).
 
-The middleware contract is exercised by the real authentication integration
-tests and the trip HTTP integration tests.
+The guards are exercised by the authentication, trip and social HTTP
+integration tests.
 
 ## CSRF flow
 

@@ -7,6 +7,7 @@ API and a React/Vite client.
 
 - [Authentication API](docs/authentication.md)
 - [User Profiles API](docs/profiles.md)
+- [Social Features API](docs/social.md)
 - [Destinations API](docs/destinations.md)
 - [Trips and Itineraries API](docs/trips.md)
 - [Group-Trip Participation API](docs/trip-participation.md)

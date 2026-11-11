@@ -107,6 +107,12 @@ the `updatedAt` activity timestamp are excluded. Suspended or missing accounts
 both return `404 PROFILE_NOT_FOUND`, so public lookups cannot be used to
 enumerate moderation state.
 
+## Social features
+
+Posts, comments, follow/unfollow actions, the following feed and
+follower/following lists are documented in [Social Features API](social.md).
+Content from suspended accounts is hidden from public reads and lists.
+
 ## Authorization and privacy
 
 - Own-profile endpoints require a valid authenticated session.
@@ -122,9 +128,10 @@ enumerate moderation state.
 Profile reads and updates are account-management actions, not protected
 community actions. Unverified accounts may therefore view and update their own
 profile and view public profiles. Trip writes, including joining, leaving and
-participant moderation, already use `requireVerifiedEmail`. Creating posts,
-commenting and following users remain guarded by the same middleware once those
-community routes are implemented.
+participant moderation, use `requireVerifiedEmail`. Creating, editing and
+deleting posts and comments, along with follow and unfollow actions, use the
+same full guard; public social reads do not require a verified email, and the
+following feed requires authentication only.
 
 ## Error codes
 
