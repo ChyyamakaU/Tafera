@@ -39,21 +39,58 @@ const createFollowRecord = (overrides = {}) => ({
 
 const createService = ({
   targetUser,
+  actorUser,
   follow,
   existingFollow,
+  followFindOneResults,
   followersResult,
   followingResult,
   createError,
+  notificationError,
 } = {}) => {
   const calls = {
     userFindOne: [],
+    userFindByPk: [],
     followFindOne: [],
     followCreate: [],
     followFindAndCountAll: [],
+    notifications: [],
+    transactions: [],
   }
 
   const followRecord =
     follow === undefined ? createFollowRecord() : follow
+
+  const sequelize = {
+    async transaction(callback) {
+      const transaction = {
+        id: `transaction-${calls.transactions.length + 1}`,
+        committed: false,
+        rolledBack: false,
+        LOCK: { UPDATE: 'UPDATE' },
+      }
+      calls.transactions.push(transaction)
+
+      try {
+        const result = await callback(transaction)
+        transaction.committed = true
+        return result
+      } catch (error) {
+        transaction.rolledBack = true
+        throw error
+      }
+    },
+  }
+
+  const notificationCreationService = {
+    async createNotification(input) {
+      calls.notifications.push(input)
+
+      if (notificationError) throw notificationError
+
+      return { id: 'notification-id', ...input }
+    },
+  }
 
   const service = createFollowService({
     User: {
@@ -63,14 +100,28 @@ const createService = ({
           ? createProfile()
           : targetUser
       },
+      async findByPk(id, options) {
+        calls.userFindByPk.push({ id, options })
+        return actorUser === undefined
+          ? createProfile({
+              id: ACTOR_ID,
+              fullName: 'Ada Lovelace',
+            })
+          : actorUser
+      },
     },
     Follow: {
       async findOne(options) {
         calls.followFindOne.push(options)
+
+        if (followFindOneResults) {
+          return followFindOneResults.shift() ?? null
+        }
+
         return existingFollow === undefined ? null : existingFollow
       },
-      async create(values) {
-        calls.followCreate.push(values)
+      async create(values, options) {
+        calls.followCreate.push({ values, options })
 
         if (createError) throw createError
 
@@ -86,6 +137,8 @@ const createService = ({
         return followingResult || { count: 0, rows: [] }
       },
     },
+    sequelize,
+    notificationCreationService,
   })
 
   return { service, calls, followRecord }
@@ -111,6 +164,8 @@ test('createFollow rejects self-following with the validation convention', async
   )
   assert.equal(calls.userFindOne.length, 0)
   assert.equal(calls.followCreate.length, 0)
+  assert.deepEqual(calls.notifications, [])
+  assert.deepEqual(calls.transactions, [])
 })
 
 test('createFollow rejects missing and suspended targets', async () => {
@@ -131,6 +186,8 @@ test('createFollow rejects missing and suspended targets', async () => {
   })
   assert.equal(calls.followFindOne.length, 0)
   assert.equal(calls.followCreate.length, 0)
+  assert.deepEqual(calls.notifications, [])
+  assert.deepEqual(calls.transactions, [])
 })
 
 test('createFollow returns FOLLOW_EXISTS before inserting duplicates', async () => {
@@ -152,6 +209,8 @@ test('createFollow returns FOLLOW_EXISTS before inserting duplicates', async () 
     followingId: TARGET_ID,
   })
   assert.equal(calls.followCreate.length, 0)
+  assert.deepEqual(calls.notifications, [])
+  assert.deepEqual(calls.transactions, [])
 })
 
 test('createFollow assigns the authenticated follower and returns a safe relationship', async () => {
@@ -159,9 +218,13 @@ test('createFollow assigns the authenticated follower and returns a safe relatio
 
   const relationship = await service.createFollow(ACTOR_ID, TARGET_ID)
 
-  assert.deepEqual(calls.followCreate[0], {
+  assert.deepEqual(calls.followCreate[0].values, {
     followerId: ACTOR_ID,
     followingId: TARGET_ID,
+  })
+  assert.deepEqual(calls.userFindByPk[0], {
+    id: ACTOR_ID,
+    options: { attributes: ['id', 'fullName'] },
   })
   assert.deepEqual(Object.keys(relationship).sort(), [
     'followedAt',
@@ -175,6 +238,94 @@ test('createFollow assigns the authenticated follower and returns a safe relatio
   assert.equal(relationship.id, undefined)
   assert.equal(relationship.followerId, undefined)
   assert.equal(relationship.followingId, undefined)
+
+  assert.equal(calls.transactions.length, 1)
+  assert.deepEqual(calls.notifications, [
+    {
+      recipientId: TARGET_ID,
+      actorId: ACTOR_ID,
+      type: 'new_follower',
+      message: 'Ada Lovelace started following you.',
+      referenceType: 'user',
+      referenceId: ACTOR_ID,
+      transaction: calls.transactions[0],
+    },
+  ])
+  assert.equal(
+    calls.followCreate[0].options.transaction,
+    calls.transactions[0],
+  )
+  assert.equal(calls.transactions[0].committed, true)
+  assert.equal(calls.transactions[0].rolledBack, false)
+})
+
+test('createFollow rolls the follow back when notification creation fails', async () => {
+  const notificationError = new Error('notification write failed')
+  const { service, calls } = createService({ notificationError })
+
+  await assert.rejects(
+    service.createFollow(ACTOR_ID, TARGET_ID),
+    notificationError,
+  )
+
+  assert.equal(calls.followCreate.length, 1)
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.transactions.length, 1)
+  assert.equal(calls.transactions[0].committed, false)
+  assert.equal(calls.transactions[0].rolledBack, true)
+  assert.equal(
+    calls.notifications[0].transaction,
+    calls.transactions[0],
+  )
+})
+
+test('createFollow creates a fresh notification when re-following after unfollow', async () => {
+  const existingFollow = createFollowRecord()
+  const { service, calls } = createService({
+    followFindOneResults: [null, existingFollow, null],
+  })
+
+  await service.createFollow(ACTOR_ID, TARGET_ID)
+  await service.deleteFollow(ACTOR_ID, TARGET_ID)
+  await service.createFollow(ACTOR_ID, TARGET_ID)
+
+  assert.equal(calls.followCreate.length, 2)
+  assert.equal(calls.notifications.length, 2)
+  assert.deepEqual(
+    calls.notifications.map((notification) => ({
+      recipientId: notification.recipientId,
+      actorId: notification.actorId,
+      type: notification.type,
+      message: notification.message,
+      referenceType: notification.referenceType,
+      referenceId: notification.referenceId,
+    })),
+    [
+      {
+        recipientId: TARGET_ID,
+        actorId: ACTOR_ID,
+        type: 'new_follower',
+        message: 'Ada Lovelace started following you.',
+        referenceType: 'user',
+        referenceId: ACTOR_ID,
+      },
+      {
+        recipientId: TARGET_ID,
+        actorId: ACTOR_ID,
+        type: 'new_follower',
+        message: 'Ada Lovelace started following you.',
+        referenceType: 'user',
+        referenceId: ACTOR_ID,
+      },
+    ],
+  )
+  assert.equal(calls.transactions.length, 2)
+  assert.deepEqual(
+    calls.notifications.map(
+      (notification) => notification.transaction,
+    ),
+    calls.transactions,
+  )
 })
 
 test('createFollow translates a unique constraint violation into FOLLOW_EXISTS', async () => {
@@ -182,7 +333,7 @@ test('createFollow translates a unique constraint violation into FOLLOW_EXISTS',
     new Error('duplicate key value violates unique constraint'),
     { name: 'SequelizeUniqueConstraintError' },
   )
-  const { service } = createService({ createError: uniqueError })
+  const { service, calls } = createService({ createError: uniqueError })
 
   await assert.rejects(
     service.createFollow(ACTOR_ID, TARGET_ID),
@@ -192,18 +343,25 @@ test('createFollow translates a unique constraint violation into FOLLOW_EXISTS',
       return true
     },
   )
+
+  assert.deepEqual(calls.notifications, [])
+  assert.equal(calls.transactions.length, 1)
+  assert.equal(calls.transactions[0].rolledBack, true)
 })
 
 test('createFollow propagates unrelated persistence errors', async () => {
   const databaseError = Object.assign(new Error('database offline'), {
     name: 'SequelizeConnectionError',
   })
-  const { service } = createService({ createError: databaseError })
+  const { service, calls } = createService({ createError: databaseError })
 
   await assert.rejects(
     service.createFollow(ACTOR_ID, TARGET_ID),
     databaseError,
   )
+
+  assert.deepEqual(calls.notifications, [])
+  assert.equal(calls.transactions[0].rolledBack, true)
 })
 
 test('deleteFollow rejects missing and suspended targets', async () => {

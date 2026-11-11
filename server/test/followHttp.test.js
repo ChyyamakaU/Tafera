@@ -24,6 +24,7 @@ const { createClient } = require('redis')
 const { runtimeConfig } = require('../src/config/database')
 const UserModel = require('../src/models/user')
 const FollowModel = require('../src/models/follow')
+const NotificationModel = require('../src/models/notification')
 const passwordService = require('../src/services/passwordService')
 const sessionService = require('../src/services/sessionService')
 const {
@@ -58,6 +59,7 @@ let base = null
 let scoped = null
 let User = null
 let Follow = null
+let Notification = null
 let schema = null
 let databaseAvailable = false
 let redisClient = null
@@ -141,6 +143,45 @@ before(async () => {
       `CREATE INDEX follows_following_id_idx
        ON "${schema}".follows (following_id)`,
     )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_notifications_type AS ENUM (
+         'new_follower',
+         'post_like',
+         'post_comment',
+         'trip_join_request',
+         'trip_join_approved',
+         'trip_join_rejected'
+       )`,
+    )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_notifications_reference_type AS ENUM (
+         'user',
+         'post',
+         'comment',
+         'trip'
+       )`,
+    )
+    await base.query(
+      `CREATE TABLE "${schema}".notifications (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         actor_id uuid REFERENCES "${schema}".users(id)
+           ON DELETE SET NULL ON UPDATE CASCADE,
+         type "${schema}".enum_notifications_type NOT NULL,
+         message text NOT NULL,
+         reference_type "${schema}".enum_notifications_reference_type,
+         reference_id uuid,
+         is_read boolean NOT NULL DEFAULT false,
+         read_at timestamptz,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         updated_at timestamptz NOT NULL DEFAULT now(),
+         CONSTRAINT notifications_reference_pair_check CHECK (
+           ("reference_type" IS NULL AND "reference_id" IS NULL)
+           OR ("reference_type" IS NOT NULL AND "reference_id" IS NOT NULL)
+         )
+       )`,
+    )
 
     scoped = new Sequelize(
       config.database,
@@ -160,6 +201,7 @@ before(async () => {
 
     User = UserModel(scoped, DataTypes)
     Follow = FollowModel(scoped, DataTypes)
+    Notification = NotificationModel(scoped, DataTypes)
 
     Follow.belongsTo(User, {
       foreignKey: 'followerId',
@@ -223,7 +265,8 @@ after(async () => {
 beforeEach(async () => {
   if (databaseAvailable) {
     await base.query(
-      `TRUNCATE TABLE "${schema}".follows,
+      `TRUNCATE TABLE "${schema}".notifications,
+         "${schema}".follows,
          "${schema}".users CASCADE`,
     )
   }
@@ -352,7 +395,7 @@ const cleanupNamespace = async (namespace) => {
   }
 }
 
-const createHarness = async () => {
+const createHarness = async ({ notificationCreationService } = {}) => {
   const namespace = `tafera-follow-test-${crypto.randomUUID()}`
   const index = createSessionIndex({ client: redisClient, namespace })
   const nodeEnv = 'development'
@@ -412,7 +455,13 @@ const createHarness = async () => {
   app.use('/api/auth', authRouter)
 
   const profileService = createProfileService({ User })
-  const followService = createFollowService({ Follow, User })
+  const followService = createFollowService({
+    Follow,
+    User,
+    Notification,
+    sequelize: scoped,
+    notificationCreationService,
+  })
   const postService = {
     async listUserPosts() {
       return { posts: [], pagination: {} }
@@ -553,6 +602,102 @@ test('verified users can follow a public profile and protected input is ignored'
   }
 })
 
+test('following creates a new_follower notification for the followed user', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const actor = await createVerifiedClient(harness, {
+      fullName: 'Ada Lovelace',
+    })
+    const target = await createVerifiedClient(harness, {
+      fullName: 'Grace Hopper',
+    })
+
+    const response = await follow(actor.client, target.user.id)
+    assert.equal(response.status, 201)
+
+    const notifications = await Notification.findAll()
+    assert.equal(notifications.length, 1)
+
+    const notification = notifications[0]
+    assert.equal(notification.userId, target.user.id)
+    assert.equal(notification.actorId, actor.user.id)
+    assert.equal(notification.type, 'new_follower')
+    assert.equal(
+      notification.message,
+      'Ada Lovelace started following you.',
+    )
+    assert.equal(notification.referenceType, 'user')
+    assert.equal(notification.referenceId, actor.user.id)
+    assert.equal(notification.isRead, false)
+    assert.equal(notification.readAt, null)
+
+    // A duplicate follow is rejected and must not add another notification.
+    const duplicate = await follow(actor.client, target.user.id)
+    assert.equal(duplicate.status, 409)
+    assert.equal(duplicate.body.error.code, 'FOLLOW_EXISTS')
+    assert.equal(await Notification.count(), 1)
+    assert.equal(await Follow.count(), 1)
+
+    // Unfollowing leaves the historical notification alone.
+    const unfollowed = await unfollow(actor.client, target.user.id)
+    assert.equal(unfollowed.status, 204)
+    assert.equal(await Notification.count(), 1)
+
+    // Re-following is a new event and creates a fresh notification.
+    const refollowed = await follow(actor.client, target.user.id)
+    assert.equal(refollowed.status, 201)
+    assert.equal(await Follow.count(), 1)
+    assert.equal(await Notification.count(), 2)
+
+    const refreshed = await Notification.findAll()
+    for (const entry of refreshed) {
+      assert.equal(entry.userId, target.user.id)
+      assert.equal(entry.actorId, actor.user.id)
+      assert.equal(entry.type, 'new_follower')
+      assert.equal(
+        entry.message,
+        'Ada Lovelace started following you.',
+      )
+      assert.equal(entry.referenceType, 'user')
+      assert.equal(entry.referenceId, actor.user.id)
+    }
+  } finally {
+    await harness.close()
+  }
+})
+
+test('notification failure rolls the follow back', async (t) => {
+  if (skip(t)) return
+
+  let attempts = 0
+  const harness = await createHarness({
+    notificationCreationService: {
+      async createNotification() {
+        attempts += 1
+        throw new Error('notification write failed')
+      },
+    },
+  })
+
+  try {
+    const actor = await createVerifiedClient(harness)
+    const target = await createVerifiedClient(harness)
+
+    const response = await follow(actor.client, target.user.id)
+
+    assert.equal(response.status, 500)
+    assert.equal(response.body.error.code, 'INTERNAL_ERROR')
+    assertNoStore(response)
+    assert.equal(attempts, 1)
+    assert.equal(await Follow.count(), 0)
+    assert.equal(await Notification.count(), 0)
+  } finally {
+    await harness.close()
+  }
+})
+
 test('follow writes require authentication, CSRF and a verified email', async (t) => {
   if (skip(t)) return
   const harness = await createHarness()
@@ -622,6 +767,7 @@ test('users cannot follow themselves', async (t) => {
     ])
     assertNoStore(response)
     assert.equal(await Follow.count(), 0)
+    assert.equal(await Notification.count(), 0)
   } finally {
     await harness.close()
   }
@@ -692,6 +838,9 @@ test('missing and suspended targets return PROFILE_NOT_FOUND for every endpoint'
         'PROFILE_NOT_FOUND',
       )
     }
+
+    assert.equal(await Follow.count(), 0)
+    assert.equal(await Notification.count(), 0)
   } finally {
     await harness.close()
   }

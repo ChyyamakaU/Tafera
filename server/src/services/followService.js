@@ -9,10 +9,27 @@ const {
   FollowExistsError,
   FollowNotFoundError,
 } = require('../utils/socialErrors')
+const {
+  createNotificationCreationService,
+} = require('./notificationCreationService')
 
-const createFollowService = ({ Follow, User } = {}) => {
+const createFollowService = ({
+  Follow,
+  User,
+  Notification,
+  sequelize,
+  notificationCreationService,
+} = {}) => {
   const followModel = Follow || require('../models').Follow
   const userModel = User || require('../models').User
+  const database =
+    sequelize || followModel.sequelize || require('../models').sequelize
+  const notifications =
+    notificationCreationService ||
+    createNotificationCreationService({
+      Notification:
+        Notification || require('../models').Notification,
+    })
 
   const publicProfileInclude = (as) => ({
     model: userModel,
@@ -119,12 +136,37 @@ const createFollowService = ({ Follow, User } = {}) => {
       throw new FollowExistsError()
     }
 
+    // The notification text uses the follower's current display name. The
+    // authenticated account is guaranteed to exist, but only the name is
+    // needed here, so avoid loading private profile fields.
+    const actor = await userModel.findByPk(followerId, {
+      attributes: ['id', 'fullName'],
+    })
+
     let follow
 
     try {
-      follow = await followModel.create({
-        followerId,
-        followingId,
+      // The follow and its notification are one unit of work. If notification
+      // creation fails, the transaction rolls the follow back so the recipient
+      // can never miss an event for a relationship that exists.
+      await database.transaction(async (transaction) => {
+        follow = await followModel.create(
+          {
+            followerId,
+            followingId,
+          },
+          { transaction },
+        )
+
+        await notifications.createNotification({
+          recipientId: followingId,
+          actorId: followerId,
+          type: 'new_follower',
+          message: `${actor.fullName} started following you.`,
+          referenceType: 'user',
+          referenceId: followerId,
+          transaction,
+        })
       })
     } catch (error) {
       // The database unique constraint is the final authority. Concurrent
