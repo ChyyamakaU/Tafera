@@ -4,7 +4,13 @@ const express = require('express')
 const env = require('../config/env')
 const sessionService = require('../services/sessionService')
 const { createPostService } = require('../services/postService')
+const {
+  createCommentService,
+} = require('../services/commentService')
 const { createPostController } = require('../controllers/postController')
+const {
+  createCommentController,
+} = require('../controllers/commentController')
 const {
   createAuthenticate,
 } = require('../middlewares/authenticate')
@@ -17,12 +23,17 @@ const {
 
 const createPostsRouter = ({
   postService,
+  commentService,
   sessions = sessionService,
   nodeEnv = env.NODE_ENV,
   User,
 } = {}) => {
   const service = postService || createPostService()
   const controller = createPostController({ postService: service })
+  const comments = commentService || createCommentService()
+  const commentController = createCommentController({
+    commentService: comments,
+  })
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
   const csrfProtection = createCsrfProtection()
   const requireVerifiedEmail = createRequireVerifiedEmail({ User })
@@ -37,6 +48,25 @@ const createPostsRouter = ({
 
   router.post('/', ...protectWrite, controller.create)
   router.get('/', controller.list)
+  // Comment routes are nested under their post. They are registered before
+  // the parameterized post routes so the intent of the path hierarchy is
+  // explicit.
+  router.get('/:postId/comments', commentController.list)
+  router.post(
+    '/:postId/comments',
+    ...protectWrite,
+    commentController.create,
+  )
+  router.patch(
+    '/:postId/comments/:commentId',
+    ...protectWrite,
+    commentController.update,
+  )
+  router.delete(
+    '/:postId/comments/:commentId',
+    ...protectWrite,
+    commentController.remove,
+  )
   // A future GET /following route must be registered before this
   // parameterized detail route.
   router.get('/:postId', controller.detail)
