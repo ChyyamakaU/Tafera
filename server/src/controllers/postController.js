@@ -33,6 +33,18 @@ const createPostController = ({ postService }) => ({
     })
   }),
 
+  following: asyncHandler(async (req, res) => {
+    const filters = parsePaginationQuery(req.query)
+    const { posts, pagination } = await postService.listFollowingPosts(
+      req.auth.userId,
+      filters,
+    )
+
+    noStore(res).status(200).json({
+      data: { posts, pagination },
+    })
+  }),
+
   detail: asyncHandler(async (req, res) => {
     const { postId } = parsePostId(req.params)
     const post = await postService.getPost(postId)

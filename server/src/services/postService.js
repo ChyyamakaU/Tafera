@@ -1,5 +1,6 @@
 'use strict'
 
+const { Op } = require('sequelize')
 const { DestinationNotFoundError } = require('../utils/destinationErrors')
 const { createPagination } = require('../utils/pagination')
 const {
@@ -19,6 +20,7 @@ const createPostService = ({
   User,
   Destination,
   DestinationImage,
+  Follow,
 } = {}) => {
   const postModel = Post || require('../models').Post
   const userModel = User || require('../models').User
@@ -26,6 +28,7 @@ const createPostService = ({
     Destination || require('../models').Destination
   const imageModel =
     DestinationImage || require('../models').DestinationImage
+  const followModel = Follow || require('../models').Follow
 
   const destinationImagesInclude = {
     model: imageModel,
@@ -130,6 +133,42 @@ const createPostService = ({
     return listVisiblePosts({ where: { userId }, filters })
   }
 
+  const listFollowingPosts = async (followerId, filters) => {
+    // Resolve only active followed accounts. Suspended accounts are excluded
+    // here as well as by the active-author filter used for the posts.
+    const follows = await followModel.findAll({
+      where: { followerId },
+      attributes: ['followingId'],
+      include: [
+        {
+          model: userModel,
+          as: 'followingUser',
+          attributes: ['id'],
+          where: { status: 'active' },
+          required: true,
+        },
+      ],
+    })
+
+    const followedIds = follows.map((follow) => follow.followingId)
+
+    if (followedIds.length === 0) {
+      return {
+        posts: [],
+        pagination: createPagination({
+          page: filters.page,
+          limit: filters.limit,
+          total: 0,
+        }),
+      }
+    }
+
+    return listVisiblePosts({
+      where: { userId: { [Op.in]: followedIds } },
+      filters,
+    })
+  }
+
   const createPost = async (userId, input) => {
     await assertDestinationAvailable(input.destinationId)
 
@@ -181,6 +220,7 @@ const createPostService = ({
     createPost,
     deletePost,
     getPost,
+    listFollowingPosts,
     listPosts,
     listUserPosts,
     updatePost,

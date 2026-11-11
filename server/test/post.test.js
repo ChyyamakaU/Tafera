@@ -2,6 +2,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
+const { Op } = require('sequelize')
 
 const { DestinationNotFoundError } = require('../src/utils/destinationErrors')
 const { createPostService } = require('../src/services/postService')
@@ -59,9 +60,10 @@ const createPostRecord = (overrides = {}) => ({
   ...overrides,
 })
 
-const createService = ({ post, postsResult, user } = {}) => {
+const createService = ({ post, postsResult, user, follows } = {}) => {
   const calls = {
     destinationFindOne: [],
+    followFindAll: [],
     postCreate: [],
     postFindOne: [],
     postFindAndCountAll: [],
@@ -83,6 +85,12 @@ const createService = ({ post, postsResult, user } = {}) => {
       async findAndCountAll(options) {
         calls.postFindAndCountAll.push(options)
         return postsResult || { count: 0, rows: [] }
+      },
+    },
+    Follow: {
+      async findAll(options) {
+        calls.followFindAll.push(options)
+        return follows || []
       },
     },
     User: {
@@ -225,6 +233,82 @@ test('listUserPosts scopes the feed to the requested user', async () => {
   assert.deepEqual(calls.postFindAndCountAll[0].where, {
     userId: OWNER_ID,
   })
+})
+
+test('listFollowingPosts queries only active followed accounts', async () => {
+  const post = createPostRecord({ destination })
+  const { service, calls } = createService({
+    follows: [
+      { followingId: OWNER_ID },
+      { followingId: OTHER_ID },
+    ],
+    postsResult: { count: 3, rows: [post] },
+  })
+
+  const result = await service.listFollowingPosts(OWNER_ID, {
+    page: 2,
+    limit: 1,
+  })
+
+  assert.deepEqual(calls.followFindAll[0].where, {
+    followerId: OWNER_ID,
+  })
+  const followingInclude = calls.followFindAll[0].include.find(
+    (include) => include.as === 'followingUser',
+  )
+  assert.equal(followingInclude.required, true)
+  assert.deepEqual(followingInclude.where, { status: 'active' })
+
+  assert.deepEqual(
+    calls.postFindAndCountAll[0].where.userId[Op.in],
+    [OWNER_ID, OTHER_ID],
+  )
+  assert.deepEqual(calls.postFindAndCountAll[0].order, [
+    ['createdAt', 'DESC'],
+    ['id', 'DESC'],
+  ])
+  assert.equal(calls.postFindAndCountAll[0].limit, 1)
+  assert.equal(calls.postFindAndCountAll[0].offset, 1)
+  assert.equal(calls.postFindAndCountAll[0].distinct, true)
+
+  const authorInclude = calls.postFindAndCountAll[0].include.find(
+    (include) => include.as === 'author',
+  )
+  assert.equal(authorInclude.required, true)
+  assert.deepEqual(authorInclude.where, { status: 'active' })
+
+  assert.equal(result.posts.length, 1)
+  assert.equal(result.posts[0].userId, undefined)
+  assert.equal(result.posts[0].destination.status, undefined)
+  assert.equal(result.posts[0].destination.id, DESTINATION_ID)
+  assert.deepEqual(result.pagination, {
+    page: 2,
+    limit: 1,
+    total: 3,
+    totalPages: 3,
+    hasNextPage: true,
+    hasPreviousPage: true,
+  })
+})
+
+test('listFollowingPosts returns an empty paginated result when following nobody', async () => {
+  const { service, calls } = createService({ follows: [] })
+
+  const result = await service.listFollowingPosts(OWNER_ID, {
+    page: 1,
+    limit: 20,
+  })
+
+  assert.deepEqual(result.posts, [])
+  assert.deepEqual(result.pagination, {
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  })
+  assert.equal(calls.postFindAndCountAll.length, 0)
 })
 
 test('updatePost rejects a different author with POST_ACCESS_DENIED', async () => {

@@ -26,6 +26,7 @@ const UserModel = require('../src/models/user')
 const DestinationModel = require('../src/models/destination')
 const DestinationImageModel = require('../src/models/destinationImage')
 const PostModel = require('../src/models/post')
+const FollowModel = require('../src/models/follow')
 const passwordService = require('../src/services/passwordService')
 const sessionService = require('../src/services/sessionService')
 const {
@@ -48,6 +49,9 @@ const { createPostsRouter } = require('../src/routes/posts')
 const { createUsersRouter } = require('../src/routes/users')
 const { createPostService } = require('../src/services/postService')
 const { PUBLIC_PROFILE_FIELDS } = require('../src/utils/safeUser')
+const {
+  PUBLIC_DESTINATION_FIELDS,
+} = require('../src/utils/safeDestination')
 const errorHandler = require('../src/middlewares/errorHandler')
 
 const TEST_SECRET = 'test-only-session-secret-0123456789abcdef'
@@ -60,6 +64,7 @@ let User = null
 let Destination = null
 let DestinationImage = null
 let Post = null
+let Follow = null
 let schema = null
 let databaseAvailable = false
 let redisClient = null
@@ -173,6 +178,20 @@ before(async () => {
          updated_at timestamptz NOT NULL DEFAULT now()
        )`,
     )
+    await base.query(
+      `CREATE TABLE "${schema}".follows (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         follower_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         following_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         CONSTRAINT follows_follower_id_following_id_unique
+           UNIQUE (follower_id, following_id),
+         CONSTRAINT follows_no_self_follow_check
+           CHECK (follower_id <> following_id)
+       )`,
+    )
 
     scoped = new Sequelize(
       config.database,
@@ -194,13 +213,30 @@ before(async () => {
     Destination = DestinationModel(scoped, DataTypes)
     DestinationImage = DestinationImageModel(scoped, DataTypes)
     Post = PostModel(scoped, DataTypes)
+    Follow = FollowModel(scoped, DataTypes)
 
     Post.belongsTo(User, { foreignKey: 'userId', as: 'author' })
     Post.belongsTo(Destination, {
       foreignKey: 'destinationId',
       as: 'destination',
     })
+    Follow.belongsTo(User, {
+      foreignKey: 'followerId',
+      as: 'follower',
+    })
+    Follow.belongsTo(User, {
+      foreignKey: 'followingId',
+      as: 'followingUser',
+    })
     User.hasMany(Post, { foreignKey: 'userId', as: 'posts' })
+    User.hasMany(Follow, {
+      foreignKey: 'followerId',
+      as: 'following',
+    })
+    User.hasMany(Follow, {
+      foreignKey: 'followingId',
+      as: 'followers',
+    })
     Destination.hasMany(DestinationImage, {
       foreignKey: 'destinationId',
       as: 'images',
@@ -251,7 +287,8 @@ after(async () => {
 beforeEach(async () => {
   if (databaseAvailable) {
     await base.query(
-      `TRUNCATE TABLE "${schema}".posts,
+      `TRUNCATE TABLE "${schema}".follows,
+         "${schema}".posts,
          "${schema}".destination_images,
          "${schema}".destinations,
          "${schema}".users CASCADE`,
@@ -452,6 +489,7 @@ const createHarness = async () => {
     User,
     Destination,
     DestinationImage,
+    Follow,
   })
 
   app.use(
@@ -551,6 +589,12 @@ const listPosts = (client, query = '') =>
 
 const listUserPosts = (client, userId, query = '') =>
   client.get(`/api/users/${userId}/posts${query}`)
+
+const listFollowingPosts = (client, query = '') =>
+  client.get(`/api/posts/following${query}`)
+
+const createFollow = (followerId, followingId) =>
+  Follow.create({ followerId, followingId })
 
 const assertNoStore = (response) => {
   assert.match(
@@ -910,6 +954,283 @@ test('user post listings are public, scoped and reject missing or suspended user
     )
     assert.equal(suspended.status, 404)
     assert.equal(suspended.body.error.code, 'PROFILE_NOT_FOUND')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the following feed returns only followed authors with safe post data', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const viewer = await createVerifiedClient(harness)
+    const alice = await createVerifiedClient(harness)
+    const bob = await createVerifiedClient(harness)
+    const stranger = await createVerifiedClient(harness)
+
+    await createFollow(viewer.user.id, alice.user.id)
+    await createFollow(viewer.user.id, bob.user.id)
+
+    const destination = await createDestination()
+    const aliceFirst = await createPost(alice.client, {
+      content: 'Alice first',
+      destinationId: destination.id,
+    })
+    const bobPost = await createPost(bob.client, {
+      content: 'Bob post',
+    })
+    const aliceSecond = await createPost(alice.client, {
+      content: 'Alice second',
+    })
+    await createPost(stranger.client, {
+      content: 'Stranger post',
+    })
+    await createPost(viewer.client, {
+      content: 'Viewer post',
+    })
+
+    await Post.update(
+      { createdAt: new Date('2026-03-01T00:00:00.000Z') },
+      { where: { id: aliceFirst.body.data.post.id } },
+    )
+    await Post.update(
+      { createdAt: new Date('2026-03-02T00:00:00.000Z') },
+      { where: { id: bobPost.body.data.post.id } },
+    )
+    await Post.update(
+      { createdAt: new Date('2026-03-03T00:00:00.000Z') },
+      { where: { id: aliceSecond.body.data.post.id } },
+    )
+
+    const feed = await listFollowingPosts(viewer.client)
+    assert.equal(feed.status, 200)
+    assertNoStore(feed)
+    assert.deepEqual(
+      feed.body.data.posts.map((post) => post.content),
+      ['Alice second', 'Bob post', 'Alice first'],
+    )
+    assert.deepEqual(feed.body.data.pagination, {
+      page: 1,
+      limit: 20,
+      total: 3,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    })
+
+    assertPublicPost(feed.body.data.posts[0], alice.user.id)
+    assertPublicPost(feed.body.data.posts[1], bob.user.id)
+    assertPublicPost(feed.body.data.posts[2], alice.user.id)
+
+    const destinationPost = feed.body.data.posts[2]
+    assert.equal(destinationPost.destination.id, destination.id)
+    assert.deepEqual(
+      Object.keys(destinationPost.destination).sort(),
+      [...PUBLIC_DESTINATION_FIELDS, 'coverImage'].sort(),
+    )
+    assert.equal(destinationPost.destination.status, undefined)
+    assert.equal(destinationPost.destination.createdBy, undefined)
+
+    // Existing public feed and detail behavior remains unchanged.
+    const publicFeed = await listPosts(harness.client())
+    assert.equal(publicFeed.status, 200)
+    assert.equal(publicFeed.body.data.pagination.total, 5)
+    assert.equal(
+      publicFeed.body.data.posts.some(
+        (post) => post.content === 'Stranger post',
+      ),
+      true,
+    )
+
+    const detail = await getPost(
+      harness.client(),
+      aliceFirst.body.data.post.id,
+    )
+    assert.equal(detail.status, 200)
+    assertPublicPost(detail.body.data.post, alice.user.id)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the following feed requires authentication but not CSRF', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const anonymous = await listFollowingPosts(harness.client())
+    assert.equal(anonymous.status, 401)
+    assert.equal(anonymous.body.error.code, 'AUTH_REQUIRED')
+    assertNoStore(anonymous)
+
+    const viewer = await createVerifiedClient(harness)
+    viewer.client.clearCsrf()
+
+    const feed = await listFollowingPosts(viewer.client)
+    assert.equal(feed.status, 200)
+    assertNoStore(feed)
+    assert.deepEqual(feed.body.data.posts, [])
+    assert.deepEqual(feed.body.data.pagination, {
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    })
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the following feed excludes suspended followed accounts and their posts', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const viewer = await createVerifiedClient(harness)
+    const alice = await createVerifiedClient(harness)
+    const bob = await createVerifiedClient(harness)
+
+    await createFollow(viewer.user.id, alice.user.id)
+    await createFollow(viewer.user.id, bob.user.id)
+
+    await createPost(alice.client, { content: 'Alice post' })
+    await createPost(bob.client, { content: 'Bob post' })
+
+    await alice.user.update({ status: 'suspended' })
+
+    const visible = await listFollowingPosts(viewer.client)
+    assert.equal(visible.status, 200)
+    assertNoStore(visible)
+    assert.deepEqual(
+      visible.body.data.posts.map((post) => post.content),
+      ['Bob post'],
+    )
+    assert.equal(visible.body.data.pagination.total, 1)
+    assert.equal(await Follow.count(), 2)
+
+    await bob.user.update({ status: 'suspended' })
+
+    const empty = await listFollowingPosts(viewer.client)
+    assert.equal(empty.status, 200)
+    assert.deepEqual(empty.body.data.posts, [])
+    assert.equal(empty.body.data.pagination.total, 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the following feed paginates deterministically and enforces the limit maximum', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const viewer = await createVerifiedClient(harness)
+    const author = await createVerifiedClient(harness)
+
+    await createFollow(viewer.user.id, author.user.id)
+
+    const first = await createPost(author.client, {
+      content: 'First',
+    })
+    const second = await createPost(author.client, {
+      content: 'Second',
+    })
+    const third = await createPost(author.client, {
+      content: 'Third',
+    })
+
+    await Post.update(
+      { createdAt: new Date('2026-04-01T00:00:00.000Z') },
+      { where: { id: first.body.data.post.id } },
+    )
+    await Post.update(
+      { createdAt: new Date('2026-04-02T00:00:00.000Z') },
+      { where: { id: second.body.data.post.id } },
+    )
+    await Post.update(
+      { createdAt: new Date('2026-04-03T00:00:00.000Z') },
+      { where: { id: third.body.data.post.id } },
+    )
+
+    const defaults = await listFollowingPosts(viewer.client)
+    assert.equal(defaults.status, 200)
+    assert.equal(defaults.body.data.pagination.limit, 20)
+    assert.deepEqual(
+      defaults.body.data.posts.map((post) => post.content),
+      ['Third', 'Second', 'First'],
+    )
+
+    const pageOne = await listFollowingPosts(
+      viewer.client,
+      '?page=1&limit=2',
+    )
+    assert.equal(pageOne.status, 200)
+    assert.deepEqual(
+      pageOne.body.data.posts.map((post) => post.content),
+      ['Third', 'Second'],
+    )
+    assert.deepEqual(pageOne.body.data.pagination, {
+      page: 1,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+      hasNextPage: true,
+      hasPreviousPage: false,
+    })
+
+    const pageTwo = await listFollowingPosts(
+      viewer.client,
+      '?page=2&limit=2',
+    )
+    assert.equal(pageTwo.status, 200)
+    assert.deepEqual(
+      pageTwo.body.data.posts.map((post) => post.content),
+      ['First'],
+    )
+    assert.equal(pageTwo.body.data.pagination.hasPreviousPage, true)
+
+    const maximum = await listFollowingPosts(
+      viewer.client,
+      '?limit=50',
+    )
+    assert.equal(maximum.status, 200)
+    assert.equal(maximum.body.data.pagination.limit, 50)
+
+    const tooLarge = await listFollowingPosts(
+      viewer.client,
+      '?limit=51',
+    )
+    assert.equal(tooLarge.status, 400)
+    assert.equal(tooLarge.body.error.code, 'VALIDATION_ERROR')
+    assertNoStore(tooLarge)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('the following feed returns an empty page when the viewer follows nobody', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const viewer = await createVerifiedClient(harness)
+    await createPost(viewer.client, { content: 'Own post' })
+
+    const feed = await listFollowingPosts(viewer.client)
+    assert.equal(feed.status, 200)
+    assertNoStore(feed)
+    assert.deepEqual(feed.body.data.posts, [])
+    assert.deepEqual(feed.body.data.pagination, {
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    })
   } finally {
     await harness.close()
   }

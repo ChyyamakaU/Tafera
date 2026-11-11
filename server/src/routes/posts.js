@@ -48,6 +48,9 @@ const createPostsRouter = ({
 
   router.post('/', ...protectWrite, controller.create)
   router.get('/', controller.list)
+  // /following is a read-only feed scoped to the authenticated user. It must
+  // be registered before /:postId so it is never treated as a post ID.
+  router.get('/following', authenticate, controller.following)
   // Comment routes are nested under their post. They are registered before
   // the parameterized post routes so the intent of the path hierarchy is
   // explicit.
@@ -67,8 +70,6 @@ const createPostsRouter = ({
     ...protectWrite,
     commentController.remove,
   )
-  // A future GET /following route must be registered before this
-  // parameterized detail route.
   router.get('/:postId', controller.detail)
   router.patch('/:postId', ...protectWrite, controller.update)
   router.delete('/:postId', ...protectWrite, controller.remove)
