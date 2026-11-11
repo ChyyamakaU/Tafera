@@ -1,7 +1,7 @@
 'use strict'
 
 const { Op } = require('sequelize')
-const { createPagination } = require('./tripService')
+const { createPagination } = require('../utils/pagination')
 const { PUBLIC_PROFILE_FIELDS } = require('../utils/safeUser')
 const {
   toTripParticipant,
