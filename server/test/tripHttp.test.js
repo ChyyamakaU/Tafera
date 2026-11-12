@@ -29,6 +29,7 @@ const TripModel = require('../src/models/trip')
 const TripDestinationModel = require('../src/models/tripDestination')
 const TripItineraryModel = require('../src/models/tripItinerary')
 const TripParticipantModel = require('../src/models/tripParticipant')
+const NotificationModel = require('../src/models/notification')
 const passwordService = require('../src/services/passwordService')
 const sessionService = require('../src/services/sessionService')
 const {
@@ -79,6 +80,7 @@ let Trip = null
 let TripDestination = null
 let TripItinerary = null
 let TripParticipant = null
+let Notification = null
 let schema = null
 let databaseAvailable = false
 let redisClient = null
@@ -151,6 +153,45 @@ before(async () => {
     await base.query(
       `CREATE UNIQUE INDEX users_email_lower_unique
        ON "${schema}".users (lower(email))`,
+    )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_notifications_type AS ENUM (
+         'new_follower',
+         'post_like',
+         'post_comment',
+         'trip_join_request',
+         'trip_join_approved',
+         'trip_join_rejected'
+       )`,
+    )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_notifications_reference_type AS ENUM (
+         'user',
+         'post',
+         'comment',
+         'trip'
+       )`,
+    )
+    await base.query(
+      `CREATE TABLE "${schema}".notifications (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         actor_id uuid REFERENCES "${schema}".users(id)
+           ON DELETE SET NULL ON UPDATE CASCADE,
+         type "${schema}".enum_notifications_type NOT NULL,
+         message text NOT NULL,
+         reference_type "${schema}".enum_notifications_reference_type,
+         reference_id uuid,
+         is_read boolean NOT NULL DEFAULT false,
+         read_at timestamptz,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         updated_at timestamptz NOT NULL DEFAULT now(),
+         CONSTRAINT notifications_reference_pair_check CHECK (
+           ("reference_type" IS NULL AND "reference_id" IS NULL)
+           OR ("reference_type" IS NOT NULL AND "reference_id" IS NOT NULL)
+         )
+       )`,
     )
     await base.query(
       `CREATE TABLE "${schema}".destinations (
@@ -309,6 +350,7 @@ before(async () => {
     TripDestination = TripDestinationModel(scoped, DataTypes)
     TripItinerary = TripItineraryModel(scoped, DataTypes)
     TripParticipant = TripParticipantModel(scoped, DataTypes)
+    Notification = NotificationModel(scoped, DataTypes)
 
     Destination.hasMany(DestinationImage, {
       foreignKey: 'destinationId',
@@ -396,7 +438,8 @@ after(async () => {
 beforeEach(async () => {
   if (databaseAvailable) {
     await base.query(
-      `TRUNCATE TABLE "${schema}".trip_participants,
+      `TRUNCATE TABLE "${schema}".notifications,
+         "${schema}".trip_participants,
          "${schema}".trip_itineraries,
          "${schema}".trip_destinations,
          "${schema}".trips,
@@ -534,7 +577,7 @@ const cleanupNamespace = async (namespace) => {
   }
 }
 
-const createHarness = async () => {
+const createHarness = async ({ notificationCreationService } = {}) => {
   const namespace = `tafera-trip-test-${crypto.randomUUID()}`
   const index = createSessionIndex({ client: redisClient, namespace })
   const nodeEnv = 'development'
@@ -608,7 +651,9 @@ const createHarness = async () => {
         Trip,
         TripParticipant,
         User,
+        Notification,
         sequelize: scoped,
+        notificationCreationService,
       }),
       sessions,
       nodeEnv,
@@ -1973,6 +2018,416 @@ test('rejoining reuses rejected and cancelled participation rows', async (t) => 
       await TripParticipant.count({ where: { tripId, userId: joiner.id } }),
       1,
     )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('joining a group trip notifies the trip owner', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness, { fullName: 'Grace Hopper' })
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+
+    const notifications = await Notification.findAll()
+    assert.equal(notifications.length, 1)
+
+    const notification = notifications[0]
+    assert.equal(notification.userId, owner.id)
+    assert.equal(notification.actorId, joiner.id)
+    assert.equal(notification.type, 'trip_join_request')
+    assert.equal(
+      notification.message,
+      'Grace Hopper requested to join your trip.',
+    )
+    assert.equal(notification.referenceType, 'trip')
+    assert.equal(notification.referenceId, tripId)
+    assert.equal(notification.isRead, false)
+    assert.equal(notification.readAt, null)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('reactivating a cancelled request creates a fresh notification', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness, { fullName: 'Grace Hopper' })
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    const participantId = joined.body.data.participation.id
+
+    const cancelled = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'cancelled',
+    )
+    assert.equal(cancelled.status, 200)
+
+    const reactivated = await joinTrip(joinerClient, tripId)
+    assert.equal(reactivated.status, 200)
+
+    const notifications = await Notification.findAll({
+      where: { type: 'trip_join_request', referenceId: tripId },
+    })
+    // One request notification for the initial join and one fresh
+    // notification for the cancellation reactivation.
+    assert.equal(notifications.length, 2)
+    for (const notification of notifications) {
+      assert.equal(notification.userId, owner.id)
+      assert.equal(notification.actorId, joiner.id)
+      assert.equal(
+        notification.message,
+        'Grace Hopper requested to join your trip.',
+      )
+      assert.equal(notification.referenceType, 'trip')
+      assert.equal(notification.referenceId, tripId)
+    }
+  } finally {
+    await harness.close()
+  }
+})
+
+test('reactivating a rejected request does not create a fresh notification', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness, { fullName: 'Grace Hopper' })
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    const participantId = joined.body.data.participation.id
+
+    const rejected = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'rejected',
+    )
+    assert.equal(rejected.status, 200)
+
+    const reactivated = await joinTrip(joinerClient, tripId)
+    assert.equal(reactivated.status, 200)
+
+    // Only the initial join created a trip_join_request notification;
+    // rejecting then reactivating must not add another.
+    const notifications = await Notification.findAll({
+      where: { type: 'trip_join_request', referenceId: tripId },
+    })
+    assert.equal(notifications.length, 1)
+    assert.equal(notifications[0].userId, owner.id)
+    assert.equal(notifications[0].actorId, joiner.id)
+    assert.equal(notifications[0].type, 'trip_join_request')
+    assert.equal(
+      notifications[0].message,
+      'Grace Hopper requested to join your trip.',
+    )
+    assert.equal(notifications[0].referenceType, 'trip')
+    assert.equal(notifications[0].referenceId, tripId)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('joining does not notify for duplicate requests or a full trip', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } = await createVerifiedClient(
+      harness,
+    )
+    const trip = await createGroupTrip(ownerClient, { maxParticipants: 1 })
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    // A successful join notifies the owner once.
+    assert.equal(await Notification.count(), 1)
+
+    const duplicate = await joinTrip(joinerClient, tripId)
+    assert.equal(duplicate.status, 409)
+    assert.equal(duplicate.body.error.code, 'TRIP_PARTICIPATION_EXISTS')
+    assert.equal(await Notification.count(), 1)
+
+    const full = await createGroupTrip(ownerClient, { maxParticipants: 1 })
+    const fullTripId = full.id
+    const { user: joiner2, client: joiner2Client } =
+      await createVerifiedClient(harness)
+    const fullJoined = await joinTrip(joiner2Client, fullTripId)
+    assert.equal(fullJoined.status, 201)
+    assert.equal(await Notification.count(), 2)
+    const fullDuplicate = await joinTrip(joiner2Client, fullTripId)
+    assert.equal(fullDuplicate.status, 409)
+    assert.equal(await Notification.count(), 2)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('approving a request notifies the participant', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    const participantId = joined.body.data.participation.id
+
+    const approved = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'approved',
+    )
+    assert.equal(approved.status, 200)
+
+    const notifications = await Notification.findAll()
+    assert.equal(notifications.length, 2)
+
+    const notification = notifications.find(
+      (n) => n.type === 'trip_join_approved',
+    )
+    assert.ok(notification)
+    assert.equal(notification.userId, joiner.id)
+    assert.equal(notification.actorId, owner.id)
+    assert.equal(
+      notification.message,
+      'The trip owner approved your request to join.',
+    )
+    assert.equal(notification.referenceType, 'trip')
+    assert.equal(notification.referenceId, tripId)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('rejecting a request notifies the participant', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    const participantId = joined.body.data.participation.id
+
+    const rejected = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'rejected',
+    )
+    assert.equal(rejected.status, 200)
+
+    const notifications = await Notification.findAll()
+    assert.equal(notifications.length, 2)
+
+    const notification = notifications.find(
+      (n) => n.type === 'trip_join_rejected',
+    )
+    assert.ok(notification)
+    assert.equal(notification.userId, joiner.id)
+    assert.equal(notification.actorId, owner.id)
+    assert.equal(
+      notification.message,
+      'The trip owner rejected your request to join.',
+    )
+    assert.equal(notification.referenceType, 'trip')
+    assert.equal(notification.referenceId, tripId)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('cancelling a request does not notify', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    const participantId = joined.body.data.participation.id
+
+    const cancelled = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'cancelled',
+    )
+    assert.equal(cancelled.status, 200)
+
+    // The join notified the owner once; cancelling must not add another.
+    assert.equal(await Notification.count(), 1)
+    const notification = await Notification.findOne()
+    assert.equal(notification.type, 'trip_join_request')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('notification failure rolls back a join request', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness({
+    notificationCreationService: {
+      async createNotification() {
+        throw new Error('notification write failed')
+      },
+    },
+  })
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+
+    assert.equal(joined.status, 500)
+    assert.equal(joined.body.error.code, 'INTERNAL_ERROR')
+    assert.equal(await TripParticipant.count({ where: { tripId } }), 0)
+    assert.equal(await Notification.count(), 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('notification failure rolls back an approval', async (t) => {
+  if (skip(t)) return
+  let attempts = 0
+  const harness = await createHarness({
+    notificationCreationService: {
+      async createNotification() {
+        attempts += 1
+        if (attempts >= 2) throw new Error('notification write failed')
+        return { id: 'notification-id' }
+      },
+    },
+  })
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    assert.equal(attempts, 1)
+    const participantId = joined.body.data.participation.id
+
+    const approved = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'approved',
+    )
+
+    assert.equal(approved.status, 500)
+    assert.equal(approved.body.error.code, 'INTERNAL_ERROR')
+    assert.equal(attempts, 2)
+    // The approval must be rolled back: the participation stays pending.
+    const stored = await TripParticipant.findByPk(participantId)
+    assert.equal(stored.status, 'pending')
+    // The join's participation committed; only the approval update rolled back.
+    assert.equal(await TripParticipant.count({ where: { tripId } }), 1)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('notification failure rolls back a rejection', async (t) => {
+  if (skip(t)) return
+  let attempts = 0
+  const harness = await createHarness({
+    notificationCreationService: {
+      async createNotification() {
+        attempts += 1
+        if (attempts >= 2) throw new Error('notification write failed')
+        return { id: 'notification-id' }
+      },
+    },
+  })
+
+  try {
+    const { user: owner, client: ownerClient } =
+      await createVerifiedClient(harness)
+    const { user: joiner, client: joinerClient } =
+      await createVerifiedClient(harness)
+    const trip = await createGroupTrip(ownerClient)
+    const tripId = trip.id
+
+    const joined = await joinTrip(joinerClient, tripId)
+    assert.equal(joined.status, 201)
+    assert.equal(attempts, 1)
+    const participantId = joined.body.data.participation.id
+
+    const rejected = await moderateParticipant(
+      ownerClient,
+      tripId,
+      participantId,
+      'rejected',
+    )
+
+    assert.equal(rejected.status, 500)
+    assert.equal(rejected.body.error.code, 'INTERNAL_ERROR')
+    assert.equal(attempts, 2)
+    // The rejection must be rolled back: the participation stays pending.
+    const stored = await TripParticipant.findByPk(participantId)
+    assert.equal(stored.status, 'pending')
+    // The join's participation committed; only the rejection update rolled back.
+    assert.equal(await TripParticipant.count({ where: { tripId } }), 1)
   } finally {
     await harness.close()
   }

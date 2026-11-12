@@ -72,9 +72,22 @@ const createFakeSequelize = () => {
   return {
     transactions,
     async transaction(callback) {
-      const transaction = { LOCK: { UPDATE: 'UPDATE' } }
+      const transaction = {
+        id: `transaction-${transactions.length + 1}`,
+        committed: false,
+        rolledBack: false,
+        LOCK: { UPDATE: 'UPDATE' },
+      }
       transactions.push(transaction)
-      return callback(transaction)
+
+      try {
+        const result = await callback(transaction)
+        transaction.committed = true
+        return result
+      } catch (error) {
+        transaction.rolledBack = true
+        throw error
+      }
     },
   }
 }
@@ -87,6 +100,8 @@ const createService = ({
   rows = [],
   count = 0,
   createError = null,
+  notificationError = null,
+  actorUser,
   sequelize = createFakeSequelize(),
 } = {}) => {
   const calls = {
@@ -96,6 +111,9 @@ const createService = ({
     participantUpdate: [],
     participantCount: [],
     participantFindAndCountAll: [],
+    userFindByPk: [],
+    notifications: [],
+    transactions: [],
   }
   let findOneIndex = 0
 
@@ -119,7 +137,9 @@ const createService = ({
     },
     async create(values, options) {
       calls.participantCreate.push({ values, options })
+
       if (createError) throw createError
+
       return createdParticipant
     },
     async update(values, options) {
@@ -132,11 +152,35 @@ const createService = ({
     },
   }
 
+  const notificationCreationService = {
+    async createNotification(input) {
+      calls.notifications.push(input)
+
+      if (notificationError) throw notificationError
+
+      return { id: 'notification-id', ...input }
+    },
+  }
+
+  const User = {
+    async findByPk(id, options) {
+      calls.userFindByPk.push({ id, options })
+      return actorUser === undefined
+        ? {
+            id,
+            fullName: id === OWNER_ID ? 'Grace Hopper' : 'Ada Lovelace',
+          }
+        : actorUser
+    },
+  }
+
   const service = createTripParticipationService({
     Trip,
     TripParticipant,
-    User: {},
+    User,
+    Notification: {},
     sequelize,
+    notificationCreationService,
   })
 
   return {
@@ -739,4 +783,311 @@ test('participation writes use the transaction for every mutation', async () => 
     joining.calls.participantCreate[0].options.transaction,
     joining.sequelize.transactions[0],
   )
+})
+
+test('requestJoin notifies the trip owner of a new pending request', async () => {
+  const reloaded = buildParticipant()
+  const { calls, service, sequelize } = createService({
+    participantFindOneResults: [null, reloaded],
+  })
+
+  await service.requestJoin(USER_ID, TRIP_ID)
+
+  assert.deepEqual(calls.userFindByPk, [
+    { id: USER_ID, options: { attributes: ['id', 'fullName'] } },
+  ])
+  assert.equal(calls.notifications.length, 1)
+  assert.deepEqual(calls.notifications[0], {
+    recipientId: OWNER_ID,
+    actorId: USER_ID,
+    type: 'trip_join_request',
+    message: 'Ada Lovelace requested to join your trip.',
+    referenceType: 'trip',
+    referenceId: TRIP_ID,
+    transaction: sequelize.transactions[0],
+  })
+  assert.equal(sequelize.transactions.length, 1)
+  assert.equal(sequelize.transactions[0].committed, true)
+  assert.equal(sequelize.transactions[0].rolledBack, false)
+  assert.equal(
+    calls.participantCreate[0].options.transaction,
+    sequelize.transactions[0],
+  )
+})
+
+test('requestJoin notifies the trip owner when a cancelled request is reactivated', async () => {
+  const existing = buildParticipant({ status: 'cancelled' })
+  const reloaded = buildParticipant({ status: 'pending' })
+  const { calls, service, sequelize } = createService({
+    participantFindOneResults: [existing, reloaded],
+  })
+
+  const result = await service.requestJoin(USER_ID, TRIP_ID)
+
+  assert.equal(result.created, false)
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.notifications[0].recipientId, OWNER_ID)
+  assert.equal(calls.notifications[0].actorId, USER_ID)
+  assert.equal(calls.notifications[0].type, 'trip_join_request')
+  assert.equal(
+    calls.notifications[0].message,
+    'Ada Lovelace requested to join your trip.',
+  )
+  assert.equal(calls.notifications[0].referenceType, 'trip')
+  assert.equal(calls.notifications[0].referenceId, TRIP_ID)
+  assert.equal(sequelize.transactions[0].committed, true)
+})
+
+test('requestJoin does not notify when a rejected request is reactivated', async () => {
+  const existing = buildParticipant({ status: 'rejected' })
+  const reloaded = buildParticipant({ status: 'pending' })
+  const { calls, service, sequelize } = createService({
+    participantFindOneResults: [existing, reloaded],
+  })
+
+  const result = await service.requestJoin(USER_ID, TRIP_ID)
+
+  assert.equal(result.created, false)
+  assert.equal(result.participation.status, 'pending')
+  // A rejected record reactivated to pending does not create a notification.
+  assert.equal(calls.notifications.length, 0)
+  assert.equal(calls.userFindByPk.length, 0)
+  assert.equal(sequelize.transactions[0].committed, true)
+})
+
+test('requestJoin does not notify for duplicate pending or approved requests', async () => {
+  for (const status of ['pending', 'approved']) {
+    const { calls, service } = createService({
+      participantFindOneResults: [buildParticipant({ status })],
+    })
+
+    await rejectsWith(
+      service.requestJoin(USER_ID, TRIP_ID),
+      TripParticipationExistsError,
+    )
+    assert.equal(calls.notifications.length, 0)
+    assert.equal(calls.userFindByPk.length, 0)
+  }
+})
+
+test('requestJoin does not notify when the trip is full', async () => {
+  const { calls, service } = createService({
+    approvedCount: 3,
+    participantFindOneResults: [null],
+  })
+
+  await rejectsWith(
+    service.requestJoin(USER_ID, TRIP_ID),
+    TripFullError,
+  )
+  assert.equal(calls.notifications.length, 0)
+  assert.equal(calls.userFindByPk.length, 0)
+})
+
+test('requestJoin rolls back when notification creation fails', async () => {
+  const notificationError = new Error('notification write failed')
+  const { calls, service, sequelize } = createService({
+    participantFindOneResults: [null, buildParticipant()],
+    notificationError,
+  })
+
+  await assert.rejects(
+    service.requestJoin(USER_ID, TRIP_ID),
+    notificationError,
+  )
+
+  assert.equal(calls.participantCreate.length, 1)
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.notifications[0].transaction, sequelize.transactions[0])
+  assert.equal(sequelize.transactions.length, 1)
+  assert.equal(sequelize.transactions[0].committed, false)
+  assert.equal(sequelize.transactions[0].rolledBack, true)
+})
+
+test('moderateParticipant notifies the participant when approved', async () => {
+  const reloaded = buildParticipant({
+    status: 'approved',
+    joinedAt: new Date('2026-11-11T12:00:00.000Z'),
+  })
+  const { calls, service, sequelize } = createService({
+    approvedCount: 1,
+    participantFindOneResults: [
+      buildParticipant({ status: 'pending' }),
+      reloaded,
+    ],
+  })
+
+  await service.moderateParticipant(
+    OWNER_ID,
+    TRIP_ID,
+    PARTICIPANT_ID,
+    { status: 'approved' },
+  )
+
+  assert.deepEqual(calls.userFindByPk, [
+    { id: OWNER_ID, options: { attributes: ['id', 'fullName'] } },
+  ])
+  assert.equal(calls.notifications.length, 1)
+  assert.deepEqual(calls.notifications[0], {
+    recipientId: USER_ID,
+    actorId: OWNER_ID,
+    type: 'trip_join_approved',
+    message: 'The trip owner approved your request to join.',
+    referenceType: 'trip',
+    referenceId: TRIP_ID,
+    transaction: sequelize.transactions[0],
+  })
+  assert.equal(sequelize.transactions[0].committed, true)
+})
+
+test('moderateParticipant notifies the participant when rejected', async () => {
+  const { calls, service, sequelize } = createService({
+    participantFindOneResults: [
+      buildParticipant({ status: 'pending' }),
+      buildParticipant({ status: 'rejected' }),
+    ],
+  })
+
+  await service.moderateParticipant(
+    OWNER_ID,
+    TRIP_ID,
+    PARTICIPANT_ID,
+    { status: 'rejected' },
+  )
+
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.notifications[0].recipientId, USER_ID)
+  assert.equal(calls.notifications[0].actorId, OWNER_ID)
+  assert.equal(calls.notifications[0].type, 'trip_join_rejected')
+  assert.equal(
+    calls.notifications[0].message,
+    'The trip owner rejected your request to join.',
+  )
+  assert.equal(calls.notifications[0].referenceType, 'trip')
+  assert.equal(calls.notifications[0].referenceId, TRIP_ID)
+  assert.equal(sequelize.transactions[0].committed, true)
+})
+
+test('moderateParticipant does not notify for pending-to-cancelled', async () => {
+  const { calls, service } = createService({
+    participantFindOneResults: [
+      buildParticipant({ status: 'pending' }),
+      buildParticipant({ status: 'cancelled' }),
+    ],
+  })
+
+  await service.moderateParticipant(
+    OWNER_ID,
+    TRIP_ID,
+    PARTICIPANT_ID,
+    { status: 'cancelled' },
+  )
+
+  assert.equal(calls.notifications.length, 0)
+})
+
+test('moderateParticipant does not notify for approved-to-cancelled', async () => {
+  const { calls, service } = createService({
+    participantFindOneResults: [
+      buildParticipant({ status: 'approved' }),
+      buildParticipant({ status: 'cancelled' }),
+    ],
+  })
+
+  await service.moderateParticipant(
+    OWNER_ID,
+    TRIP_ID,
+    PARTICIPANT_ID,
+    { status: 'cancelled' },
+  )
+
+  assert.equal(calls.notifications.length, 0)
+})
+
+test('moderateParticipant does not notify for invalid transitions', async () => {
+  const invalid = [
+    ['approved', 'approved'],
+    ['approved', 'rejected'],
+    ['rejected', 'approved'],
+    ['cancelled', 'approved'],
+  ]
+
+  for (const [current, target] of invalid) {
+    const { calls, service } = createService({
+      participantFindOneResults: [buildParticipant({ status: current })],
+    })
+
+    await rejectsWith(
+      service.moderateParticipant(
+        OWNER_ID,
+        TRIP_ID,
+        PARTICIPANT_ID,
+        { status: target },
+      ),
+      TripParticipationStateConflictError,
+    )
+    assert.equal(calls.notifications.length, 0)
+    assert.equal(calls.userFindByPk.length, 0)
+  }
+})
+
+test('moderateParticipant rolls back when notification creation fails', async () => {
+  const notificationError = new Error('notification write failed')
+  const reloaded = buildParticipant({
+    status: 'approved',
+    joinedAt: new Date('2026-11-11T12:00:00.000Z'),
+  })
+  const { calls, service, sequelize } = createService({
+    approvedCount: 1,
+    participantFindOneResults: [
+      buildParticipant({ status: 'pending' }),
+      reloaded,
+    ],
+    notificationError,
+  })
+
+  await assert.rejects(
+    service.moderateParticipant(
+      OWNER_ID,
+      TRIP_ID,
+      PARTICIPANT_ID,
+      { status: 'approved' },
+    ),
+    notificationError,
+  )
+
+  assert.equal(calls.participantUpdate.length, 1)
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.notifications[0].transaction, sequelize.transactions[0])
+  assert.equal(sequelize.transactions.length, 1)
+  assert.equal(sequelize.transactions[0].committed, false)
+  assert.equal(sequelize.transactions[0].rolledBack, true)
+})
+
+test('moderateParticipant rolls back rejection when notification creation fails', async () => {
+  const notificationError = new Error('notification write failed')
+  const { calls, service, sequelize } = createService({
+    participantFindOneResults: [
+      buildParticipant({ status: 'pending' }),
+      buildParticipant({ status: 'rejected' }),
+    ],
+    notificationError,
+  })
+
+  await assert.rejects(
+    service.moderateParticipant(
+      OWNER_ID,
+      TRIP_ID,
+      PARTICIPANT_ID,
+      { status: 'rejected' },
+    ),
+    notificationError,
+  )
+
+  assert.equal(calls.participantUpdate.length, 1)
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.notifications[0].transaction, sequelize.transactions[0])
+  assert.equal(sequelize.transactions.length, 1)
+  assert.equal(sequelize.transactions[0].committed, false)
+  assert.equal(sequelize.transactions[0].rolledBack, true)
 })

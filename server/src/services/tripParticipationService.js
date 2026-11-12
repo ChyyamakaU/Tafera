@@ -15,18 +15,30 @@ const {
   TripParticipationNotFoundError,
   TripParticipationStateConflictError,
 } = require('../utils/tripErrors')
+const {
+  createNotificationCreationService,
+} = require('./notificationCreationService')
 
 const createTripParticipationService = ({
   Trip,
   TripParticipant,
   User,
+  Notification,
   sequelize,
+  notificationCreationService,
 } = {}) => {
   const tripModel = Trip || require('../models').Trip
   const participantModel =
     TripParticipant || require('../models').TripParticipant
   const userModel = User || require('../models').User
-  const database = sequelize || require('../models').sequelize
+  const database =
+    sequelize || tripModel.sequelize || require('../models').sequelize
+  const notifications =
+    notificationCreationService ||
+    createNotificationCreationService({
+      Notification:
+        Notification || require('../models').Notification,
+    })
 
   const participantUserInclude = {
     model: userModel,
@@ -127,7 +139,11 @@ const createTripParticipationService = ({
           throw new TripFullError()
         }
 
+        let reactivatedFromCancelled = false
+
         if (existing) {
+          reactivatedFromCancelled = existing.status === 'cancelled'
+
           await participantModel.update(
             { status: 'pending', joinedAt: null },
             {
@@ -137,20 +153,42 @@ const createTripParticipationService = ({
           )
           participantId = existing.id
           created = false
-          return
+        } else {
+          const participant = await participantModel.create(
+            {
+              tripId,
+              userId,
+              status: 'pending',
+              joinedAt: null,
+            },
+            { transaction },
+          )
+          participantId = participant.id
+          created = true
         }
 
-        const participant = await participantModel.create(
-          {
-            tripId,
-            userId,
-            status: 'pending',
-            joinedAt: null,
-          },
-          { transaction },
-        )
-        participantId = participant.id
-        created = true
+        // A new request, or a cancelled record reactivated to pending,
+        // notifies the trip owner. A rejected record reactivated to pending
+        // does not create a fresh notification. Duplicate pending/approved
+        // requests and full trips throw before this point, so they never
+        // notify.
+        const shouldNotify = created || reactivatedFromCancelled
+
+        if (shouldNotify) {
+          const actor = await userModel.findByPk(userId, {
+            attributes: ['id', 'fullName'],
+          })
+
+          await notifications.createNotification({
+            recipientId: trip.userId,
+            actorId: userId,
+            type: 'trip_join_request',
+            message: `${actor.fullName} requested to join your trip.`,
+            referenceType: 'trip',
+            referenceId: tripId,
+            transaction,
+          })
+        }
       })
     } catch (error) {
       if (error.name === 'SequelizeUniqueConstraintError') {
@@ -327,6 +365,30 @@ const createTripParticipationService = ({
           transaction,
         },
       )
+
+      // Only pending -> approved/rejected transitions notify the participant.
+      // Cancellations and other transitions do not create notifications.
+      if (
+        participant.status === 'pending' &&
+        (input.status === 'approved' || input.status === 'rejected')
+      ) {
+        const actor = await userModel.findByPk(ownerId, {
+          attributes: ['id', 'fullName'],
+        })
+
+        const isApproved = input.status === 'approved'
+        await notifications.createNotification({
+          recipientId: participant.userId,
+          actorId: ownerId,
+          type: isApproved ? 'trip_join_approved' : 'trip_join_rejected',
+          message: isApproved
+            ? 'The trip owner approved your request to join.'
+            : 'The trip owner rejected your request to join.',
+          referenceType: 'trip',
+          referenceId: tripId,
+          transaction,
+        })
+      }
     })
 
     const participation = await findParticipantWithUser(
