@@ -11,11 +11,29 @@ const {
   CommentNotFoundError,
   PostNotFoundError,
 } = require('../utils/socialErrors')
+const {
+  createNotificationCreationService,
+} = require('./notificationCreationService')
 
-const createCommentService = ({ Comment, Post, User } = {}) => {
+const createCommentService = ({
+  Comment,
+  Post,
+  User,
+  Notification,
+  sequelize,
+  notificationCreationService,
+} = {}) => {
   const commentModel = Comment || require('../models').Comment
   const postModel = Post || require('../models').Post
   const userModel = User || require('../models').User
+  const database =
+    sequelize || commentModel.sequelize || require('../models').sequelize
+  const notifications =
+    notificationCreationService ||
+    createNotificationCreationService({
+      Notification:
+        Notification || require('../models').Notification,
+    })
 
   // Comment authors are filtered at the query level so pagination totals and
   // direct lookups never include content hidden by a suspension.
@@ -100,13 +118,45 @@ const createCommentService = ({ Comment, Post, User } = {}) => {
   }
 
   const createComment = async (userId, postId, input) => {
-    await assertPostVisible(postId)
+    const post = await assertPostVisible(postId)
+    const recipientId = post.author.id
 
-    // auth owns the userId value; validated input can only contain content.
-    const comment = await commentModel.create({
-      ...input,
-      postId,
-      userId,
+    // Commenting on your own post is normal, but there is nobody else to
+    // notify. Skip the actor lookup and notification entirely in that case.
+    const notifyAuthor = recipientId !== userId
+    const actor = notifyAuthor
+      ? await userModel.findByPk(userId, {
+          attributes: ['id', 'fullName'],
+        })
+      : null
+
+    let comment
+
+    // The comment and its notification are one unit of work. If notification
+    // creation fails, the transaction rolls the comment back so a comment can
+    // never exist without the notification its author should receive.
+    await database.transaction(async (transaction) => {
+      // auth owns the userId value; validated input can only contain content.
+      comment = await commentModel.create(
+        {
+          ...input,
+          postId,
+          userId,
+        },
+        { transaction },
+      )
+
+      if (!notifyAuthor) return
+
+      await notifications.createNotification({
+        recipientId,
+        actorId: userId,
+        type: 'post_comment',
+        message: `${actor.fullName} commented on your post.`,
+        referenceType: 'comment',
+        referenceId: comment.id,
+        transaction,
+      })
     })
 
     return getComment(postId, comment.id)

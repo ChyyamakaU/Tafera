@@ -44,19 +44,55 @@ const createCommentRecord = (overrides = {}) => ({
 })
 
 const createService = ({
-  post = { id: POST_ID },
+  post = { id: POST_ID, author: { id: OWNER_ID } },
+  actorUser,
   comment,
   commentsResult,
+  createError,
+  notificationError,
 } = {}) => {
   const calls = {
     postFindOne: [],
+    userFindByPk: [],
     commentCreate: [],
     commentFindOne: [],
     commentFindAndCountAll: [],
+    notifications: [],
+    transactions: [],
   }
 
   const commentRecord =
     comment === undefined ? createCommentRecord() : comment
+
+  const sequelize = {
+    async transaction(callback) {
+      const transaction = {
+        id: `transaction-${calls.transactions.length + 1}`,
+        committed: false,
+        rolledBack: false,
+      }
+      calls.transactions.push(transaction)
+
+      try {
+        const result = await callback(transaction)
+        transaction.committed = true
+        return result
+      } catch (error) {
+        transaction.rolledBack = true
+        throw error
+      }
+    },
+  }
+
+  const notificationCreationService = {
+    async createNotification(input) {
+      calls.notifications.push(input)
+
+      if (notificationError) throw notificationError
+
+      return { id: 'notification-id', ...input }
+    },
+  }
 
   const service = createCommentService({
     Post: {
@@ -66,8 +102,11 @@ const createService = ({
       },
     },
     Comment: {
-      async create(values) {
-        calls.commentCreate.push(values)
+      async create(values, options) {
+        calls.commentCreate.push({ values, options })
+
+        if (createError) throw createError
+
         return commentRecord
       },
       async findOne(options) {
@@ -79,7 +118,16 @@ const createService = ({
         return commentsResult || { count: 0, rows: [] }
       },
     },
-    User: {},
+    User: {
+      async findByPk(id, options) {
+        calls.userFindByPk.push({ id, options })
+        return actorUser === undefined
+          ? { id: OTHER_ID, fullName: 'Grace Hopper' }
+          : actorUser
+      },
+    },
+    sequelize,
+    notificationCreationService,
   })
 
   return { service, calls, commentRecord }
@@ -181,7 +229,7 @@ test('createComment assigns the authenticated author and returns a safe comment'
     postId: '55555555-5555-4555-8555-555555555555',
   })
 
-  assert.deepEqual(calls.commentCreate[0], {
+  assert.deepEqual(calls.commentCreate[0].values, {
     content: 'A comment',
     postId: POST_ID,
     userId: OWNER_ID,
@@ -196,6 +244,86 @@ test('createComment assigns the authenticated author and returns a safe comment'
     id: COMMENT_ID,
     postId: POST_ID,
   })
+
+  // The commenter owns the post, so no notification is created.
+  assert.deepEqual(calls.userFindByPk, [])
+  assert.deepEqual(calls.notifications, [])
+  assert.equal(calls.transactions.length, 1)
+  assert.equal(calls.transactions[0].committed, true)
+})
+
+test('createComment notifies the post author with a safe comment reference', async () => {
+  const { service, calls } = createService({
+    post: { id: POST_ID, author: { id: OWNER_ID } },
+  })
+
+  await service.createComment(OTHER_ID, POST_ID, {
+    content: 'A comment',
+  })
+
+  assert.deepEqual(calls.userFindByPk, [
+    {
+      id: OTHER_ID,
+      options: { attributes: ['id', 'fullName'] },
+    },
+  ])
+  assert.equal(calls.transactions.length, 1)
+  assert.deepEqual(calls.notifications, [
+    {
+      recipientId: OWNER_ID,
+      actorId: OTHER_ID,
+      type: 'post_comment',
+      message: 'Grace Hopper commented on your post.',
+      referenceType: 'comment',
+      referenceId: COMMENT_ID,
+      transaction: calls.transactions[0],
+    },
+  ])
+  assert.equal(
+    calls.commentCreate[0].options.transaction,
+    calls.transactions[0],
+  )
+  assert.equal(calls.transactions[0].committed, true)
+  assert.equal(calls.transactions[0].rolledBack, false)
+})
+
+test('createComment rolls the comment back when notification creation fails', async () => {
+  const notificationError = new Error('notification write failed')
+  const { service, calls } = createService({ notificationError })
+
+  await assert.rejects(
+    service.createComment(OTHER_ID, POST_ID, {
+      content: 'A comment',
+    }),
+    notificationError,
+  )
+
+  assert.equal(calls.commentCreate.length, 1)
+  assert.equal(calls.notifications.length, 1)
+  assert.equal(calls.transactions.length, 1)
+  assert.equal(calls.transactions[0].committed, false)
+  assert.equal(calls.transactions[0].rolledBack, true)
+  assert.equal(
+    calls.notifications[0].transaction,
+    calls.transactions[0],
+  )
+})
+
+test('createComment does not notify when comment creation fails', async () => {
+  const createError = new Error('comment write failed')
+  const { service, calls } = createService({ createError })
+
+  await assert.rejects(
+    service.createComment(OTHER_ID, POST_ID, {
+      content: 'A comment',
+    }),
+    createError,
+  )
+
+  assert.equal(calls.commentCreate.length, 1)
+  assert.deepEqual(calls.notifications, [])
+  assert.equal(calls.transactions.length, 1)
+  assert.equal(calls.transactions[0].rolledBack, true)
 })
 
 test('updateComment scopes the comment to its post and rejects non-authors', async () => {

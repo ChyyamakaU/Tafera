@@ -27,6 +27,7 @@ const DestinationModel = require('../src/models/destination')
 const DestinationImageModel = require('../src/models/destinationImage')
 const PostModel = require('../src/models/post')
 const CommentModel = require('../src/models/comment')
+const NotificationModel = require('../src/models/notification')
 const passwordService = require('../src/services/passwordService')
 const sessionService = require('../src/services/sessionService')
 const {
@@ -64,6 +65,7 @@ let Destination = null
 let DestinationImage = null
 let Post = null
 let Comment = null
+let Notification = null
 let schema = null
 let databaseAvailable = false
 let redisClient = null
@@ -189,6 +191,45 @@ before(async () => {
          updated_at timestamptz NOT NULL DEFAULT now()
        )`,
     )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_notifications_type AS ENUM (
+         'new_follower',
+         'post_like',
+         'post_comment',
+         'trip_join_request',
+         'trip_join_approved',
+         'trip_join_rejected'
+       )`,
+    )
+    await base.query(
+      `CREATE TYPE "${schema}".enum_notifications_reference_type AS ENUM (
+         'user',
+         'post',
+         'comment',
+         'trip'
+       )`,
+    )
+    await base.query(
+      `CREATE TABLE "${schema}".notifications (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid NOT NULL REFERENCES "${schema}".users(id)
+           ON DELETE CASCADE ON UPDATE CASCADE,
+         actor_id uuid REFERENCES "${schema}".users(id)
+           ON DELETE SET NULL ON UPDATE CASCADE,
+         type "${schema}".enum_notifications_type NOT NULL,
+         message text NOT NULL,
+         reference_type "${schema}".enum_notifications_reference_type,
+         reference_id uuid,
+         is_read boolean NOT NULL DEFAULT false,
+         read_at timestamptz,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         updated_at timestamptz NOT NULL DEFAULT now(),
+         CONSTRAINT notifications_reference_pair_check CHECK (
+           ("reference_type" IS NULL AND "reference_id" IS NULL)
+           OR ("reference_type" IS NOT NULL AND "reference_id" IS NOT NULL)
+         )
+       )`,
+    )
 
     scoped = new Sequelize(
       config.database,
@@ -211,6 +252,7 @@ before(async () => {
     DestinationImage = DestinationImageModel(scoped, DataTypes)
     Post = PostModel(scoped, DataTypes)
     Comment = CommentModel(scoped, DataTypes)
+    Notification = NotificationModel(scoped, DataTypes)
 
     Post.belongsTo(User, { foreignKey: 'userId', as: 'author' })
     Post.belongsTo(Destination, {
@@ -272,7 +314,8 @@ after(async () => {
 beforeEach(async () => {
   if (databaseAvailable) {
     await base.query(
-      `TRUNCATE TABLE "${schema}".comments,
+      `TRUNCATE TABLE "${schema}".notifications,
+         "${schema}".comments,
          "${schema}".posts,
          "${schema}".destination_images,
          "${schema}".destinations,
@@ -404,7 +447,7 @@ const cleanupNamespace = async (namespace) => {
   }
 }
 
-const createHarness = async () => {
+const createHarness = async ({ notificationCreationService } = {}) => {
   const namespace = `tafera-comment-test-${crypto.randomUUID()}`
   const index = createSessionIndex({ client: redisClient, namespace })
   const nodeEnv = 'development'
@@ -473,6 +516,9 @@ const createHarness = async () => {
     Comment,
     Post,
     User,
+    Notification,
+    sequelize: scoped,
+    notificationCreationService,
   })
 
   app.use(
@@ -624,6 +670,108 @@ test('verified users can create comments and protected fields are stripped', asy
     assert.equal(stored.postId, postId)
     assert.equal(stored.userId, user.id)
     assert.equal(stored.content, 'Hello commentary')
+
+    // Commenting on your own post is not a notifiable event.
+    assert.equal(await Notification.count(), 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('commenting on another user post creates a post_comment notification', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const owner = await createVerifiedClient(harness, {
+      fullName: 'Grace Hopper',
+    })
+    const commenter = await createVerifiedClient(harness, {
+      fullName: 'Ada Lovelace',
+    })
+    const post = await createPost(owner.client)
+    const postId = post.body.data.post.id
+
+    const response = await createComment(commenter.client, postId, {
+      content: 'Great post',
+    })
+
+    assert.equal(response.status, 201)
+    assertNoStore(response)
+
+    const notifications = await Notification.findAll()
+    assert.equal(notifications.length, 1)
+
+    const notification = notifications[0]
+    assert.equal(notification.userId, owner.user.id)
+    assert.equal(notification.actorId, commenter.user.id)
+    assert.equal(notification.type, 'post_comment')
+    assert.equal(
+      notification.message,
+      'Ada Lovelace commented on your post.',
+    )
+    assert.equal(notification.referenceType, 'comment')
+    assert.equal(
+      notification.referenceId,
+      response.body.data.comment.id,
+    )
+    assert.equal(notification.isRead, false)
+    assert.equal(notification.readAt, null)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('commenting on your own post does not create a notification', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const owner = await createVerifiedClient(harness)
+    const post = await createPost(owner.client)
+    const postId = post.body.data.post.id
+
+    const response = await createComment(owner.client, postId, {
+      content: 'Talking to myself',
+    })
+
+    assert.equal(response.status, 201)
+    assert.equal(await Comment.count(), 1)
+    assert.equal(await Notification.count(), 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('notification failure rolls the comment back', async (t) => {
+  if (skip(t)) return
+
+  let attempts = 0
+  const harness = await createHarness({
+    notificationCreationService: {
+      async createNotification() {
+        attempts += 1
+        throw new Error('notification write failed')
+      },
+    },
+  })
+
+  try {
+    const owner = await createVerifiedClient(harness)
+    const commenter = await createVerifiedClient(harness)
+    const post = await createPost(owner.client)
+    const postId = post.body.data.post.id
+
+    const response = await createComment(commenter.client, postId, {
+      content: 'This must roll back',
+    })
+
+    assert.equal(response.status, 500)
+    assert.equal(response.body.error.code, 'INTERNAL_ERROR')
+    assertNoStore(response)
+    assert.equal(attempts, 1)
+    assert.equal(await Comment.count(), 0)
+    assert.equal(await Notification.count(), 0)
   } finally {
     await harness.close()
   }
@@ -678,6 +826,9 @@ test('comment creation validates content and the parent post', async (t) => {
     })
     assert.equal(hiddenPost.status, 404)
     assert.equal(hiddenPost.body.error.code, 'POST_NOT_FOUND')
+
+    assert.equal(await Comment.count(), 1)
+    assert.equal(await Notification.count(), 0)
   } finally {
     await harness.close()
   }
