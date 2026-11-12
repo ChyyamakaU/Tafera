@@ -200,6 +200,13 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE',
     })
+
+    User.hasMany(models.ScrapbookJournal, {
+      foreignKey: 'userId',
+      as: 'scrapbooks',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
   }
 
   return User

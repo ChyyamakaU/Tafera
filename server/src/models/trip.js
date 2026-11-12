@@ -90,6 +90,13 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE',
     })
+
+    Trip.hasMany(models.ScrapbookJournal, {
+      foreignKey: 'tripId',
+      as: 'scrapbooks',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
+    })
   }
 
   return Trip
