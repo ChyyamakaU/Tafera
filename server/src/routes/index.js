@@ -7,6 +7,7 @@ const destinationsRouter = require('./destinations')
 const tripsRouter = require('./trips')
 const postsRouter = require('./posts')
 const notificationsRouter = require('./notifications')
+const reportsRouter = require('./reports')
 
 const CHECK_TIMEOUT_MS = 2000
 
@@ -37,6 +38,7 @@ router.use('/destinations', destinationsRouter)
 router.use('/trips', tripsRouter)
 router.use('/posts', postsRouter)
 router.use('/notifications', notificationsRouter)
+router.use('/reports', reportsRouter)
 
 // Liveness: the process is up. This must not depend on PostgreSQL or Redis.
 router.get('/health', (req, res) => {
