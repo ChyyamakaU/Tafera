@@ -98,6 +98,11 @@ const createService = (params = {}) => {
       if (!destination) return null
       return destination.id === id ? destination : null
     },
+    async findOne(options = {}) {
+      calls.destinationFindByPk.push({ id: options.where?.id, lock: options.lock })
+      if (!destination) return null
+      return destination.id === options.where?.id ? destination : null
+    },
   }
 
   const DestinationImage = {

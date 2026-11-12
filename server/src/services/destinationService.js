@@ -288,8 +288,15 @@ const createDestinationService = ({
   }
 
   const listDestinationImages = async (destinationId) => {
-    // Verify destination exists.
-    const destination = await destinationModel.findByPk(destinationId)
+    // Verify destination exists and is published. Draft destinations are
+    // hidden from public image listings, consistent with the public detail
+    // policy.
+    const destination = await destinationModel.findOne({
+      where: {
+        id: destinationId,
+        status: 'published',
+      },
+    })
     if (!destination) {
       throw new DestinationNotFoundError()
     }
@@ -328,6 +335,12 @@ const createDestinationService = ({
     // Lock the parent destination row so concurrent cover changes and
     // deletions cannot bypass the single-cover rule.
     await destinationModel.sequelize.transaction(async (transaction) => {
+      // Lock the destination row to serialize per-destination writes.
+      await destinationModel.findByPk(image.destinationId, {
+        lock: transaction.LOCK.UPDATE,
+        transaction,
+      })
+
       // Re-fetch the image inside the transaction to get the locked row
       // state and ensure we operate on the latest version.
       const lockedImage = await imageModel.findByPk(imageId, {
