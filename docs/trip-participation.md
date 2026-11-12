@@ -261,6 +261,29 @@ Participation writes run in database transactions:
   the update, under the same trip row lock used by joins and approvals.
 - The unique `(trip_id, user_id)` constraint remains the final safeguard.
 
+## Notifications
+
+Trip participation creates notifications for trip owners and participants:
+
+| Event | Notification type | Recipient | Actor | Reference |
+|---|---|---|---|---|
+| Join request created | `trip_join_request` | Trip owner | Requesting participant | `trip` / trip ID |
+| Cancelled request reactivated | `trip_join_request` | Trip owner | Requesting participant | `trip` / trip ID |
+| Request approved | `trip_join_approved` | Participant | Trip owner | `trip` / trip ID |
+| Request rejected | `trip_join_rejected` | Participant | Trip owner | `trip` / trip ID |
+
+- A new join request and a cancelled record reactivated to `pending` each
+  create a fresh notification for the trip owner.
+- A rejected record reactivated to `pending` does **not** create a
+  notification.
+- Cancelling a request or leaving a trip does **not** create a notification.
+- Notification creation participates in the participation transaction. If
+  notification creation fails, the participation change is rolled back.
+- Users do not receive notifications for their own actions.
+
+Notification delivery details (endpoints, pagination, actor serialization, error
+codes) are documented in [Notifications API](notifications.md).
+
 ## Serialization and privacy
 
 Participation responses use an explicit allowlist:

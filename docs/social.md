@@ -5,7 +5,8 @@ tables. No additional migration is required for this feature.
 
 Social content is public. Comments are flat, follows are immediate and one-way,
 and there are no private accounts, follow requests or threaded replies.
-Post images, likes, saved posts, notifications and reports are not implemented.
+Post images, likes, saved posts and reports are not implemented. Notifications
+are documented separately in [Notifications API](notifications.md).
 
 Related documentation:
 
