@@ -109,6 +109,64 @@ const imageIdParamsSchema = z.object({
   imageId: imageIdSchema,
 })
 
+const createScrapbookJournalSchema = z.object({
+  title: z
+    .string({ message: 'Title must be a string.' })
+    .trim()
+    .min(1, 'Title is required.'),
+  description: z
+    .string({ message: 'Description must be a string.' })
+    .trim()
+    .max(1000, 'Description must be at most 1000 characters long.')
+    .optional()
+    .nullable(),
+  tripId: z
+    .string({ message: 'Trip ID must be a string.' })
+    .trim()
+    .regex(UUID_PATTERN, 'Enter a valid trip ID.')
+    .optional()
+    .nullable(),
+  isPublic: z
+    .preprocess(booleanFromForm, z.boolean({ message: 'isPublic must be true or false.' }))
+    .optional(),
+})
+
+const updateScrapbookJournalSchema = z.object({
+  title: z
+    .string({ message: 'Title must be a string.' })
+    .trim()
+    .min(1, 'Title is required.')
+    .optional(),
+  description: z
+    .string({ message: 'Description must be a string.' })
+    .trim()
+    .max(1000, 'Description must be at most 1000 characters long.')
+    .optional()
+    .nullable(),
+}).superRefine((data, ctx) => {
+  if (data.title === undefined && data.description === undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'At least one of title or description is required.',
+      path: ['title'],
+    })
+  }
+})
+
+const setJournalVisibilitySchema = z.object({
+  isPublic: z.preprocess(
+    booleanFromForm,
+    z.boolean({ message: 'isPublic must be true or false.' }),
+  ),
+})
+
+const linkTripSchema = z.object({
+  tripId: z
+    .string({ message: 'Trip ID must be a string.' })
+    .trim()
+    .regex(UUID_PATTERN, 'Enter a valid trip ID.'),
+})
+
 const parseJournalId = (input) => parseWith(journalIdParamsSchema, input)
 const parseImageId = (input) => parseWith(imageIdParamsSchema, input)
 const parseCreateScrapbookImage = (input) =>
@@ -117,6 +175,13 @@ const parseUpdateScrapbookImage = (input) =>
   parseWith(updateScrapbookImageSchema, input)
 const parseReorderScrapbookImages = (input) =>
   parseWith(reorderImagesSchema, input)
+const parseCreateScrapbookJournal = (input) =>
+  parseWith(createScrapbookJournalSchema, input)
+const parseUpdateScrapbookJournal = (input) =>
+  parseWith(updateScrapbookJournalSchema, input)
+const parseSetJournalVisibility = (input) =>
+  parseWith(setJournalVisibilitySchema, input)
+const parseLinkTrip = (input) => parseWith(linkTripSchema, input)
 
 const isJournalId = (value) => isUuid(value)
 
@@ -133,10 +198,18 @@ module.exports = {
   createScrapbookImageSchema,
   updateScrapbookImageSchema,
   reorderImagesSchema,
+  createScrapbookJournalSchema,
+  updateScrapbookJournalSchema,
+  setJournalVisibilitySchema,
+  linkTripSchema,
   parseWith,
   parseJournalId,
   parseImageId,
   parseCreateScrapbookImage,
   parseUpdateScrapbookImage,
   parseReorderScrapbookImages,
+  parseCreateScrapbookJournal,
+  parseUpdateScrapbookJournal,
+  parseSetJournalVisibility,
+  parseLinkTrip,
 }

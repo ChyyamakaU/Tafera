@@ -11,17 +11,27 @@ migration is required.
 
 | Method | Path | Auth | CSRF | Verified email | Success |
 |:---|:---|:---:|:---:|:---:|---:|
+| `GET` | `/api/scrapbooks` | Yes | No | No | `200` |
+| `POST` | `/api/scrapbooks` | Yes | Yes | No | `201` |
+| `GET` | `/api/scrapbooks/:journalId` | Yes | No | No | `200` |
+| `PATCH` | `/api/scrapbooks/:journalId` | Yes | Yes | No | `200` |
+| `DELETE` | `/api/scrapbooks/:journalId` | Yes | Yes | No | `204` |
+| `PATCH` | `/api/scrapbooks/:journalId/visibility` | Yes | Yes | No | `200` |
+| `POST` | `/api/scrapbooks/:journalId/trip` | Yes | Yes | No | `200` |
+| `DELETE` | `/api/scrapbooks/:journalId/trip` | Yes | Yes | No | `204` |
 | `GET` | `/api/scrapbooks/:journalId/images` | Yes | No | No | `200` |
-| `POST` | `/api/scrapbooks/:journalId/images` | Yes | Yes | Yes | `201` |
-| `PATCH` | `/api/scrapbooks/:journalId/images/reorder` | Yes | Yes | Yes | `200` |
-| `PATCH` | `/api/scrapbooks/:journalId/images/:imageId` | Yes | Yes | Yes | `200` |
-| `DELETE` | `/api/scrapbooks/:journalId/images/:imageId` | Yes | Yes | Yes | `204` |
+| `POST` | `/api/scrapbooks/:journalId/images` | Yes | Yes | No | `201` |
+| `PATCH` | `/api/scrapbooks/:journalId/images/reorder` | Yes | Yes | No | `200` |
+| `PATCH` | `/api/scrapbooks/:journalId/images/:imageId` | Yes | Yes | No | `200` |
+| `DELETE` | `/api/scrapbooks/:journalId/images/:imageId` | Yes | Yes | No | `204` |
 
 All write routes use:
 
 ```text
-authenticate → csrfProtection → requireVerifiedEmail → controller
+authenticate → csrfProtection → controller
 ```
+
+Email verification is **not** required for scrapbook operations.
 
 Path identifiers must be UUIDs. Malformed journal or image IDs return
 `400 VALIDATION_ERROR`. The caller's identity always comes from the
@@ -32,12 +42,183 @@ Image responses expose only `id`, `imageUrl`, `altText`, `caption`, `takenAt`,
 `displayOrder` and `isCover`. Cloudinary `publicId` and ownership fields are
 never exposed. Every response is sent with `Cache-Control: no-store`.
 
-## GET /api/scrapbooks/:journalId/images
+## Privacy model
 
-Returns the images for one of the caller's journals, ordered by
-`displayOrder` then `id`. The journal must belong to the authenticated user;
-otherwise `404 SCRAPBOOK_NOT_FOUND` is returned so journal existence cannot be
-enumerated by other users.
+- Journals are **private by default** (`is_public` defaults to `false`).
+- Only the journal owner can create, update, delete, change visibility, or
+  manage trip associations for a journal.
+- The journal owner can view their own journals, whether private or public.
+- Other authenticated users can view **public** journals.
+- Other authenticated users receive `404 SCRAPBOOK_NOT_FOUND` when accessing a
+  private journal, so private journal existence cannot be enumerated.
+- There is **no public scrapbook directory**: `GET /api/scrapbooks` returns only
+  the authenticated user's own journals.
+
+## Journal endpoints
+
+### GET /api/scrapbooks
+
+Lists the authenticated user's own journals, ordered by `createdAt` descending.
+Supports optional `page` and `limit` query parameters for pagination, and an
+optional `isPublic` boolean filter.
+
+### Response
+
+```json
+{
+  "data": {
+    "journals": [
+      {
+        "id": "j0000000-0000-4000-8000-000000000001",
+        "title": "My Travel Journal",
+        "description": "My personal travel memories",
+        "isPublic": false,
+        "tripId": null,
+        "imageCount": 3,
+        "coverImage": {
+          "id": "i0000000-0000-4000-8000-000000000001",
+          "imageUrl": "https://res.cloudinary.com/test/image/upload/v1/photo.jpg",
+          "altText": "A scenic view",
+          "caption": "A caption",
+          "takenAt": "2026-01-15T00:00:00.000Z",
+          "displayOrder": 1,
+          "isCover": true
+        },
+        "createdAt": "2026-01-15T00:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPreviousPage": false
+    }
+  }
+}
+```
+
+### POST /api/scrapbooks
+
+Creates a new journal. The journal is private by default unless `isPublic` is
+explicitly set to `true`.
+
+### Request body
+
+| Field | Rules |
+|:---|:---|
+| `title` | Required string, at least 1 non-whitespace character. |
+| `description` | Optional string, at most 1000 characters. |
+| `tripId` | Optional UUID. Must reference a trip owned by the authenticated user. |
+| `isPublic` | Optional boolean: `true` or `false`. Defaults to `false`. |
+
+### Response
+
+Returns the created journal in the journal detail shape below.
+
+### GET /api/scrapbooks/:journalId
+
+Retrieves a single journal. The authenticated owner can view any of their own
+journals. Other authenticated users can view only public journals. Private
+journals owned by other users return `404 SCRAPBOOK_NOT_FOUND`.
+
+### Response
+
+Returns the journal detail, including its images:
+
+```json
+{
+  "data": {
+    "journal": {
+      "id": "j0000000-0000-4000-8000-000000000001",
+      "title": "My Travel Journal",
+      "description": "My personal travel memories",
+      "isPublic": false,
+      "tripId": null,
+      "imageCount": 2,
+      "coverImage": { ... },
+      "createdAt": "2026-01-15T00:00:00.000Z",
+      "images": [
+        {
+          "id": "i0000000-0000-4000-8000-000000000001",
+          "imageUrl": "https://res.cloudinary.com/test/image/upload/v1/photo.jpg",
+          "altText": "A scenic view",
+          "caption": "A caption",
+          "takenAt": "2026-01-15T00:00:00.000Z",
+          "displayOrder": 1,
+          "isCover": true
+        }
+      ]
+    }
+  }
+}
+```
+
+### PATCH /api/scrapbooks/:journalId
+
+Updates the title and/or description of a journal owned by the authenticated
+user. At least one field is required.
+
+### Request body
+
+| Field | Rules |
+|:---|:---|
+| `title` | Optional string, at least 1 non-whitespace character. |
+| `description` | Optional string, at most 1000 characters. |
+
+### Response
+
+Returns the updated journal in the journal detail shape.
+
+### DELETE /api/scrapbooks/:journalId
+
+Deletes a journal owned by the authenticated user. All associated images are
+deleted from Cloudinary and the database. Returns `204 No Content` on success.
+
+### PATCH /api/scrapbooks/:journalId/visibility
+
+Changes the `isPublic` visibility of a journal owned by the authenticated user.
+
+### Request body
+
+| Field | Rules |
+|:---|:---|
+| `isPublic` | Required boolean: `true` or `false`. |
+
+### Response
+
+Returns the updated journal in the journal detail shape.
+
+### POST /api/scrapbooks/:journalId/trip
+
+Links a journal owned by the authenticated user to a trip owned by the same
+user. Trip ownership is verified; linking to another user's trip returns
+`404 SCRAPBOOK_NOT_FOUND`.
+
+### Request body
+
+| Field | Rules |
+|:---|:---|
+| `tripId` | Required UUID. Must reference a trip owned by the authenticated user. |
+
+### Response
+
+Returns the updated journal in the journal detail shape.
+
+### DELETE /api/scrapbooks/:journalId/trip
+
+Unlinks the trip from a journal owned by the authenticated user, setting
+`tripId` to `null`. Returns the updated journal.
+
+## Image endpoints
+
+### GET /api/scrapbooks/:journalId/images
+
+Returns the images for a journal. The authenticated owner can list images for
+any of their own journals. Other authenticated users can list images for
+public journals only. Private journals owned by other users return
+`404 SCRAPBOOK_NOT_FOUND`.
 
 ### Response
 
@@ -59,10 +240,10 @@ enumerated by other users.
 }
 ```
 
-## POST /api/scrapbooks/:journalId/images
+### POST /api/scrapbooks/:journalId/images
 
-Uploads one image to a journal. The request is `multipart/form-data` with the
-file in the `image` field.
+Uploads one image to a journal owned by the authenticated user. The request is
+`multipart/form-data` with the file in the `image` field.
 
 ### Request body (form fields)
 
@@ -87,26 +268,12 @@ file in the `image` field.
 
 ### Response
 
-```json
-{
-  "data": {
-    "image": {
-      "id": "i0000000-0000-4000-8000-000000000001",
-      "imageUrl": "https://res.cloudinary.com/test/image/upload/v1/photo.jpg",
-      "altText": "A scenic view",
-      "caption": "A caption",
-      "takenAt": "2026-01-15T00:00:00.000Z",
-      "displayOrder": 1,
-      "isCover": false
-    }
-  }
-}
-```
+Returns the created image in the image shape above.
 
-## PATCH /api/scrapbooks/:journalId/images/reorder
+### PATCH /api/scrapbooks/:journalId/images/reorder
 
-Reorders the images of one of the caller's journals. The body is an array of
-image IDs in the desired order. All IDs must belong to the journal.
+Reorders the images of a journal owned by the authenticated user. The body is an
+array of image IDs in the desired order. All IDs must belong to the journal.
 
 ### Request body
 
@@ -121,10 +288,10 @@ image IDs in the desired order. All IDs must belong to the journal.
 
 Returns the reordered images in the list shape above.
 
-## PATCH /api/scrapbooks/:journalId/images/:imageId
+### PATCH /api/scrapbooks/:journalId/images/:imageId
 
-Updates the metadata of one of the caller's images. At least one field is
-required.
+Updates the metadata of an image belonging to a journal owned by the
+authenticated user. At least one field is required.
 
 ### Request body
 
@@ -143,12 +310,12 @@ unset within the same transaction, so the single-cover rule is never violated.
 
 Returns the updated image in the image shape above.
 
-## DELETE /api/scrapbooks/:journalId/images/:imageId
+### DELETE /api/scrapbooks/:journalId/images/:imageId
 
-Deletes one of the caller's images. The Cloudinary asset is deleted first, then
-the database record. If Cloudinary deletion fails, the database record is
-preserved and `500 CLOUDINARY_DELETE_ERROR` is returned; the operation is safe
-to retry.
+Deletes an image belonging to a journal owned by the authenticated user. The
+Cloudinary asset is deleted first, then the database record. If Cloudinary
+deletion fails, the database record is preserved and
+`500 CLOUDINARY_DELETE_ERROR` is returned; the operation is safe to retry.
 
 Returns `204 No Content` on success.
 
@@ -161,9 +328,8 @@ Returns `204 No Content` on success.
 | 401 | `AUTH_REQUIRED` | Authentication is required |
 | 401 | `SESSION_INVALID` | Session is no longer valid |
 | 403 | `CSRF_TOKEN_INVALID` | Missing or invalid CSRF token on a write |
-| 403 | `EMAIL_VERIFICATION_REQUIRED` | A verified email is required |
 | 403 | `ACCOUNT_INACTIVE` | The authenticated account is suspended |
-| 404 | `SCRAPBOOK_NOT_FOUND` | Journal or image is missing, or not owned by the caller |
+| 404 | `SCRAPBOOK_NOT_FOUND` | Journal is missing, or not owned by the caller (private journal accessed by non-owner) |
 | 404 | `SCRAPBOOK_IMAGE_NOT_FOUND` | Image is missing or belongs to another journal |
 | 409 | `SCRAPBOOK_IMAGE_LIMIT_EXCEEDED` | Journal already holds 50 images |
 | 500 | `CLOUDINARY_DELETE_ERROR` | Cloudinary asset deletion failed |

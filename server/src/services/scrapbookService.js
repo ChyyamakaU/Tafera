@@ -464,15 +464,24 @@ const createScrapbookService = ({
   }
 
   const listScrapbookImages = async (userId, journalId) => {
-    // Verify journal exists and belongs to user.
+    // Find the journal. For private journals, only the owner can list images.
+    // For public journals, any authenticated user can list images.
     const journal = await journalModel.findOne({
       where: {
         id: journalId,
-        userId,
+        [Op.or]: [
+          { userId },
+          { isPublic: true },
+        ],
       },
     })
 
     if (!journal) {
+      throw new ScrapbookNotFoundError()
+    }
+
+    // If the journal is private and the user is not the owner, reject.
+    if (journal.isPublic !== true && journal.userId !== userId) {
       throw new ScrapbookNotFoundError()
     }
 
