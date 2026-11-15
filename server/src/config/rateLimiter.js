@@ -7,6 +7,37 @@ const { client } = require('./redis')
 const WINDOW_MS = 15 * 60 * 1000
 const MAX_REQUESTS = 300
 
+// Login rate limiting targets brute-force attempts. The key combines the
+// client IP with the login email so a single IP cannot rapidly guess many
+// accounts and a single account cannot be hammered from one IP. When no email
+// is present the request falls back to an IP-only key.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_MAX_REQUESTS = 10
+
+// Registration rate limiting curbs automated account creation. It is keyed by
+// IP alone because there is no existing account to tie the attempt to.
+const REGISTRATION_WINDOW_MS = 15 * 60 * 1000
+const REGISTRATION_MAX_REQUESTS = 5
+
+const rateLimitedResponse = (res, retryAfter, code, message) => {
+  res.set('Retry-After', String(retryAfter))
+  res.set('Cache-Control', 'no-store')
+  res.status(429).json({
+    error: {
+      code,
+      message,
+      status: 429,
+    },
+  })
+}
+
+const retryAfterFrom = (resetTime, windowMs) => {
+  if (resetTime instanceof Date) {
+    return Math.max(0, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+  }
+  return Math.ceil(windowMs / 1000)
+}
+
 const isMonitoringPath = (path) => {
   const normalized = path.replace(/\/+$/, '') || '/'
   return normalized === '/api/health' || normalized === '/api/ready'
@@ -106,3 +137,80 @@ module.exports = createApiLimiter
 module.exports.createApiLimiter = createApiLimiter
 module.exports.createEmailVerificationLimiter =
   createEmailVerificationLimiter
+
+// Login rate limiting targets brute-force attempts. The key combines the
+// client IP with the login email so a single IP cannot rapidly guess many
+// accounts and a single account cannot be hammered from one IP. When no email
+// is present the request falls back to an IP-only key.
+const createLoginLimiter = ({
+  client: redisClient = client,
+  prefix = `${env.SESSION_NAMESPACE}:login:`,
+  windowMs = LOGIN_WINDOW_MS,
+  limit = LOGIN_MAX_REQUESTS,
+} = {}) => {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    passOnStoreError: false,
+    validate: { trustProxy: false },
+    keyGenerator: (req) => {
+      const email = req.body && req.body.email
+      return typeof email === 'string' && email.length > 0
+        ? `${prefix}ip:${ipKeyGenerator(req.ip)}:email:${email.toLowerCase()}`
+        : `${prefix}ip:${ipKeyGenerator(req.ip)}`
+    },
+    store: new RedisStore({
+      prefix,
+      sendCommand: (...args) => redisClient.sendCommand(args),
+    }),
+    handler: (req, res, next, options) => {
+      const resetTime = req.rateLimit && req.rateLimit.resetTime
+      const retryAfter = retryAfterFrom(resetTime, options.windowMs)
+      rateLimitedResponse(
+        res,
+        retryAfter,
+        'LOGIN_RATE_LIMITED',
+        'Too many login attempts. Please try again later.',
+      )
+    },
+  })
+}
+
+// Registration rate limiting curbs automated account creation. It is keyed by
+// IP alone because there is no existing account to tie the attempt to.
+const createRegistrationLimiter = ({
+  client: redisClient = client,
+  prefix = `${env.SESSION_NAMESPACE}:registration:`,
+  windowMs = REGISTRATION_WINDOW_MS,
+  limit = REGISTRATION_MAX_REQUESTS,
+} = {}) => {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    passOnStoreError: false,
+    validate: { trustProxy: false },
+    keyGenerator: (req) =>
+      `${prefix}ip:${ipKeyGenerator(req.ip)}`,
+    store: new RedisStore({
+      prefix,
+      sendCommand: (...args) => redisClient.sendCommand(args),
+    }),
+    handler: (req, res, next, options) => {
+      const resetTime = req.rateLimit && req.rateLimit.resetTime
+      const retryAfter = retryAfterFrom(resetTime, options.windowMs)
+      rateLimitedResponse(
+        res,
+        retryAfter,
+        'REGISTRATION_RATE_LIMITED',
+        'Too many registration attempts. Please try again later.',
+      )
+    },
+  })
+}
+
+module.exports.createLoginLimiter = createLoginLimiter
+module.exports.createRegistrationLimiter = createRegistrationLimiter

@@ -15,6 +15,8 @@ const {
 } = require('../middlewares/csrfProtection')
 const {
   createEmailVerificationLimiter,
+  createLoginLimiter,
+  createRegistrationLimiter,
 } = require('../config/rateLimiter')
 
 const createAuthRouter = ({
@@ -26,6 +28,8 @@ const createAuthRouter = ({
   redisClient = defaultRedisClient,
   rateLimitPrefix,
   resendRateLimit = {},
+  loginRateLimit = {},
+  registrationRateLimit = {},
 } = {}) => {
   const service =
     authService ||
@@ -51,12 +55,25 @@ const createAuthRouter = ({
     ...(rateLimitPrefix ? { prefix: rateLimitPrefix } : {}),
     ...resendRateLimit,
   })
+  const loginLimiter = createLoginLimiter({
+    client: redisClient,
+    ...loginRateLimit,
+  })
+  const registrationLimiter = createRegistrationLimiter({
+    client: redisClient,
+    ...registrationRateLimit,
+  })
 
   const router = express.Router()
 
   router.get('/csrf', controller.csrf)
-  router.post('/register', csrfProtection, controller.register)
-  router.post('/login', csrfProtection, controller.login)
+  router.post(
+    '/register',
+    csrfProtection,
+    registrationLimiter,
+    controller.register,
+  )
+  router.post('/login', csrfProtection, loginLimiter, controller.login)
   router.post('/logout', logoutCsrfProtection, controller.logout)
   router.get('/me', authenticate, controller.me)
   // Verification uses the emailed bearer token, not the session cookie, so it

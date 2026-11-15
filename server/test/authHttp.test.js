@@ -529,6 +529,14 @@ const createHarness = async ({
         limit: 3,
         ...resendRateLimit,
       },
+      loginRateLimit: {
+        prefix: `${namespace}:login:`,
+        limit: 100,
+      },
+      registrationRateLimit: {
+        prefix: `${namespace}:registration:`,
+        limit: 100,
+      },
     }),
   )
   app.use(
