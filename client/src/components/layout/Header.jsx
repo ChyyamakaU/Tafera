@@ -67,14 +67,14 @@ export default function Header({ isAuthenticated = false } = {}) {
           </Link>
 
           {/* Desktop navigation */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-tafera-text">
+          <nav className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
               <Link
                 key={link.to}
                 to={link.to}
-                className={`transition-colors ${
+                className={`font-nav font-medium text-base text-tafera-text transition-colors ${
                   isActive(link.to)
-                    ? 'text-tafera-primary font-semibold'
+                    ? 'font-semibold text-tafera-primary'
                     : 'hover:text-tafera-accent'
                 }`}
                 aria-current={isActive(link.to) ? 'page' : undefined}
@@ -86,11 +86,11 @@ export default function Header({ isAuthenticated = false } = {}) {
               <div className="relative inline-flex items-center">
                 <button
                   onClick={toggleProfileMenu}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md font-nav font-medium text-base text-tafera-text transition-colors hover:bg-tafera-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary"
                   aria-haspopup="true"
                   aria-expanded={profileMenuOpen}
                 >
-                  <span className="w-6 h-6 rounded-full bg-tafera-surface border border-tafera-border flex items-center justify-center text-xs font-semibold text-tafera-text">
+                  <span className="w-6 h-6 rounded-full bg-tafera-surface border border-tafera-border flex items-center justify-center text-sm font-semibold text-tafera-text">
                     U
                   </span>
                   <span>Profile</span>
@@ -116,7 +116,7 @@ export default function Header({ isAuthenticated = false } = {}) {
                           key={item.to}
                           to={item.to}
                           onClick={closeProfileMenu}
-                          className="block px-4 py-2.5 text-sm text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+                          className="font-nav font-medium text-base block px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
                         >
                           {item.label}
                         </Link>
@@ -124,7 +124,7 @@ export default function Header({ isAuthenticated = false } = {}) {
                         <button
                           key={item.label}
                           onClick={closeProfileMenu}
-                          className="block w-full text-left px-4 py-2.5 text-sm text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left"
+                          className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
                         >
                           {item.label}
                         </button>
@@ -139,7 +139,7 @@ export default function Header({ isAuthenticated = false } = {}) {
                   <Link
                     key={action.to}
                     to={action.to}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                    className={`font-nav font-medium text-base px-3 py-1.5 rounded-md border transition-colors ${
                       action.variant === 'primary'
                         ? 'bg-tafera-accent text-white border-tafera-accent hover:bg-tafera-accent/90'
                         : 'border-tafera-border text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent'
@@ -211,7 +211,7 @@ export default function Header({ isAuthenticated = false } = {}) {
               key={link.to}
               to={link.to}
               onClick={closeMenu}
-              className={`block px-3 py-3 rounded-md text-sm font-medium transition-colors ${
+              className={`font-nav font-medium text-base block px-3 py-3 rounded-md transition-colors ${
                 isActive(link.to)
                   ? 'bg-tafera-surface text-tafera-primary'
                   : 'text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent'
@@ -229,7 +229,7 @@ export default function Header({ isAuthenticated = false } = {}) {
                     key={action.to}
                     to={action.to}
                     onClick={closeMenu}
-                    className={`block w-full text-center px-3 py-3 rounded-md text-sm font-medium border border-tafera-border text-tafera-text transition-colors ${
+                    className={`font-nav font-medium text-base block w-full text-center px-3 py-3 rounded-md border border-tafera-border text-tafera-text transition-colors ${
                       action.variant === 'primary'
                         ? 'bg-tafera-accent text-white border-tafera-accent hover:bg-tafera-accent/90'
                         : 'hover:bg-tafera-surface hover:text-tafera-accent'
@@ -247,7 +247,7 @@ export default function Header({ isAuthenticated = false } = {}) {
                       key={item.to}
                       to={item.to}
                       onClick={closeMenu}
-                      className="block w-full text-left px-3 py-3 rounded-md border-b border-tafera-border/50 text-sm font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+                      className="font-nav font-medium text-base block w-full text-left px-3 py-3 rounded-md border-b border-tafera-border/50 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
                     >
                       {item.label}
                     </Link>
@@ -255,7 +255,7 @@ export default function Header({ isAuthenticated = false } = {}) {
                     <button
                       key={item.label}
                       onClick={closeMenu}
-                      className="block w-full text-left px-3 py-3 rounded-md border-b border-tafera-border/50 text-sm font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+                      className="font-nav font-medium text-base block w-full text-left px-3 py-3 rounded-md border-b border-tafera-border/50 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
                     >
                       {item.label}
                     </button>
