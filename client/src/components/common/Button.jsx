@@ -8,21 +8,17 @@ export default function Button({
   ...props
 }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-tafera-primary'
+    'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-tafera-primary'
 
   const variants = {
     primary:
       'bg-tafera-primary text-white hover:bg-tafera-primary/90',
-    secondary:
-      'bg-tafera-secondary text-white hover:bg-tafera-secondary/90',
     accent:
       'bg-tafera-accent text-white hover:bg-tafera-accent/90',
     outline:
-      'border border-tafera-border bg-tafera-surface text-tafera-text hover:bg-tafera-bg hover:text-tafera-primary',
+      'border border-tafera-border bg-tafera-bg text-tafera-text hover:bg-tafera-surface hover:text-tafera-primary',
     ghost:
-      'bg-transparent text-tafera-text-muted hover:bg-tafera-bg hover:text-tafera-text',
-    danger:
-      'bg-tafera-accent text-white hover:bg-tafera-accent/90',
+      'bg-transparent text-tafera-text-muted hover:bg-tafera-surface hover:text-tafera-text',
   }
 
   const sizes = {
