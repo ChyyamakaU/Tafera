@@ -91,7 +91,7 @@ const byStopOrder = (left, right) => {
   return String(left.id).localeCompare(String(right.id))
 }
 
-const toTripDetail = (trip) => {
+const toTripDetail = (trip, viewerUserId = null) => {
   const source = toPlain(trip)
 
   if (!source) return null
@@ -100,6 +100,7 @@ const toTripDetail = (trip) => {
 
   return {
     ...toTripSummary(source),
+    isCreator: viewerUserId !== null ? source.userId === viewerUserId : false,
     stops: (Array.isArray(stops) ? stops : [])
       .map(toTripStop)
       .filter(Boolean)

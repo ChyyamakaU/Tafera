@@ -1,7 +1,86 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Button } from '../components/common/Button'
+import { getPendingAction, clearPendingAction } from '../services/auth'
+import { API_BASE } from '../services/api'
 
 export default function Login() {
+  const [pendingAction, setPendingAction] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [csrfToken, setCsrfToken] = useState(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const action = getPendingAction()
+    if (action) {
+      setPendingAction(action)
+      clearPendingAction()
+    }
+    fetchCsrfToken()
+  }, [])
+
+  const fetchCsrfToken = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/csrf`, {
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setCsrfToken(data.data.csrfToken)
+      }
+    } catch {
+      // CSRF fetch failure is non-fatal; login will still attempt
+    }
+  }
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    const email = document.getElementById('email').value
+    const password = document.getElementById('password').value
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Login failed')
+      }
+
+      const data = await res.json()
+
+      // Refresh auth state
+      try {
+        await fetch(`${API_BASE}/api/auth/me`, {
+          credentials: 'include',
+        })
+      } catch {
+        // Auth check failure is non-fatal after successful login
+      }
+
+      // Return to pending action or home
+      if (pendingAction?.returnTo) {
+        navigate(pendingAction.returnTo)
+      } else {
+        navigate('/')
+      }
+    } catch (err) {
+      setError(err.message || 'Login failed')
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-md mx-auto">
       <div className="mb-8">
@@ -13,7 +92,33 @@ export default function Login() {
         </p>
       </div>
 
-      <form className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6" onSubmit={(e) => e.preventDefault()}>
+      {pendingAction && (
+        <div className="mb-6 p-4 rounded-md border border-tafera-border bg-tafera-surface">
+          <p className="text-sm text-tafera-text-muted">
+            You were trying to{' '}
+            <span className="font-semibold text-tafera-text">
+              {pendingAction.actionLabel || pendingAction.action}
+            </span>
+            {pendingAction.entityName && (
+              <span className="font-semibold text-tafera-text">
+                for &quot;{pendingAction.entityName}&quot;
+              </span>
+            )}
+            . Sign in to continue.
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      <form
+        className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6"
+        onSubmit={handleLogin}
+      >
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-tafera-text mb-1">
             Email address
@@ -53,9 +158,9 @@ export default function Login() {
           type="submit"
           variant="primary"
           className="w-full"
-          disabled
+          disabled={loading}
         >
-          Log in
+          {loading ? 'Signing in...' : 'Log in'}
         </Button>
         <p className="mt-4 text-sm text-center text-tafera-text-muted">
           Don't have an account?{' '}

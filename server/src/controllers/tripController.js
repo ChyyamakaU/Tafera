@@ -39,6 +39,19 @@ const createTripController = ({ tripService }) => ({
     })
   }),
 
+  listPublic: asyncHandler(async (req, res) => {
+    const filters = parseTripListQuery(req.query)
+    const viewerUserId = req.auth ? req.auth.userId : null
+    const { trips, pagination } = await tripService.listPublicTrips(
+      viewerUserId,
+      filters,
+    )
+
+    noStore(res).status(200).json({
+      data: { trips, pagination },
+    })
+  }),
+
   detail: asyncHandler(async (req, res) => {
     const { tripId } = parseTripId(req.params)
     const viewerUserId = req.auth ? req.auth.userId : null

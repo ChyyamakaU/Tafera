@@ -818,7 +818,7 @@ const assertPublicParticipant = (participant) => {
   }
 }
 
-const tripKeys = [...PUBLIC_TRIP_FIELDS, 'stops'].sort()
+const tripKeys = [...PUBLIC_TRIP_FIELDS, 'isCreator', 'stops'].sort()
 const stopKeys = [...PUBLIC_TRIP_STOP_FIELDS, 'destination'].sort()
 const destinationKeys = [
   'country',

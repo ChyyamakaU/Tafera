@@ -56,6 +56,9 @@ const createTripsRouter = ({
 
   router.post('/', ...protectWrite, controller.create)
   router.get('/', authenticate, controller.list)
+  // Public listing: published trips are readable by anyone, while an
+  // authenticated owner may also read their own drafts.
+  router.get('/public', optionalAuthenticate, controller.listPublic)
   // Public detail: non-draft trips are readable by anyone, while an
   // authenticated owner may also read a draft.
   router.get('/:tripId', optionalAuthenticate, controller.detail)

@@ -1,36 +1,30 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
-
-const FEATURES = [
-  {
-    title: 'Discover destinations',
-    description:
-      'Explore curated travel destinations and plan your next adventure.',
-    href: '/destinations',
-  },
-  {
-    title: 'Plan your trips',
-    description:
-      'Organise itineraries, dates, and travel details in one place.',
-    href: '/trips',
-  },
-  {
-    title: 'Travel with others',
-    description:
-      'Join group trips and coordinate with fellow travellers.',
-    href: '/group-travel',
-  },
-  {
-    title: 'Keep a scrapbook',
-    description:
-      'Collect photos and memories from every journey.',
-    href: '/scrapbooks',
-  },
-]
+import TrustStrip from '../components/home/TrustStrip'
+import FeaturedDestinations from '../components/home/FeaturedDestinations'
+import TravellerStories from '../components/home/TravellerStories'
+import UpcomingTrips from '../components/home/UpcomingTrips'
+import DiscoveryFilters from '../components/home/DiscoveryFilters'
+import HowItWorks from '../components/home/HowItWorks'
+import PracticalGuides from '../components/home/PracticalGuides'
+import CommunitySpotlight from '../components/home/CommunitySpotlight'
+import TrustAndSafety from '../components/home/TrustAndSafety'
+import ComingSoon from '../components/home/ComingSoon'
+import ActionBand from '../components/home/ActionBand'
+import { checkAuth } from '../services/auth'
 
 export default function Home() {
   const navigate = useNavigate()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
+
+  useEffect(() => {
+    checkAuth().then(({ isAuthenticated }) => {
+      setIsAuthenticated(isAuthenticated)
+      setAuthChecked(true)
+    })
+  }, [])
 
   const handleSearch = (event) => {
     event.preventDefault()
@@ -95,11 +89,22 @@ export default function Home() {
                 </div>
               </form>
               <div className="mt-8">
-                <Link to="/destinations">
-                  <Button variant="primary" size="lg" className="w-full sm:w-auto">
+                {!isAuthenticated ? (
+                  <button
+                    onClick={() => {
+                      window.location.href = '/register'
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md bg-tafera-accent text-white font-semibold transition-colors hover:bg-tafera-accent/90 sm:text-base w-full sm:w-auto"
+                  >
                     Explore Destinations
-                  </Button>
-                </Link>
+                  </button>
+                ) : (
+                  <Link to="/destinations">
+                    <Button variant="primary" size="lg" className="w-full sm:w-auto">
+                      Explore Destinations
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -116,79 +121,38 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Feature grid */}
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
-              Everything your journey needs
-            </h2>
-            <p className="mt-4 text-tafera-text-muted max-w-xl mx-auto leading-relaxed">
-              From inspiration to memories, Tafera is the place for every part
-              of your journey.
-            </p>
-          </div>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {FEATURES.map((feature) => (
-              <li key={feature.title} className="group relative">
-                <div className="aspect-video overflow-hidden rounded-md border border-tafera-border bg-tafera-surface group-hover:border-tafera-accent transition-colors">
-                  <img
-                    src={`https://images.unsplash.com/photo-${featureImageMap[feature.title]}?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80`}
-                    alt=""
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-lg font-heading font-bold text-tafera-text group-hover:text-tafera-accent transition-colors">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2 text-sm text-tafera-text-muted leading-relaxed">
-                    {feature.description}
-                  </p>
-                  <Link
-                    to={feature.href}
-                    className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-tafera-primary hover:underline"
-                  >
-                    Learn more <span aria-hidden="true">→</span>
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      {/* Trust strip */}
+      <TrustStrip />
 
-      {/* CTA */}
-      <section className="py-16 bg-tafera-surface border-t border-tafera-border">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
-            Ready to start your journey?
-          </h2>
-          <p className="mt-4 text-tafera-text-muted leading-relaxed">
-            Join Tafera and start discovering destinations, planning trips, and
-            sharing your travel stories with the community.
-          </p>
-          <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="primary" className="px-6 py-2.5 text-base">
-              Create an account
-            </Button>
-            <Link
-              to="/login"
-              className="px-5 py-2.5 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-semibold text-sm transition-colors hover:bg-tafera-surface sm:text-base"
-            >
-              Log in
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Featured destinations */}
+      <FeaturedDestinations />
+
+      {/* Discovery filters */}
+      <DiscoveryFilters />
+
+      {/* Traveller stories */}
+      <TravellerStories />
+
+      {/* Upcoming trips */}
+      <UpcomingTrips />
+
+      {/* Practical guides */}
+      <PracticalGuides />
+
+      {/* How it works */}
+      <HowItWorks />
+
+      {/* Community spotlight */}
+      <CommunitySpotlight />
+
+      {/* Trust and safety */}
+      <TrustAndSafety />
+
+      {/* Coming soon */}
+      <ComingSoon />
+
+      {/* Action band */}
+      <ActionBand isAuthenticated={isAuthenticated} />
     </div>
   )
-}
-
-// Unsplash image IDs for each feature section
-const featureImageMap = {
-  'Discover destinations': '1501785888041-af3ef285b470',
-  'Plan your trips': '1469854523086-cc02fe5d8800',
-  'Travel with others': '1529275600612-0c3902f1734f',
-  'Keep a scrapbook': '1464822759023-fed622ff2c3b',
 }

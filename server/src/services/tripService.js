@@ -189,6 +189,70 @@ const createTripService = ({
     }
   }
 
+  const listPublicTrips = async (viewerUserId, filters) => {
+    const where = {
+      status: 'published',
+    }
+
+    const { count, rows } = await tripModel.findAndCountAll({
+      where,
+      attributes: [...PUBLIC_TRIP_FIELDS],
+      include: [
+        {
+          model: require('../models').User,
+          as: 'creator',
+          attributes: [
+            'id',
+            'fullName',
+            'profileImage',
+            'bio',
+            'emailVerifiedAt',
+          ],
+        },
+      ],
+      order: [
+        ['startDate', 'ASC'],
+        ['id', 'ASC'],
+      ],
+      limit: filters.limit,
+      offset: (filters.page - 1) * filters.limit,
+    })
+
+    const tripsWithParticipantCounts = await Promise.all(
+      rows.map(async (trip) => {
+        const plain = trip.get({ plain: true })
+        const approvedCount = await participantModel.count({
+          where: { tripId: plain.id, status: 'approved' },
+        })
+        const spotsRemaining =
+          plain.maxParticipants !== null
+            ? Math.max(0, Number(plain.maxParticipants) - approvedCount)
+            : null
+
+        return {
+          ...toTripSummary(plain),
+          creator: {
+            id: plain.creator.id,
+            fullName: plain.creator.fullName,
+            profileImage: plain.creator.profileImage,
+            bio: plain.creator.bio,
+            emailVerified: plain.creator.emailVerifiedAt !== null,
+          },
+          spotsRemaining,
+        }
+      }),
+    )
+
+    return {
+      trips: tripsWithParticipantCounts,
+      pagination: createPagination({
+        page: filters.page,
+        limit: filters.limit,
+        total: count,
+      }),
+    }
+  }
+
   const getTrip = async (tripId, viewerUserId = null) => {
     const where = { id: tripId }
 
@@ -210,7 +274,7 @@ const createTripService = ({
       throw new TripNotFoundError()
     }
 
-    return toTripDetail(trip)
+    return toTripDetail(trip, viewerUserId)
   }
 
   const createTrip = async (userId, input) => {

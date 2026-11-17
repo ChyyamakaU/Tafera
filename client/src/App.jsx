@@ -6,6 +6,7 @@ import Destinations from './pages/Destinations'
 import Trips from './pages/Trips'
 import GroupTravel from './pages/GroupTravel'
 import SocialFeed from './pages/SocialFeed'
+import TripDetail from './pages/TripDetail'
 import Scrapbooks from './pages/Scrapbooks'
 import Login from './pages/Login'
 import Registration from './pages/Registration'
@@ -19,6 +20,7 @@ function App() {
         <Route index element={<Home />} />
         <Route path="destinations" element={<Destinations />} />
         <Route path="trips" element={<Trips />} />
+        <Route path="trips/:tripId" element={<TripDetail />} />
         <Route path="group-travel" element={<GroupTravel />} />
         <Route path="social" element={<SocialFeed />} />
         <Route path="scrapbooks" element={<Scrapbooks />} />
