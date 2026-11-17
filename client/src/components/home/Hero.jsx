@@ -80,7 +80,7 @@ export default function Hero() {
           {/* Right column — destination photography */}
           <div className="lg:col-span-6 relative overflow-hidden rounded-md border border-tafera-border">
             <img
-              src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80"
+              src="/hero%20tafera.jpeg"
               alt="Nigerian destination landscape"
               className="w-full h-[360px] sm:h-[420px] lg:h-[560px] object-cover"
               loading="lazy"
