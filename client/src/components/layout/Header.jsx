@@ -331,7 +331,7 @@ export default function Header({ isAuthenticated = false } = {}) {
 
   return (
     <header
-      className={`sticky top-0 z-50 border-b border-tafera-border mx-0 md:mx-15 ${
+      className={`sticky top-0 z-50 border-b border-tafera-border px-0 md:px-15 ${
         scrolled ? 'shadow-sm' : ''
       }`}
       style={{
