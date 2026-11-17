@@ -19,7 +19,7 @@ export default function Layout() {
     return (
       <div className="flex min-h-svh flex-col">
         <Header isAuthenticated={false} />
-        <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
+        <main className="flex-1 pt-8 pb-12 w-full">
           <Outlet />
         </main>
         <Footer />
@@ -30,7 +30,7 @@ export default function Layout() {
   return (
     <div className="flex min-h-svh flex-col">
       <Header isAuthenticated={isAuthenticated} />
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
+      <main className="flex-1 pt-8 pb-12 w-full">
         <Outlet />
       </main>
       <Footer />

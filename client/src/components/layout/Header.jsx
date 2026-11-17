@@ -338,7 +338,7 @@ export default function Header({ isAuthenticated = false } = {}) {
         backgroundColor: scrolled ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 1)',
       }}
     >
-      <div className="px-3 sm:px-4 lg:px-6 py-4">
+      <div className="px-[15px] py-4">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="justify-self-start">
             <Link
