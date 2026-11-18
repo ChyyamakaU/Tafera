@@ -29,8 +29,8 @@ const CARDS = [
 
 export default function DiscoveryFilters() {
   return (
-    <section className="py-16 bg-tafera-surface">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="px-0 md:px-15 py-16 bg-tafera-surface">
+      <div className="px-[15px]">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl mb-4">
             Plan by What Matters

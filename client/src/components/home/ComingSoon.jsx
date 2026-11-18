@@ -1,7 +1,7 @@
 export default function ComingSoon() {
   return (
-    <section className="py-12 bg-tafera-surface border-t border-tafera-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="px-0 md:px-15 py-12 bg-tafera-surface border-t border-tafera-border">
+      <div className="px-[15px]">
         <h2 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl text-center mb-12">
           Coming soon
         </h2>

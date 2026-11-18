@@ -1,7 +1,7 @@
 export default function PracticalGuides() {
   return (
-    <section className="py-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="px-0 md:px-15 py-16">
+      <div className="px-[15px]">
         <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
           Real costs and practical information
         </h2>
