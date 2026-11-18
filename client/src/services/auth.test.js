@@ -259,4 +259,51 @@ describe('pending actions', () => {
     expect(() => getPendingAction()).not.toThrow()
     expect(getPendingAction()).toBeNull()
   })
+
+  it('setPendingAction preserves actionLabel', () => {
+    setPendingAction({
+      action: 'create_story',
+      actionLabel: 'share your story',
+      entityType: 'story',
+      entityName: 'Kyoto Trip',
+    })
+    const stored = sessionStorage.getItem('tafera:pending-action')
+    const parsed = JSON.parse(stored)
+    expect(parsed.actionLabel).toBe('share your story')
+  })
+
+  it('pending action round-trip: store, retrieve, then clear', () => {
+    setPendingAction({
+      action: 'create_trip',
+      actionLabel: 'create a trip',
+      entityType: 'trip',
+      entityName: 'Spring Trip',
+    }, '/trips/new')
+
+    const retrieved = getPendingAction()
+    expect(retrieved.action).toBe('create_trip')
+    expect(retrieved.actionLabel).toBe('create a trip')
+    expect(retrieved.entityType).toBe('trip')
+    expect(retrieved.entityName).toBe('Spring Trip')
+    expect(retrieved.returnTo).toBe('/trips/new')
+
+    clearPendingAction()
+    expect(getPendingAction()).toBeNull()
+  })
+
+  it('getPendingAction clears after retrieval simulating login flow', () => {
+    sessionStorage.setItem(
+      'tafera:pending-action',
+      JSON.stringify({ action: 'sign_in', returnTo: '/destinations' }),
+    )
+
+    // Simulate login page reading pending action
+    const pending = getPendingAction()
+    expect(pending.action).toBe('sign_in')
+    expect(pending.returnTo).toBe('/destinations')
+
+    // Then clear it
+    clearPendingAction()
+    expect(getPendingAction()).toBeNull()
+  })
 })
