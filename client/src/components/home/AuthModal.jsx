@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { setPendingAction } from '../../services/auth'
 
 export default function SignInModal({
   isOpen,
@@ -9,6 +11,7 @@ export default function SignInModal({
   entityName,
 }) {
   const [isMounted, setIsMounted] = useState(false)
+  const navigate = useNavigate()
 
   // Animate in after mount so the modal doesn't flash open
   useState(() => {
@@ -17,6 +20,26 @@ export default function SignInModal({
 
   const handleClose = () => {
     onClose()
+  }
+
+  const handleSignIn = () => {
+    if (isMounted) {
+      setPendingAction(
+        { action, entityType, entityName },
+        window.location.pathname,
+      )
+      navigate('/login')
+    }
+  }
+
+  const handleRegister = () => {
+    if (isMounted) {
+      setPendingAction(
+        { action, entityType, entityName },
+        window.location.pathname,
+      )
+      navigate('/register')
+    }
   }
 
   return (
@@ -53,6 +76,7 @@ export default function SignInModal({
                       viewBox="0 0 24 24"
                       strokeWidth="1.5"
                       stroke="currentColor"
+                      fill="none"
                       aria-hidden="true"
                     >
                       <path
@@ -75,44 +99,13 @@ export default function SignInModal({
                 </p>
                 <div className="flex flex-col gap-3">
                   <button
-                    onClick={() => {
-                      if (isMounted) {
-                        // Store intended action for return after auth
-                        try {
-                          sessionStorage.setItem(
-                            'tafera:pending-action',
-                            JSON.stringify({
-                              action,
-                              entityType,
-                              entityName,
-                              returnTo: window.location.pathname,
-                            }),
-                          )
-                        } catch {}
-                      }
-                      window.location.href = '/login'
-                    }}
+                    onClick={handleSignIn}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-tafera-primary text-white font-medium text-sm transition-colors hover:bg-tafera-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary"
                   >
                     Sign in
                   </button>
                   <button
-                    onClick={() => {
-                      if (isMounted) {
-                        try {
-                          sessionStorage.setItem(
-                            'tafera:pending-action',
-                            JSON.stringify({
-                              action,
-                              entityType,
-                              entityName,
-                              returnTo: window.location.pathname,
-                            }),
-                          )
-                        } catch {}
-                      }
-                      window.location.href = '/register'
-                    }}
+                    onClick={handleRegister}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-medium text-sm transition-colors hover:bg-tafera-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary"
                   >
                     Create an account
@@ -121,22 +114,7 @@ export default function SignInModal({
                 <p className="mt-6 text-xs text-tafera-text-muted text-center">
                   Already have an account?{' '}
                   <button
-                    onClick={() => {
-                      if (isMounted) {
-                        try {
-                          sessionStorage.setItem(
-                            'tafera:pending-action',
-                            JSON.stringify({
-                              action,
-                              entityType,
-                              entityName,
-                              returnTo: window.location.pathname,
-                            }),
-                          )
-                        } catch {}
-                      }
-                      window.location.href = '/login'
-                    }}
+                    onClick={handleSignIn}
                     className="font-medium text-tafera-primary hover:underline"
                   >
                     Sign in here
