@@ -13,13 +13,8 @@ const STEPS = [
   },
   {
     number: 3,
-    title: 'Create or Join',
-    description: 'Create your own trip or request to join an existing one.',
-  },
-  {
-    number: 4,
-    title: 'Travel',
-    description: 'Experience new places and share your memories.',
+    title: 'Go Together',
+    description: 'Create or join a trip and experience new places with others.',
   },
 ]
 

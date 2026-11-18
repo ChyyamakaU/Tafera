@@ -2,14 +2,14 @@
 @import "tailwindcss";
 
 @theme {
-  /* Tafera monochrome brand palette */
-  --color-tafera-primary: #171717;    /* Near-black — primary brand */
-  --color-tafera-bg: #FFFFFF;         /* White — main background */
-  --color-tafera-surface: #F4F4F2;    /* Soft off-white — secondary background */
-  --color-tafera-text: #171717;       /* Near-black — primary text */
-  --color-tafera-text-muted: #6B6B6B; /* Neutral grey — secondary text */
-  --color-tafera-accent: #B85C3B;     /* Terracotta — sparing accent */
-  --color-tafera-border: #E5E5E5;     /* Subtle border */
+  /* Tafera ocean-inspired brand palette — light theme (default) */
+  --color-tafera-primary: #0F4C81;    /* Deep ocean blue — primary brand */
+  --color-tafera-bg: #FFFFFF;         /* Clean white — main background */
+  --color-tafera-surface: #F1F5F9;    /* Cool grey-blue surface — secondary background */
+  --color-tafera-text: #0B2A4A;       /* Deep slate — primary text */
+  --color-tafera-text-muted: #64748B; /* Muted slate — secondary text */
+  --color-tafera-accent: #38BDF8;     /* Bright ocean blue — sparing accent */
+  --color-tafera-border: #E2E8F0;     /* Light cool grey border */
 
   /* Typography — Outfit headings, Manrope body, Inter navigation */
   --font-heading: "Outfit", ui-sans-serif, system-ui, -apple-system,
@@ -25,6 +25,17 @@
 
   /* Shadows — very subtle, almost none */
   --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+}
+
+html[data-theme="dark"] {
+  --color-tafera-primary: #7DD3FC;
+  --color-tafera-bg: #020617;
+  --color-tafera-surface: #0F172A;
+  --color-tafera-text: #F8FAFC;
+  --color-tafera-text-muted: #94A3B8;
+  --color-tafera-accent: #22D3EE;
+  --color-tafera-border: #334155;
 }
 
 html {

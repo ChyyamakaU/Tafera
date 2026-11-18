@@ -7,6 +7,11 @@ export async function fetchFeaturedDestinations(limit = 6) {
   return data.destinations || []
 }
 
+export async function fetchDestination(slug) {
+  const { data } = await request(`/api/destinations/${encodeURIComponent(slug)}`)
+  return data.destination
+}
+
 export async function fetchDestinations(params = {}) {
   const qs = new URLSearchParams()
   if (params.q) qs.set('q', params.q)

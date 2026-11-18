@@ -1,15 +1,11 @@
 import { Link } from 'react-router-dom'
 
-const DESTINATION_LINKS = [
-  { to: '/destinations', label: 'Destinations' },
-  { to: '/trips', label: 'Trips' },
-  { to: '/group-travel', label: 'Group Travel' },
-  { to: '/social', label: 'Social Feed' },
-  { to: '/scrapbooks', label: 'Scrapbooks' },
-]
-
-const COMPANY_LINKS = [
+const FOOTER_LINKS = [
+  { to: '/about', label: 'About' },
   { to: '/trust-and-safety', label: 'Trust and Safety' },
+  { to: '/privacy', label: 'Privacy' },
+  { to: '/contact', label: 'Contact' },
+  { to: '/social', label: 'Socials' },
 ]
 
 export default function Footer() {
@@ -27,79 +23,18 @@ export default function Footer() {
             </p>
           </div>
           <nav className="flex flex-col md:flex-row gap-8">
-            <div>
-              <h4 className="text-xs font-heading font-bold text-tafera-text uppercase tracking-wider mb-4">
-                Explore
-              </h4>
-              <ul className="space-y-2">
-                {DESTINATION_LINKS.map((link) => (
-                  <li key={link.to}>
-                    <Link
-                      to={link.to}
-                      className="text-sm text-tafera-text-muted transition-colors hover:text-tafera-accent"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-xs font-heading font-bold text-tafera-text uppercase tracking-wider mb-4">
-                Company
-              </h4>
-              <ul className="space-y-2">
-                {COMPANY_LINKS.map((link) => (
-                  <li key={link.to}>
-                    <Link
-                      to={link.to}
-                      className="text-sm text-tafera-text-muted transition-colors hover:text-tafera-accent"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-                <li>
+            <ul className="space-y-2 md:space-y-0 md:flex md:flex-row md:gap-6">
+              {FOOTER_LINKS.map((link) => (
+                <li key={link.to}>
                   <a
-                    href="#"
-                    className="text-sm text-tafera-text-muted hover:text-tafera-accent"
+                    href={link.to.startsWith('/') ? '#' : link.to}
+                    className="text-sm text-tafera-text-muted transition-colors hover:text-tafera-accent"
                   >
-                    About Tafera
+                    {link.label}
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="#"
-                    className="text-sm text-tafera-text-muted hover:text-tafera-accent"
-                  >
-                    Support
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-xs font-heading font-bold text-tafera-text uppercase tracking-wider mb-4">
-                Legal
-              </h4>
-              <ul className="space-y-2">
-                <li>
-                  <a
-                    href="#"
-                    className="text-sm text-tafera-text-muted hover:text-tafera-accent"
-                  >
-                    Privacy policy
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="#"
-                    className="text-sm text-tafera-text-muted hover:text-tafera-accent"
-                  >
-                    Terms and conditions
-                  </a>
-                </li>
-              </ul>
-            </div>
+              ))}
+            </ul>
           </nav>
         </div>
       </div>

@@ -38,12 +38,11 @@ export default function FeaturedDestinations() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-10 gap-4">
             <div>
               <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
-                Featured destinations
+                Destinations People Love
               </h2>
               <p className="text-lg text-tafera-text-muted max-w-xl mt-2">
-                Discover handpicked destinations, from historic cities to
-                coastal retreats, each chosen for its unique character and
-                appeal.
+                Popular destinations with real traveller photos, locations and
+                stories from the community.
               </p>
             </div>
             <Link
@@ -76,12 +75,11 @@ export default function FeaturedDestinations() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-10 gap-4">
             <div>
               <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
-                Featured destinations
+                Destinations People Love
               </h2>
               <p className="text-lg text-tafera-text-muted max-w-xl mt-2">
-                Discover handpicked destinations, from historic cities to
-                coastal retreats, each chosen for its unique character and
-                appeal.
+                Popular destinations with real traveller photos, locations and
+                stories from the community.
               </p>
             </div>
             <Link
@@ -132,16 +130,15 @@ export default function FeaturedDestinations() {
     <section className="px-0 md:px-15 py-16">
       <div className="px-[15px]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-10 gap-4">
-          <div>
-            <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
-              Featured destinations
-            </h2>
-            <p className="text-lg text-tafera-text-muted max-w-xl mt-2">
-              Discover handpicked destinations, from historic cities to
-              coastal retreats, each chosen for its unique character and
-              appeal.
-            </p>
-          </div>
+            <div>
+              <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
+                Destinations People Love
+              </h2>
+              <p className="text-lg text-tafera-text-muted max-w-xl mt-2">
+                Popular destinations with real traveller photos, locations and
+                stories from the community.
+              </p>
+            </div>
           <Link
             to="/destinations"
             className="font-medium text-tafera-accent hover:underline transition-colors sm:mt-0"
