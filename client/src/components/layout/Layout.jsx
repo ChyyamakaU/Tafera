@@ -1,21 +1,12 @@
-import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Header from './Header'
 import Footer from './Footer'
-import { checkAuth } from '../../services/auth.js'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function Layout() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [authChecked, setAuthChecked] = useState(false)
+  const { isAuthenticated, isLoading } = useAuth()
 
-  useEffect(() => {
-    checkAuth().then(({ isAuthenticated }) => {
-      setIsAuthenticated(isAuthenticated)
-      setAuthChecked(true)
-    })
-  }, [])
-
-  if (!authChecked) {
+  if (isLoading) {
     return (
       <div className="flex min-h-svh flex-col">
         <Header isAuthenticated={false} />
