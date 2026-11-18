@@ -1,14 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Button } from '../components/common/Button'
-import { getPendingAction, clearPendingAction } from '../services/auth'
-import { API_BASE } from '../services/api'
+import { login, getPendingAction, clearPendingAction } from '../services/auth'
 
 export default function Login() {
   const [pendingAction, setPendingAction] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [csrfToken, setCsrfToken] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -17,21 +15,19 @@ export default function Login() {
       setPendingAction(action)
       clearPendingAction()
     }
-    fetchCsrfToken()
   }, [])
 
-  const fetchCsrfToken = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/csrf`, {
-        credentials: 'include',
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setCsrfToken(data.data.csrfToken)
-      }
-    } catch {
-      // CSRF fetch failure is non-fatal; login will still attempt
+  const validate = () => {
+    const email = document.getElementById('email')?.value
+    const password = document.getElementById('password')?.value
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return 'Enter a valid email address.'
     }
+    if (!password || password.length < 1) {
+      return 'Password is required.'
+    }
+    return null
   }
 
   const handleLogin = async (e) => {
@@ -39,37 +35,19 @@ export default function Login() {
     setLoading(true)
     setError(null)
 
-    const email = document.getElementById('email').value
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      setLoading(false)
+      return
+    }
+
+    const email = document.getElementById('email').value.trim().toLowerCase()
     const password = document.getElementById('password').value
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-        },
-        body: JSON.stringify({ email, password }),
-      })
+      await login({ email, password })
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.message || 'Login failed')
-      }
-
-      const data = await res.json()
-
-      // Refresh auth state
-      try {
-        await fetch(`${API_BASE}/api/auth/me`, {
-          credentials: 'include',
-        })
-      } catch {
-        // Auth check failure is non-fatal after successful login
-      }
-
-      // Return to pending action or home
       if (pendingAction?.returnTo) {
         navigate(pendingAction.returnTo)
       } else {

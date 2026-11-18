@@ -1,7 +1,100 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
+import {
+  register,
+  fetchCsrfToken,
+  getPendingAction,
+  clearPendingAction,
+} from '../services/auth'
 
 export default function Registration() {
+  const [form, setForm] = useState({ fullName: '', email: '', password: '' })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [csrfToken, setCsrfToken] = useState(null)
+  const [pendingAction, setPendingAction] = useState(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const action = getPendingAction()
+    if (action) {
+      setPendingAction(action)
+      clearPendingAction()
+    }
+    fetchCsrfToken()
+      .then((token) => setCsrfToken(token))
+      .catch(() => {
+        // CSRF fetch failure is non-fatal; registration will still attempt
+      })
+  }, [])
+
+  const refreshCsrf = async () => {
+    try {
+      const token = await fetchCsrfToken()
+      setCsrfToken(token)
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  const validate = () => {
+    const { fullName, email, password } = form
+    if (!fullName || fullName.trim().length < 2) {
+      return 'Full name must be at least 2 characters long.'
+    }
+    if (
+      !email ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    ) {
+      return 'Enter a valid email address.'
+    }
+    if (!password || password.length < 12) {
+      return 'Password must be at least 12 characters long.'
+    }
+    return null
+  }
+
+  const handleChange = (field) => (e) => {
+    setForm({ ...form, [field]: e.target.value })
+    setError(null)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      setLoading(false)
+      return
+    }
+
+    try {
+      if (!csrfToken) {
+        await refreshCsrf()
+      }
+      await register({
+        fullName: form.fullName.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+      })
+
+      // Registration creates an authenticated session automatically.
+      if (pendingAction?.returnTo) {
+        navigate(pendingAction.returnTo)
+      } else {
+        navigate('/')
+      }
+    } catch (err) {
+      setError(err.message || 'Registration failed')
+      setLoading(false)
+      await refreshCsrf()
+    }
+  }
+
   return (
     <div className="max-w-md mx-auto">
       <div className="mb-8">
@@ -13,7 +106,16 @@ export default function Registration() {
         </p>
       </div>
 
-      <form className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6" onSubmit={(e) => e.preventDefault()}>
+      {error && (
+        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      <form
+        className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6"
+        onSubmit={handleSubmit}
+      >
         <div>
           <label htmlFor="fullName" className="block text-sm font-medium text-tafera-text mb-1">
             Full name
@@ -23,6 +125,8 @@ export default function Registration() {
             type="text"
             autoComplete="name"
             required
+            value={form.fullName}
+            onChange={handleChange('fullName')}
             className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
             placeholder="Ada Lovelace"
           />
@@ -36,6 +140,8 @@ export default function Registration() {
             type="email"
             autoComplete="email"
             required
+            value={form.email}
+            onChange={handleChange('email')}
             className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
             placeholder="you@example.com"
           />
@@ -49,6 +155,8 @@ export default function Registration() {
             type="password"
             autoComplete="new-password"
             required
+            value={form.password}
+            onChange={handleChange('password')}
             className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
             placeholder="••••••••"
           />
@@ -57,9 +165,9 @@ export default function Registration() {
           type="submit"
           variant="primary"
           className="w-full"
-          disabled
+          disabled={loading}
         >
-          Create account
+          {loading ? 'Creating account...' : 'Create account'}
         </Button>
         <p className="mt-4 text-sm text-center text-tafera-text-muted">
           Already have an account?{' '}
