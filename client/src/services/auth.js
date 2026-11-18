@@ -69,13 +69,13 @@ export function clearPendingAction() {
   } catch {}
 }
 
-export function setPendingAction(action) {
+export function setPendingAction(action, returnTo) {
   try {
     sessionStorage.setItem(
       'tafera:pending-action',
       JSON.stringify({
         ...action,
-        returnTo: window.location.pathname,
+        returnTo: returnTo ?? window.location.pathname,
       }),
     )
   } catch {}

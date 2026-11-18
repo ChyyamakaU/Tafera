@@ -13,6 +13,7 @@ import Login from './pages/Login'
 import Registration from './pages/Registration'
 import Admin from './pages/Admin'
 import NotFound from './pages/NotFound'
+import { RequireAuth, RequireAdmin } from './components/auth/RequireAuth'
 
 function App() {
   return (
@@ -28,7 +29,7 @@ function App() {
         <Route path="scrapbooks" element={<Scrapbooks />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Registration />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
