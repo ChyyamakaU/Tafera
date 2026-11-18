@@ -9,7 +9,7 @@ export default function Layout() {
   if (isLoading) {
     return (
       <div className="flex min-h-svh flex-col">
-        <Header isAuthenticated={false} />
+        <Header />
         <main className="flex-1 pt-8 pb-12 w-full">
           <Outlet />
         </main>
@@ -20,7 +20,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-svh flex-col">
-      <Header isAuthenticated={isAuthenticated} />
+      <Header />
       <main className="flex-1 pt-8 pb-12 w-full">
         <Outlet />
       </main>

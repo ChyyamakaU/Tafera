@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 
 const PUBLIC_NAV = [
   {
@@ -40,12 +41,14 @@ const PROFILE_MENU_ITEMS = [
   { to: null, label: 'Log out' },
 ]
 
-export default function Header({ isAuthenticated = false } = {}) {
+export default function Header() {
+  const { user, isAuthenticated, isLoading, logout } = useAuth()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState(null)
   const [scrolled, setScrolled] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
   const navigate = useNavigate()
 
   const isActive = (to) => location.pathname === to
@@ -56,6 +59,20 @@ export default function Header({ isAuthenticated = false } = {}) {
   const closeProfileMenu = () => setProfileMenuOpen(false)
   const toggleDropdown = (label) =>
     setOpenDropdown((prev) => (prev === label ? null : label))
+
+  const handleLogout = async () => {
+    setLogoutLoading(true)
+    try {
+      await logout()
+      navigate('/')
+    } catch {
+      // Logout error: session is already cleared on the server side in most cases.
+      // Ensure UI reflects unauthenticated state regardless.
+      navigate('/')
+    } finally {
+      setLogoutLoading(false)
+    }
+  }
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 0)
@@ -183,10 +200,11 @@ export default function Header({ isAuthenticated = false } = {}) {
         ) : (
           <button
             key={item.label}
-            onClick={closeProfileMenu}
+            onClick={handleLogout}
+            disabled={logoutLoading}
             className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
           >
-            {item.label}
+            {logoutLoading ? 'Signing out...' : item.label}
           </button>
         ),
       )}
@@ -319,10 +337,11 @@ export default function Header({ isAuthenticated = false } = {}) {
         ) : (
           <button
             key={item.label}
-            onClick={closeProfileMenu}
+            onClick={handleLogout}
+            disabled={logoutLoading}
             className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
           >
-            {item.label}
+            {logoutLoading ? 'Signing out...' : item.label}
           </button>
         ),
       )}
