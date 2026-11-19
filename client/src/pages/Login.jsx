@@ -1,13 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Button } from '../components/common/Button'
-import { login, getPendingAction, clearPendingAction } from '../services/auth'
+import { useAuth } from '../contexts/AuthContext'
+import { getPendingAction, clearPendingAction } from '../services/auth'
 
 export default function Login() {
   const [pendingAction, setPendingAction] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
+  const { login: authLogin } = useAuth()
 
   useEffect(() => {
     const action = getPendingAction()
@@ -46,7 +48,7 @@ export default function Login() {
     const password = document.getElementById('password').value
 
     try {
-      await login({ email, password })
+      await authLogin({ email, password })
 
       if (pendingAction?.returnTo) {
         navigate(pendingAction.returnTo)

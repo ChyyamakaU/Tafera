@@ -55,8 +55,11 @@ export function AuthProvider({ children }) {
   }
 
   const logout = async () => {
-    await logoutService()
-    setUser(null)
+    try {
+      await logoutService()
+    } finally {
+      setUser(null)
+    }
   }
 
   const value = {

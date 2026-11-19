@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { AuthProvider } from '../contexts/AuthContext'
 import Login from './Login'
+import Header from '../components/layout/Header'
 import {
   login,
   getPendingAction,
@@ -9,7 +11,10 @@ import {
 } from '../services/auth'
 
 vi.mock('../services/auth', () => ({
+  checkAuth: vi.fn(),
   login: vi.fn(),
+  register: vi.fn(),
+  logout: vi.fn(),
   getPendingAction: vi.fn(),
   clearPendingAction: vi.fn(),
 }))
@@ -20,9 +25,12 @@ const mockClearPendingAction = vi.mocked(clearPendingAction)
 
 const renderLogin = () => {
   return render(
-    <MemoryRouter initialEntries={['/login']}>
-      <Login />
-    </MemoryRouter>
+    <AuthProvider>
+      <MemoryRouter initialEntries={['/login']}>
+        <Login />
+        <Header />
+      </MemoryRouter>
+    </AuthProvider>
   )
 }
 
@@ -79,7 +87,7 @@ describe('Login validation', () => {
 })
 
 describe('Login submission', () => {
-  it('submits valid credentials and redirects', async () => {
+  it('calls AuthContext login method and updates shared auth state immediately', async () => {
     mockLogin.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
     renderLogin()
     const emailInput = screen.getByLabelText('Email address')
@@ -93,6 +101,11 @@ describe('Login submission', () => {
         password: 'password12345',
       })
     })
+    await waitFor(() => {
+      expect(screen.getByText('Profile')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Join for Free' })).not.toBeInTheDocument()
   })
 
   it('shows loading state during submission', async () => {

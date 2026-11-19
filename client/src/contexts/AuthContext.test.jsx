@@ -236,10 +236,11 @@ describe('logout()', () => {
       expect(result.current.user?.email).toBe('test@example.com')
     })
     await expect(result.current.logout()).rejects.toThrow('Logout failed')
-    // logout sets user to null only after await logoutService() succeeds;
-    // if it throws, user is not cleared (current implementation behaviour)
-    expect(result.current.user?.email).toBe('test@example.com')
-    expect(result.current.isAuthenticated).toBe(true)
+    // logout clears user state even when logoutService() rejects (finally block)
+    await waitFor(() => {
+      expect(result.current.user).toBeNull()
+    })
+    expect(result.current.isAuthenticated).toBe(false)
   })
 })
 
