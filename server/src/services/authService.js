@@ -49,6 +49,7 @@ const createAuthService = ({
     const passwordHash = await passwords.hashPassword(password)
 
     let user
+    let emailVerificationSent = false
 
     try {
       user = await userModel.create({
@@ -91,18 +92,15 @@ const createAuthService = ({
     }
 
     try {
-      await verifications.sendInitialVerification(user)
+      const sendResult = await verifications.sendInitialVerification(user)
+      emailVerificationSent = sendResult.sent === true
     } catch (err) {
-      // Email delivery is deliberately non-fatal for registration. The account
-      // and session are already valid, and the user can request another email
-      // once delivery is configured or recovers.
       logSecurityEvent(
         'email_verification_delivery_failed',
         {
           operation: 'registration',
           outcome: 'failure',
-          errorCode:
-            err.code || err.name || 'EMAIL_VERIFICATION_ERROR',
+          errorCode: err.code || err.name || 'EMAIL_VERIFICATION_ERROR',
         },
         'warn',
       )
@@ -116,6 +114,7 @@ const createAuthService = ({
     return {
       user: toPublicUser(user),
       csrfToken: getCsrfToken(req.session),
+      emailVerificationSent,
     }
   }
 

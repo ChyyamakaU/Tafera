@@ -52,7 +52,8 @@ export function AuthProvider({ children }) {
 
   const register = async (userData) => {
     const response = await registerService(userData)
-    // Registration creates an authenticated session automatically per backend contract.
+    // Registration creates an authenticated session automatically per backend
+    // contract. The user is authenticated but not yet email-verified.
     setUser(response.user)
     return response
   }

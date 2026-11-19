@@ -177,7 +177,9 @@ export default function Header() {
             </svg>
           </button>
           {profileMenuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-md border border-tafera-border bg-white shadow-card py-2 z-50">
+            <div
+              className="fixed right-4 top-14 w-[240px] rounded-md border border-tafera-border bg-white shadow-card py-2 z-[60] max-h-[calc(100vh-6rem)] overflow-y-auto"
+            >
               {renderProfileLinks()}
             </div>
           )}
@@ -204,41 +206,63 @@ export default function Header() {
 
   const renderProfileLinks = () => (
     <>
-      {PROFILE_MENU_ITEMS.map((item) =>
-        item.to ? (
+      {!isEmailVerified && (
+        <>
           <Link
-            key={item.to}
-            to={item.to}
+            key="verify-email"
+            to="/verify-email"
             onClick={closeProfileMenu}
             className="font-nav font-medium text-base block px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
           >
-            {item.label}
+            Verify your email
           </Link>
-        ) : (
           <button
-            key={item.label}
+            key="resend-verification"
+            onClick={handleResendVerification}
+            disabled={resendLoading}
+            className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+          >
+            {resendLoading ? 'Sending...' : 'Resend verification email'}
+          </button>
+          <button
+            key="log-out"
             onClick={handleLogout}
             disabled={logoutLoading}
             className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
           >
-            {logoutLoading ? 'Signing out...' : item.label}
+            {logoutLoading ? 'Signing out...' : 'Log out'}
           </button>
-        ),
+          {resendError && (
+            <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+              {resendError}
+            </div>
+          )}
+        </>
       )}
-      {!isEmailVerified && (
-        <button
-          key="resend-verification"
-          onClick={handleResendVerification}
-          disabled={resendLoading}
-          className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
-        >
-          {resendLoading ? 'Sending...' : 'Resend verification email'}
-        </button>
-      )}
-      {resendError && (
-        <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
-          {resendError}
-        </div>
+      {isEmailVerified && (
+        <>
+          {PROFILE_MENU_ITEMS.map((item) =>
+            item.to ? (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={closeProfileMenu}
+                className="font-nav font-medium text-base block px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <button
+                key={item.label}
+                onClick={handleLogout}
+                disabled={logoutLoading}
+                className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+              >
+                {logoutLoading ? 'Signing out...' : item.label}
+              </button>
+            ),
+          )}
+        </>
       )}
     </>
   )
@@ -356,26 +380,63 @@ export default function Header() {
 
   const renderMobileAuthLinks = () => (
     <>
-      {PROFILE_MENU_ITEMS.map((item) =>
-        item.to ? (
+      {!isEmailVerified && (
+        <>
           <Link
-            key={item.to}
-            to={item.to}
+            key="verify-email"
+            to="/verify-email"
             onClick={closeMenu}
             className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
           >
-            {item.label}
+            Verify your email
           </Link>
-        ) : (
           <button
-            key={item.label}
+            key="resend-verification"
+            onClick={handleResendVerification}
+            disabled={resendLoading}
+            className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
+          >
+            {resendLoading ? 'Sending...' : 'Resend verification email'}
+          </button>
+          <button
+            key="log-out"
             onClick={handleLogout}
             disabled={logoutLoading}
             className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
           >
-            {logoutLoading ? 'Signing out...' : item.label}
+            {logoutLoading ? 'Signing out...' : 'Log out'}
           </button>
-        ),
+          {resendError && (
+            <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+              {resendError}
+            </div>
+          )}
+        </>
+      )}
+      {isEmailVerified && (
+        <>
+          {PROFILE_MENU_ITEMS.map((item) =>
+            item.to ? (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={closeMenu}
+                className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <button
+                key={item.label}
+                onClick={handleLogout}
+                disabled={logoutLoading}
+                className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
+              >
+                {logoutLoading ? 'Signing out...' : item.label}
+              </button>
+            ),
+          )}
+        </>
       )}
     </>
   )

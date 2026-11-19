@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import AuthModal from '../components/home/AuthModal'
+import { useAuth } from '../contexts/AuthContext'
+import { setPendingAction } from '../services/auth'
 
 export default function TripDetail() {
   const { tripId } = useParams()
@@ -10,6 +12,7 @@ export default function TripDetail() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [participation, setParticipation] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const { isAuthenticated: ctxIsAuthenticated, isEmailVerified } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -75,7 +78,16 @@ export default function TripDetail() {
   }, [tripId, isAuthenticated])
 
   const handleJoinTrip = async () => {
-    if (!tripId || !isAuthenticated) return
+    if (!tripId || !ctxIsAuthenticated) return
+
+    if (!isEmailVerified) {
+      setPendingAction(
+        { action: 'join_trip', entityType: 'trip', entityName: trip?.title },
+        `/trips/${tripId}`
+      )
+      navigate('/verify-email')
+      return
+    }
 
     try {
       const res = await fetch(`/api/trips/${tripId}/join`, {
@@ -89,6 +101,14 @@ export default function TripDetail() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
+        if (errorData.code === 'EMAIL_VERIFICATION_REQUIRED') {
+          setPendingAction(
+            { action: 'join_trip', entityType: 'trip', entityName: trip?.title },
+            `/trips/${tripId}`
+          )
+          navigate('/verify-email')
+          return
+        }
         throw new Error(errorData.message || 'Join request failed')
       }
 

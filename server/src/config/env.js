@@ -230,7 +230,7 @@ const schema = z
     CLOUDINARY_CLOUD_NAME: optionalString('must not be empty'),
     CLOUDINARY_API_KEY: optionalString('must not be empty'),
     CLOUDINARY_API_SECRET: optionalString('must not be empty'),
-    RESEND_API_KEY: optionalSecret,
+    BREVO_API_KEY: optionalSecret,
     EMAIL_FROM: z.preprocess(
       emptyToUndefined,
       z
@@ -329,19 +329,19 @@ const schema = z
       }
     }
 
-    const resend = [
-      ['RESEND_API_KEY', value.RESEND_API_KEY],
+    const brevo = [
+      ['BREVO_API_KEY', value.BREVO_API_KEY],
       ['EMAIL_FROM', value.EMAIL_FROM],
     ]
-    const resendConfigured = resend.filter(([, item]) => isPresent(item))
+    const brevoConfigured = brevo.filter(([, item]) => isPresent(item))
 
-    if (resendConfigured.length > 0 && resendConfigured.length < resend.length) {
-      for (const [name, item] of resend) {
+    if (brevoConfigured.length > 0 && brevoConfigured.length < brevo.length) {
+      for (const [name, item] of brevo) {
         if (!isPresent(item)) {
           ctx.addIssue({
             code: 'custom',
             path: [name],
-            message: 'is required when any Resend variable is set',
+            message: 'is required when any Brevo variable is set',
           })
         }
       }
@@ -437,11 +437,11 @@ module.exports = {
     apiSecret: parsed.CLOUDINARY_API_SECRET || '',
   },
 
-  RESEND: {
-    apiKey: parsed.RESEND_API_KEY,
+  BREVO: {
+    apiKey: parsed.BREVO_API_KEY,
     from: parsed.EMAIL_FROM || '',
   },
 
-  RESEND_API_KEY: parsed.RESEND_API_KEY,
+  BREVO_API_KEY: parsed.BREVO_API_KEY,
   EMAIL_FROM: parsed.EMAIL_FROM || '',
 }

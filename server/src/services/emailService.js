@@ -3,7 +3,7 @@
 const env = require('../config/env')
 const EMAIL_VERIFICATION = require('../config/emailVerification')
 const { EmailDeliveryUnavailableError } = require('../utils/emailErrors')
-const { createResendTransport } = require('./resendTransport')
+const { createBrevoTransport } = require('./brevoTransport')
 
 const buildVerificationUrl = ({
   token,
@@ -16,25 +16,25 @@ const buildVerificationUrl = ({
 
 // Delivery is deliberately provider-independent. A transport is any object
 // with an async send({ to, subject, text, html }) method. When both
-// RESEND_API_KEY and EMAIL_FROM are configured, a Resend transport is used.
+// BREVO_API_KEY and EMAIL_FROM are configured, a Brevo transport is used.
 // Otherwise the default transport is absent and email delivery is reported
 // as unconfigured rather than silently pretending to deliver mail.
-let resendTransport = null
-if (env.RESEND_API_KEY && env.EMAIL_FROM) {
+let brevoTransport = null
+if (env.BREVO_API_KEY && env.EMAIL_FROM) {
   try {
-    resendTransport = createResendTransport({
-      apiKey: env.RESEND_API_KEY,
+    brevoTransport = createBrevoTransport({
+      apiKey: env.BREVO_API_KEY,
       from: env.EMAIL_FROM,
     })
   } catch {
-    // Resend could not be initialised; stay unconfigured rather than
+    // Brevo could not be initialised; stay unconfigured rather than
     // failing to start.
-    resendTransport = null
+    brevoTransport = null
   }
 }
 
 const createEmailService = ({
-  transport = resendTransport,
+  transport = brevoTransport,
   clientUrl = env.CLIENT_URL,
 } = {}) => {
   const isConfigured = () =>
