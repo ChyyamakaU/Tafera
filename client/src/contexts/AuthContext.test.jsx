@@ -105,7 +105,7 @@ describe('AuthContext initial state and session restoration', () => {
 
 describe('login()', () => {
   it('calls login service with supplied credentials', async () => {
-    loginService.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    loginService.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderWithAuth()
     await waitFor(() => {
       expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
@@ -121,7 +121,7 @@ describe('login()', () => {
   })
 
   it('updates user and isAuthenticated on success', async () => {
-    loginService.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    loginService.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderWithAuth()
     await waitFor(() => {
       expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
@@ -147,7 +147,7 @@ describe('login()', () => {
 
 describe('register()', () => {
   it('calls register service with supplied data', async () => {
-    registerService.mockResolvedValue({ data: { user: { id: '1', email: 'new@example.com' } } })
+    registerService.mockResolvedValue({ user: { id: '1', email: 'new@example.com' }, csrfToken: 'csrf-token-123' })
     renderWithAuth()
     await waitFor(() => {
       expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
@@ -164,7 +164,7 @@ describe('register()', () => {
   })
 
   it('updates user and isAuthenticated on success', async () => {
-    registerService.mockResolvedValue({ data: { user: { id: '1', email: 'new@example.com' } } })
+    registerService.mockResolvedValue({ user: { id: '1', email: 'new@example.com' }, csrfToken: 'csrf-token-123' })
     renderWithAuth()
     await waitFor(() => {
       expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')

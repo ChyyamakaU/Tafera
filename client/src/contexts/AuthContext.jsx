@@ -42,16 +42,16 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = async (credentials) => {
-    const { data } = await loginService(credentials)
-    setUser(data.user)
-    return data
+    const response = await loginService(credentials)
+    setUser(response.user)
+    return response
   }
 
   const register = async (userData) => {
-    const { data } = await registerService(userData)
+    const response = await registerService(userData)
     // Registration creates an authenticated session automatically per backend contract.
-    setUser(data.user)
-    return data
+    setUser(response.user)
+    return response
   }
 
   const logout = async () => {

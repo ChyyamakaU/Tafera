@@ -112,7 +112,7 @@ describe('Registration rendering', () => {
 
 describe('Registration authentication-state sync', () => {
   it('calls AuthContext register method on successful submission', async () => {
-    mockRegister.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockRegister.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderRegistration()
     fillAndSubmit()
     await waitFor(() => {
@@ -125,7 +125,7 @@ describe('Registration authentication-state sync', () => {
   })
 
   it('reflects the authenticated user in shared state immediately', async () => {
-    mockRegister.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockRegister.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderRegistration()
     fillAndSubmit()
     await waitFor(() => {
@@ -136,7 +136,7 @@ describe('Registration authentication-state sync', () => {
   })
 
   it('displays authenticated navigation in Header without page refresh', async () => {
-    mockRegister.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockRegister.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderRegistration()
     fillAndSubmit()
     await waitFor(() => {
@@ -151,7 +151,7 @@ describe('Registration authentication-state sync', () => {
 
 describe('Registration pending-action redirects', () => {
   it('clears pending action when a returnTo is available', async () => {
-    mockRegister.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockRegister.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     mockGetPendingAction.mockReturnValue({ action: 'create_trip', returnTo: '/trips/new' })
     renderRegistration()
     fillAndSubmit()
@@ -164,7 +164,7 @@ describe('Registration pending-action redirects', () => {
   })
 
   it('does not clear pending action when none exists (homepage fallback)', async () => {
-    mockRegister.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockRegister.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     mockGetPendingAction.mockReturnValue(null)
     renderRegistration()
     fillAndSubmit()

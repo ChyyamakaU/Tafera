@@ -88,7 +88,7 @@ describe('Login validation', () => {
 
 describe('Login submission', () => {
   it('calls AuthContext login method and updates shared auth state immediately', async () => {
-    mockLogin.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockLogin.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderLogin()
     const emailInput = screen.getByLabelText('Email address')
     const passwordInput = screen.getByLabelText('Password')
@@ -109,7 +109,7 @@ describe('Login submission', () => {
   })
 
   it('shows loading state during submission', async () => {
-    mockLogin.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockLogin.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderLogin()
     const emailInput = screen.getByLabelText('Email address')
     const passwordInput = screen.getByLabelText('Password')
@@ -137,7 +137,7 @@ describe('Login submission', () => {
 
 describe('Login redirect behavior', () => {
   it('redirects to / after successful login with no pending action', async () => {
-    mockLogin.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockLogin.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderLogin()
     const emailInput = screen.getByLabelText('Email address')
     const passwordInput = screen.getByLabelText('Password')
@@ -150,7 +150,7 @@ describe('Login redirect behavior', () => {
   })
 
   it('redirects to pending action returnTo when available', async () => {
-    mockLogin.mockResolvedValue({ data: { user: { id: '1', email: 'test@example.com' } } })
+    mockLogin.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     mockGetPendingAction.mockReturnValue({
       action: 'create_trip',
       returnTo: '/trips/new',
