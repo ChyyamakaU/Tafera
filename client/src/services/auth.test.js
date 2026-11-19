@@ -8,6 +8,8 @@ import {
   getPendingAction,
   clearPendingAction,
   setPendingAction,
+  verifyEmail,
+  resendVerification,
 } from './auth'
 import { API_BASE } from './api'
 
@@ -305,5 +307,92 @@ describe('pending actions', () => {
     // Then clear it
     clearPendingAction()
     expect(getPendingAction()).toBeNull()
+  })
+})
+
+describe('verifyEmail', () => {
+  it('verifies email with token', async () => {
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(
+        mockResponse(true, 200, { data: { user: { id: '123', email: 'test@example.com', emailVerified: true } } }),
+      )
+
+    const result = await verifyEmail({ token: 'abc123' })
+
+    expect(result).toEqual({ user: { id: '123', email: 'test@example.com', emailVerified: true } })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
+      credentials: 'include',
+    })
+    const verifyCall = fetch.mock.calls[1]
+    expect(verifyCall[0]).toBe(`${API_BASE}/api/auth/verify-email`)
+    expect(verifyCall[1].method).toBe('POST')
+    expect(verifyCall[1].headers['X-CSRF-Token']).toBe('csrf-token')
+    expect(JSON.parse(verifyCall[1].body)).toEqual({ token: 'abc123' })
+  })
+
+  it('handles invalid verification token', async () => {
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(
+        mockResponse(false, 400, {
+          message: 'This verification link is invalid or has expired.',
+          code: 'VERIFICATION_TOKEN_INVALID',
+          status: 400,
+        }),
+      )
+
+    await expect(verifyEmail({ token: 'invalid' })).rejects.toThrow(
+      'This verification link is invalid or has expired.',
+    )
+  })
+})
+
+describe('resendVerification', () => {
+  it('resends verification email successfully', async () => {
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(
+        mockResponse(true, 202, { data: { alreadyVerified: false, sent: true } }),
+      )
+
+    const result = await resendVerification()
+
+    expect(result).toEqual({ alreadyVerified: false, sent: true })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
+      credentials: 'include',
+    })
+    const resendCall = fetch.mock.calls[1]
+    expect(resendCall[0]).toBe(`${API_BASE}/api/auth/verify-email/resend`)
+    expect(resendCall[1].method).toBe('POST')
+    expect(resendCall[1].headers['X-CSRF-Token']).toBe('csrf-token')
+  })
+
+  it('handles already verified', async () => {
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(
+        mockResponse(true, 200, { data: { alreadyVerified: true, sent: false } }),
+      )
+
+    const result = await resendVerification()
+
+    expect(result).toEqual({ alreadyVerified: true, sent: false })
+  })
+
+  it('handles resend rate limited', async () => {
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(
+        mockResponse(false, 429, {
+          message: 'Please wait before requesting another verification email.',
+          code: 'EMAIL_VERIFICATION_RATE_LIMITED',
+          status: 429,
+        }),
+      )
+
+    await expect(resendVerification()).rejects.toThrow(
+      'Please wait before requesting another verification email.',
+    )
   })
 })

@@ -14,6 +14,7 @@ export default function Registration() {
   const [error, setError] = useState(null)
   const [csrfToken, setCsrfToken] = useState(null)
   const [pendingAction, setPendingAction] = useState(null)
+  const [registrationComplete, setRegistrationComplete] = useState(false)
   const navigate = useNavigate()
   const { register: authRegister } = useAuth()
 
@@ -83,12 +84,9 @@ export default function Registration() {
         password: form.password,
       })
 
-      // Registration creates an authenticated session automatically.
-      if (pendingAction?.returnTo) {
-        navigate(pendingAction.returnTo)
-      } else {
-        navigate('/')
-      }
+      // Registration creates an authenticated session and sends a verification
+      // email automatically. Inform the user and let them continue.
+      setRegistrationComplete(true)
     } catch (err) {
       setError(err.message || 'Registration failed')
       setLoading(false)
@@ -98,91 +96,115 @@ export default function Registration() {
 
   return (
     <div className="max-w-md mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
-          Create an account
-        </h1>
-        <p className="mt-2 text-tafera-text-muted">
-          Join Tafera and start planning your journeys.
-        </p>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
-          {error}
+      {registrationComplete ? (
+        <div className="text-center py-24">
+          <h2 className="text-2xl font-heading font-bold text-tafera-text">
+            Account created!
+          </h2>
+          <p className="mt-2 text-tafera-text-muted">
+            We've sent a verification email to your email address. Please
+            verify your email to access all features.
+          </p>
+          {error && (
+            <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm mt-6">
+              {error}
+            </div>
+          )}
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+            <Link asChild to="/" className="w-full sm:w-auto">
+              <Button variant="primary">Continue to home</Button>
+            </Link>
+          </div>
         </div>
+      ) : (
+        <>
+          <div className="mb-8">
+            <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
+              Create an account
+            </h1>
+            <p className="mt-2 text-tafera-text-muted">
+              Join Tafera and start planning your journeys.
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          <form
+            className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6"
+            onSubmit={handleSubmit}
+          >
+            <div>
+              <label htmlFor="fullName" className="block text-sm font-medium text-tafera-text mb-1">
+                Full name
+              </label>
+              <input
+                id="fullName"
+                type="text"
+                autoComplete="name"
+                required
+                value={form.fullName}
+                onChange={handleChange('fullName')}
+                className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+                placeholder="Ada Lovelace"
+              />
+            </div>
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-tafera-text mb-1">
+                Email address
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={form.email}
+                onChange={handleChange('email')}
+                className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-tafera-text mb-1">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={form.password}
+                onChange={handleChange('password')}
+                className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+                placeholder="••••••••"
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full"
+              disabled={loading}
+            >
+              {loading ? 'Creating account...' : 'Create account'}
+            </Button>
+            <p className="mt-4 text-sm text-center text-tafera-text-muted">
+              Already have an account?{' '}
+              <Link to="/login" className="font-medium text-tafera-primary hover:underline">
+                Log in
+              </Link>
+            </p>
+          </form>
+
+          <div className="mt-10 flex justify-end">
+            <Link asChild to="/">
+              <Button variant="ghost">Back to home</Button>
+            </Link>
+          </div>
+        </>
       )}
-
-      <form
-        className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6"
-        onSubmit={handleSubmit}
-      >
-        <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-tafera-text mb-1">
-            Full name
-          </label>
-          <input
-            id="fullName"
-            type="text"
-            autoComplete="name"
-            required
-            value={form.fullName}
-            onChange={handleChange('fullName')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
-            placeholder="Ada Lovelace"
-          />
-        </div>
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-tafera-text mb-1">
-            Email address
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={form.email}
-            onChange={handleChange('email')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
-            placeholder="you@example.com"
-          />
-        </div>
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-tafera-text mb-1">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={form.password}
-            onChange={handleChange('password')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
-            placeholder="••••••••"
-          />
-        </div>
-        <Button
-          type="submit"
-          variant="primary"
-          className="w-full"
-          disabled={loading}
-        >
-          {loading ? 'Creating account...' : 'Create account'}
-        </Button>
-        <p className="mt-4 text-sm text-center text-tafera-text-muted">
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-tafera-primary hover:underline">
-            Log in
-          </Link>
-        </p>
-      </form>
-
-      <div className="mt-10 flex justify-end">
-        <Link asChild to="/">
-          <Button variant="ghost">Back to home</Button>
-        </Link>
-      </div>
     </div>
   )
 }

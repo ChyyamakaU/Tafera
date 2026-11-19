@@ -54,6 +54,29 @@ export async function logout() {
   })
 }
 
+export async function verifyEmail({ token }) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request('/api/auth/verify-email', {
+    method: 'POST',
+    headers: {
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify({ token }),
+  })
+  return data
+}
+
+export async function resendVerification() {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request('/api/auth/verify-email/resend', {
+    method: 'POST',
+    headers: {
+      'X-CSRF-Token': csrfToken,
+    },
+  })
+  return data
+}
+
 export function getPendingAction() {
   try {
     const stored = sessionStorage.getItem('tafera:pending-action')

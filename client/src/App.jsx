@@ -11,6 +11,7 @@ import DestinationDetail from './pages/DestinationDetail'
 import Scrapbooks from './pages/Scrapbooks'
 import Login from './pages/Login'
 import Registration from './pages/Registration'
+import VerifyEmail from './pages/VerifyEmail'
 import Admin from './pages/Admin'
 import NotFound from './pages/NotFound'
 import { RequireAuth, RequireAdmin } from './components/auth/RequireAuth'
@@ -29,6 +30,7 @@ function App() {
         <Route path="scrapbooks" element={<Scrapbooks />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Registration />} />
+        <Route path="verify-email" element={<VerifyEmail />} />
         <Route path="admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
       </Route>
       <Route path="*" element={<NotFound />} />

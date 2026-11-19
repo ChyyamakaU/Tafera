@@ -42,23 +42,40 @@ const PROFILE_MENU_ITEMS = [
 ]
 
 export default function Header() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth()
+  const { user, isAuthenticated, isEmailVerified, isLoading, logout, resendVerification } = useAuth()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState(null)
   const [scrolled, setScrolled] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendError, setResendError] = useState(null)
   const navigate = useNavigate()
 
   const isActive = (to) => location.pathname === to
 
   const toggleMenu = () => setMenuOpen((prev) => !prev)
   const closeMenu = () => setMenuOpen(false)
-  const toggleProfileMenu = () => setProfileMenuOpen((prev) => !prev)
+  const toggleProfileMenu = () => {
+    setProfileMenuOpen((prev) => !prev)
+    setResendError(null)
+  }
   const closeProfileMenu = () => setProfileMenuOpen(false)
   const toggleDropdown = (label) =>
     setOpenDropdown((prev) => (prev === label ? null : label))
+
+  const handleResendVerification = async () => {
+    setResendLoading(true)
+    try {
+      await resendVerification()
+      closeProfileMenu()
+    } catch (err) {
+      setResendError(err.message || 'Failed to resend verification email.')
+    } finally {
+      setResendLoading(false)
+    }
+  }
 
   const handleLogout = async () => {
     setLogoutLoading(true)
@@ -207,6 +224,21 @@ export default function Header() {
             {logoutLoading ? 'Signing out...' : item.label}
           </button>
         ),
+      )}
+      {!isEmailVerified && (
+        <button
+          key="resend-verification"
+          onClick={handleResendVerification}
+          disabled={resendLoading}
+          className="font-nav font-medium text-base block w-full text-left px-4 py-2.5 text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+        >
+          {resendLoading ? 'Sending...' : 'Resend verification email'}
+        </button>
+      )}
+      {resendError && (
+        <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+          {resendError}
+        </div>
       )}
     </>
   )

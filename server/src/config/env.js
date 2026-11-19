@@ -230,6 +230,16 @@ const schema = z
     CLOUDINARY_CLOUD_NAME: optionalString('must not be empty'),
     CLOUDINARY_API_KEY: optionalString('must not be empty'),
     CLOUDINARY_API_SECRET: optionalString('must not be empty'),
+    RESEND_API_KEY: optionalSecret,
+    EMAIL_FROM: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .min(1, 'must not be empty')
+        .email('must be a valid email address')
+        .optional(),
+    ),
     ARGON2_MEMORY_KIB: boundedInteger(
       19456,
       ARGON2_CONFIG_LIMITS.memoryMinKib,
@@ -314,6 +324,24 @@ const schema = z
             code: 'custom',
             path: [name],
             message: 'is required when any Cloudinary variable is set',
+          })
+        }
+      }
+    }
+
+    const resend = [
+      ['RESEND_API_KEY', value.RESEND_API_KEY],
+      ['EMAIL_FROM', value.EMAIL_FROM],
+    ]
+    const resendConfigured = resend.filter(([, item]) => isPresent(item))
+
+    if (resendConfigured.length > 0 && resendConfigured.length < resend.length) {
+      for (const [name, item] of resend) {
+        if (!isPresent(item)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message: 'is required when any Resend variable is set',
           })
         }
       }
@@ -408,4 +436,12 @@ module.exports = {
     apiKey: parsed.CLOUDINARY_API_KEY || '',
     apiSecret: parsed.CLOUDINARY_API_SECRET || '',
   },
+
+  RESEND: {
+    apiKey: parsed.RESEND_API_KEY,
+    from: parsed.EMAIL_FROM || '',
+  },
+
+  RESEND_API_KEY: parsed.RESEND_API_KEY,
+  EMAIL_FROM: parsed.EMAIL_FROM || '',
 }

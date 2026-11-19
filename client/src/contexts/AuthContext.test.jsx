@@ -6,6 +6,8 @@ import {
   login as loginService,
   register as registerService,
   logout as logoutService,
+  verifyEmail as verifyEmailService,
+  resendVerification as resendVerificationService,
 } from '../services/auth'
 
 vi.mock('../services/auth', () => ({
@@ -13,14 +15,17 @@ vi.mock('../services/auth', () => ({
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  verifyEmail: vi.fn(),
+  resendVerification: vi.fn(),
 }))
 
 const TestComponent = () => {
-  const { user, isAuthenticated, isLoading, login, register, logout } = useAuth()
+  const { user, isAuthenticated, isEmailVerified, isLoading, login, register, logout, verifyEmail, resendVerification } = useAuth()
   return (
     <div>
       <span data-testid="user">{user ? user.email : 'none'}</span>
       <span data-testid="isAuthenticated">{String(isAuthenticated)}</span>
+      <span data-testid="isEmailVerified">{String(isEmailVerified)}</span>
       <span data-testid="isLoading">{String(isLoading)}</span>
       <button data-testid="login-btn" onClick={() => login({ email: 'a@b.com', password: 'p1234567890' })}>
         Login
@@ -30,6 +35,12 @@ const TestComponent = () => {
       </button>
       <button data-testid="logout-btn" onClick={logout}>
         Logout
+      </button>
+      <button data-testid="verify-email-btn" onClick={() => verifyEmail('test-token-123')}>
+        Verify email
+      </button>
+      <button data-testid="resend-btn" onClick={resendVerification}>
+        Resend verification
       </button>
     </div>
   )
@@ -210,7 +221,7 @@ describe('logout()', () => {
     // First authenticate
     checkAuthService.mockResolvedValue({
       isAuthenticated: true,
-      user: { id: '1', email: 'test@example.com' },
+      user: { id: '1', email: 'test@example.com', emailVerified: false },
     })
     logoutService.mockResolvedValue(undefined)
     renderWithAuth()
@@ -241,6 +252,80 @@ describe('logout()', () => {
       expect(result.current.user).toBeNull()
     })
     expect(result.current.isAuthenticated).toBe(false)
+  })
+})
+
+describe('verifyEmail()', () => {
+  it('calls verify email service with token', async () => {
+    verifyEmailService.mockResolvedValue({ user: { id: '1', email: 'test@example.com', emailVerified: true } })
+    renderWithAuth()
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
+    })
+    const btn = document.querySelector('[data-testid="verify-email-btn"]')
+    btn?.click()
+    await waitFor(() => {
+      expect(verifyEmailService).toHaveBeenCalledWith('test-token-123')
+    })
+  })
+
+  it('updates user and isEmailVerified on success', async () => {
+    verifyEmailService.mockResolvedValue({ user: { id: '1', email: 'test@example.com', emailVerified: true } })
+    renderWithAuth()
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
+    })
+    const btn = document.querySelector('[data-testid="verify-email-btn"]')
+    btn?.click()
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="user"]')?.textContent).toBe('test@example.com')
+    })
+    expect(document.querySelector('[data-testid="isEmailVerified"]')?.textContent).toBe('true')
+  })
+
+  it('does not update user on verification failure', async () => {
+    verifyEmailService.mockRejectedValue(new Error('This verification link is invalid or has expired.'))
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await expect(result.current.verifyEmail('bad-token')).rejects.toThrow(
+      'This verification link is invalid or has expired.',
+    )
+    expect(result.current.user).toBeNull()
+    expect(result.current.isEmailVerified).toBe(false)
+  })
+})
+
+describe('resendVerification()', () => {
+  it('calls resend verification service', async () => {
+    resendVerificationService.mockResolvedValue({ alreadyVerified: false, sent: true })
+    renderWithAuth()
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
+    })
+    const btn = document.querySelector('[data-testid="resend-btn"]')
+    btn?.click()
+    await waitFor(() => {
+      expect(resendVerificationService).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('returns already verified when user is already verified', async () => {
+    resendVerificationService.mockResolvedValue({ alreadyVerified: true, sent: false })
+    renderWithAuth()
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="isLoading"]')?.textContent).toBe('false')
+    })
+    const btn = document.querySelector('[data-testid="resend-btn"]')
+    btn?.click()
+    const result = await resendVerificationService()
+    expect(result).toEqual({ alreadyVerified: true, sent: false })
+  })
+
+  it('handles resend rate limited error', async () => {
+    resendVerificationService.mockRejectedValue(new Error('Please wait before requesting another verification email.'))
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+    await expect(result.current.resendVerification()).rejects.toThrow(
+      'Please wait before requesting another verification email.',
+    )
   })
 })
 

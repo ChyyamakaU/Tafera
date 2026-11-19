@@ -4,6 +4,8 @@ import {
   login as loginService,
   register as registerService,
   logout as logoutService,
+  verifyEmail as verifyEmailService,
+  resendVerification as resendVerificationService,
 } from '../services/auth'
 
 export const AuthContext = createContext(null)
@@ -13,6 +15,7 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true)
 
   const isAuthenticated = !!user
+  const isEmailVerified = !!user?.emailVerified
 
   useEffect(() => {
     let cancelled = false
@@ -62,13 +65,27 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const verifyEmail = async (token) => {
+    const response = await verifyEmailService(token)
+    setUser(response.user)
+    return response
+  }
+
+  const resendVerification = async () => {
+    const response = await resendVerificationService()
+    return response
+  }
+
   const value = {
     user,
     isAuthenticated,
+    isEmailVerified,
     isLoading,
     login,
     register,
     logout,
+    verifyEmail,
+    resendVerification,
     checkAuth: checkAuthService,
   }
 
