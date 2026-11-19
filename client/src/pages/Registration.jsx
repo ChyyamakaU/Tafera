@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
+import { useAuth } from '../contexts/AuthContext'
 import {
-  register,
   fetchCsrfToken,
   getPendingAction,
   clearPendingAction,
@@ -15,6 +15,7 @@ export default function Registration() {
   const [csrfToken, setCsrfToken] = useState(null)
   const [pendingAction, setPendingAction] = useState(null)
   const navigate = useNavigate()
+  const { register: authRegister } = useAuth()
 
   useEffect(() => {
     const action = getPendingAction()
@@ -76,7 +77,7 @@ export default function Registration() {
       if (!csrfToken) {
         await refreshCsrf()
       }
-      await register({
+      await authRegister({
         fullName: form.fullName.trim(),
         email: form.email.trim().toLowerCase(),
         password: form.password,
@@ -178,7 +179,7 @@ export default function Registration() {
       </form>
 
       <div className="mt-10 flex justify-end">
-        <Link to="/">
+        <Link asChild to="/">
           <Button variant="ghost">Back to home</Button>
         </Link>
       </div>
