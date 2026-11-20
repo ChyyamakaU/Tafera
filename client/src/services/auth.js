@@ -54,6 +54,25 @@ export async function logout() {
   })
 }
 
+export async function getProfile() {
+  const { data } = await request('/api/users/me', {
+    method: 'GET',
+  })
+  return data
+}
+
+export async function updateProfile({ fullName, bio, profileImage }) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request('/api/users/me', {
+    method: 'PATCH',
+    headers: {
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify({ fullName, bio, profileImage }),
+  })
+  return data
+}
+
 export async function verifyEmail({ token }) {
   const csrfToken = await fetchCsrfToken()
   const { data } = await request('/api/auth/verify-email', {
