@@ -36,14 +36,12 @@ describe('fetchCsrfToken', () => {
     fetch.mockResolvedValue(mockResponse(true, 200, { data: { csrfToken: 'test-token' } }))
     const token = await fetchCsrfToken()
     expect(token).toBe('test-token')
-    expect(fetch).toHaveBeenCalledWith(`${API_BASE}/api/auth/csrf`, {
-      credentials: 'include',
-    })
+    expect(fetch).toHaveBeenCalledWith(`${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
   })
 
   it('throws when CSRF token fetch fails', async () => {
     fetch.mockResolvedValue(mockResponse(false, 500, { message: 'Server error' }))
-    await expect(fetchCsrfToken()).rejects.toThrow('Failed to fetch CSRF token')
+    await expect(fetchCsrfToken()).rejects.toThrow('Server error')
   })
 })
 
@@ -64,9 +62,7 @@ describe('register', () => {
     })
 
     expect(result.user).toEqual({ id: '123', email: 'test@example.com' })
-    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
-      credentials: 'include',
-    })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
     const registerCall = fetch.mock.calls[1]
     expect(registerCall[0]).toBe(`${API_BASE}/api/auth/register`)
     expect(registerCall[1].method).toBe('POST')
@@ -127,9 +123,7 @@ describe('login', () => {
     const result = await login({ email: 'test@example.com', password: 'password12345' })
 
     expect(result.user).toEqual({ id: '123', email: 'test@example.com' })
-    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
-      credentials: 'include',
-    })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
     const loginCall = fetch.mock.calls[1]
     expect(loginCall[0]).toBe(`${API_BASE}/api/auth/login`)
     expect(loginCall[1].method).toBe('POST')
@@ -165,9 +159,7 @@ describe('logout', () => {
 
     await logout()
 
-    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
-      credentials: 'include',
-    })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
     const logoutCall = fetch.mock.calls[1]
     expect(logoutCall[0]).toBe(`${API_BASE}/api/auth/logout`)
     expect(logoutCall[1].method).toBe('POST')
@@ -321,9 +313,7 @@ describe('verifyEmail', () => {
     const result = await verifyEmail({ token: 'abc123' })
 
     expect(result).toEqual({ user: { id: '123', email: 'test@example.com', emailVerified: true } })
-    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
-      credentials: 'include',
-    })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
     const verifyCall = fetch.mock.calls[1]
     expect(verifyCall[0]).toBe(`${API_BASE}/api/auth/verify-email`)
     expect(verifyCall[1].method).toBe('POST')
@@ -359,9 +349,7 @@ describe('resendVerification', () => {
     const result = await resendVerification()
 
     expect(result).toEqual({ alreadyVerified: false, sent: true })
-    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, {
-      credentials: 'include',
-    })
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
     const resendCall = fetch.mock.calls[1]
     expect(resendCall[0]).toBe(`${API_BASE}/api/auth/verify-email/resend`)
     expect(resendCall[1].method).toBe('POST')

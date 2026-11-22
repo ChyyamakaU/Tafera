@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -33,6 +33,14 @@ const PUBLIC_NAV = [
   },
 ]
 
+const AUTHENTICATED_NAV = [
+  { label: 'Feed', to: '/social' },
+  { label: 'Explore', to: '/destinations' },
+  { label: 'Group Trips', to: '/group-travel' },
+  { label: 'My Trips', to: '/trips' },
+  { label: 'Scrapbooks', to: '/scrapbooks' },
+]
+
 const PROFILE_MENU_ITEMS = [
   { to: '/profile', label: 'My Profile' },
   { to: '/scrapbooks', label: 'My Scrapbooks' },
@@ -46,22 +54,34 @@ export default function Header() {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [mobileAccountOpen, setMobileAccountOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState(null)
+  const [mobileOpenSection, setMobileOpenSection] = useState(null)
   const [scrolled, setScrolled] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
   const [resendError, setResendError] = useState(null)
   const navigate = useNavigate()
+  const featuresDropdownRef = useRef(null)
+  const profileDropdownRef = useRef(null)
+  const mobileAccountRef = useRef(null)
 
   const isActive = (to) => location.pathname === to
 
   const toggleMenu = () => setMenuOpen((prev) => !prev)
-  const closeMenu = () => setMenuOpen(false)
+  const closeMenu = () => {
+    setMenuOpen(false)
+    setProfileMenuOpen(false)
+    setMobileAccountOpen(false)
+  }
   const toggleProfileMenu = () => {
     setProfileMenuOpen((prev) => !prev)
     setResendError(null)
   }
-  const closeProfileMenu = () => setProfileMenuOpen(false)
+  const closeProfileMenu = () => {
+    setProfileMenuOpen(false)
+    setMobileAccountOpen(false)
+  }
   const toggleDropdown = (label) =>
     setOpenDropdown((prev) => (prev === label ? null : label))
 
@@ -97,13 +117,56 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  useEffect(() => {
+    const closeOnOutsidePointer = (event) => {
+      if (
+        openDropdown &&
+        !featuresDropdownRef.current?.contains(event.target)
+      ) {
+        setOpenDropdown(null)
+      }
+      if (
+        profileMenuOpen &&
+        !profileDropdownRef.current?.contains(event.target)
+      ) {
+        setProfileMenuOpen(false)
+      }
+      if (mobileAccountOpen && !mobileAccountRef.current?.contains(event.target)) {
+        setMobileAccountOpen(false)
+      }
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        setOpenDropdown(null)
+        setMobileOpenSection(null)
+        setMenuOpen(false)
+        setProfileMenuOpen(false)
+        setMobileAccountOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [openDropdown, profileMenuOpen, mobileAccountOpen])
+
+  useEffect(() => {
+    setOpenDropdown(null)
+    setMenuOpen(false)
+    setMobileOpenSection(null)
+    setProfileMenuOpen(false)
+    setMobileAccountOpen(false)
+  }, [location.pathname])
+
   const navLinkItem = (section) => {
     if (section.to) {
       return (
         <Link
           key={section.label}
           to={section.to}
-          className="px-4 py-2 rounded-md font-nav font-medium text-base text-tafera-text transition-colors hover:text-tafera-accent"
+          className={`px-2 py-2 rounded-md font-nav font-medium text-sm text-tafera-text transition-colors hover:text-tafera-accent ${isActive(section.to) ? 'text-tafera-primary' : ''}`}
           aria-current={isActive(section.to) ? 'page' : undefined}
         >
           {section.label}
@@ -111,12 +174,17 @@ export default function Header() {
       )
     }
     return (
-      <div key={section.label} className="relative group">
+      <div
+        key={section.label}
+        ref={section.label === 'Features' ? featuresDropdownRef : undefined}
+        className="relative group"
+      >
         <button
           onClick={() => toggleDropdown(section.label)}
           className="flex items-center gap-1 px-4 py-2 rounded-md font-nav font-medium text-base text-tafera-text transition-colors hover:text-tafera-accent"
           aria-haspopup="true"
           aria-expanded={openDropdown === section.label}
+          aria-controls={`${section.label.toLowerCase().replaceAll(' ', '-')}-menu`}
         >
           {section.label}
           <svg
@@ -136,11 +204,12 @@ export default function Header() {
           </svg>
         </button>
         {openDropdown === section.label && (
-          <div className="absolute top-full left-0 mt-2 w-56 rounded-md border border-tafera-border bg-white shadow-card py-3 z-50">
+          <div id={`${section.label.toLowerCase().replaceAll(' ', '-')}-menu`} className="absolute top-full left-0 mt-2 w-56 rounded-md border border-tafera-border bg-white shadow-card py-3 z-50">
             {section.items.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
+                onClick={() => setOpenDropdown(null)}
                 className="block px-4 py-2.5 text-sm text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-accent"
               >
                 {item.label}
@@ -155,7 +224,7 @@ export default function Header() {
   const desktopAuth = () => {
     if (isAuthenticated) {
       return (
-        <div className="relative inline-flex items-center">
+        <div ref={profileDropdownRef} className="relative inline-flex items-center">
           <button
             onClick={toggleProfileMenu}
             className="flex items-center gap-2 px-3 py-1.5 rounded-md font-nav font-medium text-base text-tafera-text transition-colors hover:bg-tafera-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary"
@@ -270,7 +339,7 @@ export default function Header() {
   const mobileMenuButton = () => (
     <button
       onClick={toggleMenu}
-      className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-md text-tafera-text hover:bg-tafera-surface focus:outline-none"
+      className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-md text-tafera-text hover:bg-tafera-surface focus:outline-none"
       aria-expanded={menuOpen}
       aria-controls="tafera-mobile-menu"
       aria-label="Toggle navigation menu"
@@ -304,7 +373,7 @@ export default function Header() {
   const mobileDrawer = () => (
     <nav
       id="tafera-mobile-menu"
-      className={`md:hidden ${
+      className={`lg:hidden ${
         menuOpen
           ? 'max-h-[calc(100vh-4rem)] overflow-y-auto opacity-100'
           : 'max-h-0 overflow-hidden opacity-0'
@@ -312,12 +381,22 @@ export default function Header() {
       aria-label="Mobile navigation"
     >
       <div className="px-3 py-4 space-y-4">
-        {PUBLIC_NAV.map((section) => (
+        {isAuthenticated ? AUTHENTICATED_NAV.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            onClick={closeMenu}
+            aria-current={isActive(item.to) ? 'page' : undefined}
+            className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent"
+          >
+            {item.label}
+          </Link>
+        )) : PUBLIC_NAV.map((section) => (
           <div key={section.label}>
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
+              onClick={() => setMobileOpenSection((current) => current === section.label ? null : section.label)}
               className="flex items-center justify-between w-full px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
-              aria-expanded={menuOpen}
+              aria-expanded={mobileOpenSection === section.label}
             >
               {section.label}
               <svg
@@ -326,13 +405,13 @@ export default function Header() {
                 strokeWidth="1.5"
                 stroke="currentColor"
                 fill="none"
-                style={{ transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                style={{ transform: mobileOpenSection === section.label ? 'rotate(180deg)' : 'rotate(0deg)' }}
                 aria-hidden="true"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            {menuOpen && section.items && (
+            {mobileOpenSection === section.label && section.items && (
               <div className="ml-4 space-y-2 border-l border-tafera-border pl-4">
                 {section.items.map((item) => (
                   <Link
@@ -380,7 +459,16 @@ export default function Header() {
 
   const renderMobileAuthLinks = () => (
     <>
-      {!isEmailVerified && (
+      <div ref={mobileAccountRef}>
+        <button
+          type="button"
+          onClick={() => setMobileAccountOpen((open) => !open)}
+          className="block w-full rounded-md px-3 py-3 text-left text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface"
+          aria-expanded={mobileAccountOpen}
+        >Account</button>
+        {mobileAccountOpen && <div className="mx-3 mb-2 rounded-md border border-tafera-border bg-white py-1 shadow-card">{renderProfileLinks()}</div>}
+      </div>
+      {!mobileAccountOpen && !isEmailVerified && (
         <>
           <Link
             key="verify-email"
@@ -413,7 +501,7 @@ export default function Header() {
           )}
         </>
       )}
-      {isEmailVerified && (
+      {!mobileAccountOpen && isEmailVerified && (
         <>
           {PROFILE_MENU_ITEMS.map((item) =>
             item.to ? (
@@ -442,15 +530,15 @@ export default function Header() {
   )
 
   return (
-    <header
-      className={`sticky top-0 z-50 border-b border-tafera-border px-0 md:px-15 ${
+      <header
+      className={`sticky top-0 z-50 border-b border-tafera-border ${
         scrolled ? 'shadow-sm' : ''
       }`}
       style={{
         backgroundColor: scrolled ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 1)',
       }}
     >
-      <div className="px-[15px] py-4">
+      <div className="app-container py-4">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="justify-self-start">
             <Link
@@ -465,15 +553,15 @@ export default function Header() {
             </Link>
           </div>
 
-          <nav className="hidden md:flex justify-self-center gap-8">
-            {PUBLIC_NAV.map(navLinkItem)}
+          <nav className="hidden lg:flex justify-self-center items-center gap-1">
+            {(isAuthenticated ? AUTHENTICATED_NAV : PUBLIC_NAV).map(navLinkItem)}
           </nav>
 
-          <div className="justify-self-end hidden md:flex">
+          <div className="justify-self-end hidden lg:flex">
             {desktopAuth()}
           </div>
 
-          <div className="justify-self-end md:hidden">
+          <div className="justify-self-end lg:hidden">
             {mobileMenuButton()}
           </div>
         </div>

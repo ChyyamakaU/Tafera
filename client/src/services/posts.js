@@ -13,9 +13,50 @@ export async function fetchFollowingPosts({ page = 1, limit = 20 } = {}) {
   return { posts: data.posts || [], pagination: data.pagination }
 }
 
+export async function fetchUserPosts(userId, { page = 1, limit = 20 } = {}) {
+  const { data } = await request(
+    `/api/users/${userId}/posts?page=${page}&limit=${limit}`,
+  )
+  return { posts: data.posts || [], pagination: data.pagination }
+}
+
+export async function fetchPersonalizedPosts(userId, { page = 1, limit = 20 } = {}) {
+  const [following, own] = await Promise.all([
+    fetchFollowingPosts({ page, limit }),
+    fetchUserPosts(userId, { page, limit }),
+  ])
+  const byId = new Map()
+  for (const post of [...following.posts, ...own.posts]) byId.set(post.id, post)
+  const posts = [...byId.values()].sort((a, b) => {
+    const dateDifference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return dateDifference || String(b.id).localeCompare(String(a.id))
+  })
+  return {
+    posts,
+    pagination: {
+      page,
+      limit,
+      hasNextPage:
+        Boolean(following.pagination?.hasNextPage) ||
+        Boolean(own.pagination?.hasNextPage),
+    },
+  }
+}
+
 export async function fetchPost(postId) {
   const { data } = await request(`/api/posts/${postId}`)
   return data.post
+}
+
+export async function uploadPostImage(postId, file, altText = '') {
+  const csrfToken = await fetchCsrfToken()
+  const body = new FormData()
+  body.append('image', file)
+  if (altText) body.append('altText', altText)
+  const { data } = await request(`/api/posts/${postId}/images`, {
+    method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body,
+  })
+  return data.image
 }
 
 export async function createPost({ content, destinationId = null }) {

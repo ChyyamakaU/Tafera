@@ -9,6 +9,11 @@ const {
 } = require('../utils/safeDestination')
 const { PUBLIC_POST_FIELDS, toPost } = require('../utils/safePost')
 const { PUBLIC_PROFILE_FIELDS } = require('../utils/safeUser')
+const cloudinary = require('../config/cloudinary')
+const { CloudinaryUploadError } = require('../utils/destinationErrors')
+const { logSecurityEvent } = require('../utils/securityLog')
+const { ValidationError } = require('../utils/authErrors')
+const { uploadBuffer } = require('../utils/cloudinaryUpload')
 const {
   PostAccessDeniedError,
   PostNotFoundError,
@@ -20,6 +25,7 @@ const createPostService = ({
   User,
   Destination,
   DestinationImage,
+  PostImage,
   Follow,
 } = {}) => {
   const postModel = Post || require('../models').Post
@@ -28,6 +34,7 @@ const createPostService = ({
     Destination || require('../models').Destination
   const imageModel =
     DestinationImage || require('../models').DestinationImage
+  const postImageModel = PostImage || (Post ? null : require('../models').PostImage)
   const followModel = Follow || require('../models').Follow
 
   const destinationImagesInclude = {
@@ -51,6 +58,15 @@ const createPostService = ({
     required: false,
     include: [destinationImagesInclude],
   }
+
+  const postImagesInclude = postImageModel && postModel.associations?.images ? {
+    model: postImageModel,
+    as: 'images',
+    attributes: ['id', 'imageUrl', 'altText', 'displayOrder'],
+    required: false,
+    separate: true,
+    order: [['displayOrder', 'ASC'], ['id', 'ASC']],
+  } : null
 
   // Suspended authors are filtered at the query level so pagination totals and
   // public detail lookups never include hidden content.
@@ -79,7 +95,7 @@ const createPostService = ({
     postModel.findOne({
       where: { id: postId },
       attributes: [...PUBLIC_POST_FIELDS],
-      include: [authorInclude, destinationInclude],
+      include: [authorInclude, destinationInclude, ...(postImagesInclude ? [postImagesInclude] : [])],
     })
 
   const getPost = async (postId) => {
@@ -97,7 +113,7 @@ const createPostService = ({
     const { count, rows } = await postModel.findAndCountAll({
       where,
       attributes: [...PUBLIC_POST_FIELDS],
-      include: [authorInclude, destinationInclude],
+      include: [authorInclude, destinationInclude, ...(postImagesInclude ? [postImagesInclude] : [])],
       order: [
         ['createdAt', 'DESC'],
         ['id', 'DESC'],
@@ -213,7 +229,69 @@ const createPostService = ({
 
   const deletePost = async (userId, postId) => {
     const post = await findMutablePost(userId, postId)
+    const images = postImageModel
+      ? await postImageModel.findAll({ where: { postId }, attributes: ['publicId'] })
+      : []
+    for (const image of images) {
+      try {
+        await cloudinary.uploader.destroy(image.publicId, { resource_type: 'image' })
+      } catch (error) {
+        logSecurityEvent('post_image_cleanup_failed', { error: error.message, postId })
+      }
+    }
     await post.destroy()
+  }
+
+  const addPostImage = async (userId, postId, file, altText) => {
+    const post = await postModel.findOne({ where: { id: postId, userId }, attributes: ['id', 'content'] })
+    if (!post) throw new PostNotFoundError()
+    const count = await postImageModel.count({ where: { postId } })
+    if (count >= 10) throw new ValidationError([{ field: 'image', message: 'A post can contain at most 10 photos.' }])
+    let uploaded
+    try {
+      uploaded = await uploadBuffer(cloudinary, file.buffer, { resource_type: 'image', folder: 'tafera/posts' })
+    } catch (error) {
+      logSecurityEvent('post_image_upload_failed', { error: error.message, postId })
+      throw new CloudinaryUploadError()
+    }
+    try {
+      const image = await postImageModel.create({
+        postId,
+        imageUrl: uploaded.secure_url,
+        publicId: uploaded.public_id,
+        altText: altText || null,
+        displayOrder: count,
+      })
+      return { id: image.id, imageUrl: image.imageUrl, altText: image.altText, displayOrder: image.displayOrder, createdAt: image.createdAt, post: { id: post.id, content: post.content } }
+    } catch (error) {
+      try { await cloudinary.uploader.destroy(uploaded.public_id, { resource_type: 'image' }) } catch {}
+      throw error
+    }
+  }
+
+  const listUserMedia = async (userId, filters) => {
+    const { count, rows } = await postImageModel.findAndCountAll({
+      attributes: ['id', 'imageUrl', 'altText', 'displayOrder', 'createdAt'],
+      include: [{
+        model: postModel,
+        as: 'post',
+        attributes: ['id', 'content', 'createdAt'],
+        where: { userId },
+        required: true,
+        include: [authorInclude],
+      }],
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
+      limit: filters.limit,
+      offset: (filters.page - 1) * filters.limit,
+      distinct: true,
+    })
+    return {
+      media: rows.map((row) => {
+        const item = row.get({ plain: true })
+        return { id: item.id, imageUrl: item.imageUrl, altText: item.altText, displayOrder: item.displayOrder, createdAt: item.createdAt, post: { id: item.post.id, content: item.post.content, createdAt: item.post.createdAt } }
+      }),
+      pagination: createPagination({ page: filters.page, limit: filters.limit, total: count }),
+    }
   }
 
   return {
@@ -223,6 +301,8 @@ const createPostService = ({
     listFollowingPosts,
     listPosts,
     listUserPosts,
+    addPostImage,
+    listUserMedia,
     updatePost,
   }
 }

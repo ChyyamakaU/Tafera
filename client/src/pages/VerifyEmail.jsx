@@ -91,7 +91,7 @@ export default function VerifyEmail() {
 
   if (loading) {
     return (
-      <div className="max-w-md mx-auto py-24">
+      <div className="app-container max-w-md mx-auto py-24">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Verifying email...
@@ -106,7 +106,7 @@ export default function VerifyEmail() {
 
   if (verified) {
     return (
-      <div className="max-w-md mx-auto py-24">
+      <div className="app-container max-w-md mx-auto py-24">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Email verified!
@@ -125,7 +125,7 @@ export default function VerifyEmail() {
   }
 
   return (
-    <div className="max-w-md mx-auto py-24">
+    <div className="app-container max-w-md mx-auto py-24">
       <div className="text-center">
         <h2 className="text-2xl font-heading font-bold text-tafera-text">
           Verify email

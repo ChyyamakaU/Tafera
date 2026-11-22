@@ -11,7 +11,7 @@ const FOOTER_LINKS = [
 export default function Footer() {
   return (
     <footer className="mt-auto border-t border-tafera-border bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="app-container">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 py-8">
           <div className="flex flex-col md:flex-row items-center gap-4 text-tafera-text font-medium">
             <div className="flex items-center gap-3">

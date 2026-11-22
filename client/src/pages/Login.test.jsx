@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AuthProvider } from '../contexts/AuthContext'
 import Login from './Login'
 import Header from '../components/layout/Header'
@@ -23,12 +23,18 @@ const mockLogin = vi.mocked(login)
 const mockGetPendingAction = vi.mocked(getPendingAction)
 const mockClearPendingAction = vi.mocked(clearPendingAction)
 
+function LocationProbe() {
+  const location = useLocation()
+  return <span data-testid="current-route">{location.pathname}</span>
+}
+
 const renderLogin = () => {
   return render(
     <AuthProvider>
       <MemoryRouter initialEntries={['/login']}>
         <Login />
         <Header />
+        <LocationProbe />
       </MemoryRouter>
     </AuthProvider>
   )
@@ -49,6 +55,8 @@ describe('Login page rendering', () => {
     expect(screen.getByLabelText('Email address')).toBeInTheDocument()
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Log in' })).toBeInTheDocument()
+    expect(screen.getAllByText('Password')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument()
   })
 
   it('renders heading and links', () => {
@@ -146,8 +154,20 @@ describe('Login submission', () => {
     fireEvent.input(passwordInput, { target: { value: 'wrong' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Log in' }).closest('form'))
     await waitFor(() => {
-      expect(screen.getByText(/The email or password you entered is incorrect/)).toBeInTheDocument()
+      expect(screen.getByText('Invalid email or password.')).toBeInTheDocument()
     })
+  })
+
+  it('shows a clear connection message when login cannot reach the server', async () => {
+    const err = new Error('Failed to fetch')
+    err.isNetworkError = true
+    mockLogin.mockRejectedValue(err)
+    renderLogin()
+    fireEvent.input(screen.getByLabelText('Email address'), { target: { value: 'test@example.com' } })
+    fireEvent.input(screen.getByLabelText('Password'), { target: { value: 'secret' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Log in' }).closest('form'))
+    expect(await screen.findByText('Unable to connect to the server. Please check your internet connection and try again.')).toBeInTheDocument()
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument()
   })
 
   it('displays the user-friendly message for an expired session', async () => {
@@ -162,13 +182,13 @@ describe('Login submission', () => {
     fireEvent.input(passwordInput, { target: { value: 'wrong' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Log in' }).closest('form'))
     await waitFor(() => {
-      expect(screen.getByText('Your session has expired. Please sign in again.')).toBeInTheDocument()
+      expect(screen.getByText('Your session is no longer valid. Please sign in again.')).toBeInTheDocument()
     })
   })
 })
 
 describe('Login redirect behavior', () => {
-  it('redirects to / after successful login with no pending action', async () => {
+  it('redirects to the social feed after successful login with no pending action', async () => {
     mockLogin.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     renderLogin()
     const emailInput = screen.getByLabelText('Email address')
@@ -178,6 +198,9 @@ describe('Login redirect behavior', () => {
     fireEvent.submit(screen.getByRole('button', { name: 'Log in' }).closest('form'))
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('current-route')).toHaveTextContent('/social')
     })
   })
 

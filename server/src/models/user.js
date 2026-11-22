@@ -16,6 +16,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      username: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        unique: true,
+      },
+      city: { type: DataTypes.STRING(100), allowNull: true },
+      state: { type: DataTypes.STRING(100), allowNull: true },
+      websiteUrl: { type: DataTypes.STRING(500), allowNull: true },
+      instagramUrl: { type: DataTypes.STRING(500), allowNull: true },
+      tiktokUrl: { type: DataTypes.STRING(500), allowNull: true },
+      youtubeUrl: { type: DataTypes.STRING(500), allowNull: true },
       email: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -43,6 +54,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      profileImagePublicId: { type: DataTypes.STRING, allowNull: true },
       bio: {
         type: DataTypes.TEXT,
         allowNull: true,

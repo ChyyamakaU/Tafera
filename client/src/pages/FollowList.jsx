@@ -46,7 +46,7 @@ export default function FollowList() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto py-24 text-center">
+      <div className="app-container py-24 text-center">
         <div className="h-8 w-32 rounded-md border border-tafera-border bg-tafera-surface animate-pulse mx-auto" />
         <h2 className="mt-4 text-lg font-heading font-bold text-tafera-text">
           Loading {config.label.toLowerCase()}...
@@ -57,7 +57,7 @@ export default function FollowList() {
 
   if (error) {
     return (
-      <div className="max-w-2xl mx-auto py-24 text-center">
+      <div className="app-container py-24 text-center">
         <p className="text-sm text-red-700">{error}</p>
         <div className="mt-8 flex justify-center">
           <Link asChild to={`/users/${userId}`}>
@@ -69,7 +69,7 @@ export default function FollowList() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8 sm:px-6 lg:px-8">
+<div className="app-container py-8">
       <div className="mb-6 flex items-center gap-2">
         <Link
           to={`/users/${userId}`}

@@ -8,7 +8,8 @@ import {
   createPostComment,
   deletePost,
   deletePostComment,
-  fetchFollowingPosts,
+  fetchPersonalizedPosts,
+  fetchPublicPosts,
   fetchPost,
   fetchPostComments,
   updatePost,
@@ -20,12 +21,18 @@ vi.mock('../services/posts', () => ({
   createPostComment: vi.fn(),
   deletePost: vi.fn(),
   deletePostComment: vi.fn(),
-  fetchFollowingPosts: vi.fn(),
+  fetchPersonalizedPosts: vi.fn(),
+  fetchPublicPosts: vi.fn(),
   fetchPost: vi.fn(),
   fetchPostComments: vi.fn(),
   updatePost: vi.fn(),
   updatePostComment: vi.fn(),
 }))
+
+vi.mock('../services/destinations', () => ({ fetchFeaturedDestinations: vi.fn() }))
+vi.mock('../services/trips', () => ({ fetchPublicTrips: vi.fn(), fetchMyTrips: vi.fn() }))
+import { fetchFeaturedDestinations } from '../services/destinations'
+import { fetchPublicTrips, fetchMyTrips } from '../services/trips'
 
 const user = { id: 'current-user', fullName: 'Current User', role: 'user' }
 const post = {
@@ -61,27 +68,48 @@ const renderFeed = (auth = {}) => render(
 
 beforeEach(() => {
   vi.resetAllMocks()
-  fetchFollowingPosts.mockResolvedValue({ posts: [post], pagination })
+  fetchPersonalizedPosts.mockResolvedValue({ posts: [post], pagination })
   fetchPost.mockResolvedValue(post)
   fetchPostComments.mockResolvedValue({ comments: [comment], pagination })
+  fetchPublicPosts.mockResolvedValue([post])
+  fetchFeaturedDestinations.mockResolvedValue([])
+  fetchPublicTrips.mockResolvedValue({ trips: [] })
+  fetchMyTrips.mockResolvedValue({ trips: [] })
   window.confirm = vi.fn(() => true)
 })
 
 describe('SocialFeed', () => {
+  it('keeps the shared outer gutter and responsive three-column authenticated layout', () => {
+    const { container } = renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    const feed = container.querySelector('.app-container.grid')
+    expect(feed).toBeInTheDocument()
+    expect(feed.className).toContain('lg:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)_minmax(220px,0.95fr)]')
+  })
+
   it('loads the authenticated following feed and shows author and timestamp', async () => {
     renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
     expect(await screen.findByText('A trip to Kyoto')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Travel Friend' })).toHaveAttribute('href', '/users/author-1')
+    expect(screen.getAllByRole('link', { name: 'Travel Friend' })[0]).toHaveAttribute('href', '/users/author-1')
     expect(screen.getByText(/Nov 20, 2026/)).toBeInTheDocument()
-    expect(fetchFollowingPosts).toHaveBeenCalledWith({ page: 1 })
+    expect(fetchPersonalizedPosts).toHaveBeenCalledWith(user.id, { page: 1 })
+  })
+
+  it('shows real featured destinations and discoverable trips in the authenticated sidebars', async () => {
+    fetchFeaturedDestinations.mockResolvedValueOnce([{ id: 'destination-1', name: 'Lagos', slug: 'lagos', country: 'Nigeria' }])
+    fetchPublicTrips.mockResolvedValueOnce({ trips: [{ id: 'group-1', tripType: 'group', title: 'Explore Lagos', startDate: '2027-04-01', endDate: '2027-04-05' }] })
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    await waitFor(() => expect(document.querySelector('a[href="/destinations/lagos"]')).toBeInTheDocument())
+    expect(document.querySelector('a[href="/destinations/lagos"]')).toHaveTextContent('Lagos')
+    expect(screen.getByRole('link', { name: /Explore Lagos/ })).toHaveAttribute('href', '/trips/group-1')
+    expect(screen.getByRole('link', { name: /My trips/ })).toHaveAttribute('href', '/trips')
   })
 
   it('shows an empty state and an error state', async () => {
-    fetchFollowingPosts.mockResolvedValueOnce({ posts: [], pagination: { ...pagination, total: 0 } })
+    fetchPersonalizedPosts.mockResolvedValueOnce({ posts: [], pagination: { ...pagination, total: 0 } })
     renderFeed({ user, isAuthenticated: true })
     expect(await screen.findByText('Your feed is quiet')).toBeInTheDocument()
 
-    fetchFollowingPosts.mockRejectedValueOnce(Object.assign(new Error('feed unavailable'), { code: 'SERVICE_UNAVAILABLE', status: 503 }))
+    fetchPersonalizedPosts.mockRejectedValueOnce(Object.assign(new Error('feed unavailable'), { code: 'SERVICE_UNAVAILABLE', status: 503 }))
     renderFeed({ user, isAuthenticated: true })
     expect(await screen.findByRole('alert')).toHaveTextContent(/server is temporarily unavailable/i)
   })
@@ -111,7 +139,7 @@ describe('SocialFeed', () => {
 
   it('allows an owner to edit/delete their post and comment', async () => {
     const ownPost = { ...post, author: user }
-    fetchFollowingPosts.mockResolvedValue({ posts: [ownPost], pagination })
+    fetchPersonalizedPosts.mockResolvedValue({ posts: [ownPost], pagination })
     updatePost.mockResolvedValue({ ...ownPost, content: 'Edited post' })
     updatePostComment.mockResolvedValue({ ...comment, content: 'Edited comment' })
     renderFeed({ user, isAuthenticated: true, isEmailVerified: true })

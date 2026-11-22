@@ -56,10 +56,12 @@ export default function Login() {
       if (pendingAction?.returnTo) {
         navigate(pendingAction.returnTo)
       } else {
-        navigate('/')
+        navigate('/social')
       }
     } catch (err) {
-      setError(getErrorMessage(err))
+      // Preserve the backend's response message for actionable login errors;
+      // map only client-side/network failures to a friendly connection message.
+      setError(err.status ? err.message : getErrorMessage(err))
       setFieldErrors(
         Object.fromEntries(
           getFieldErrors(err).map((fe) => [fe.field, fe.message])
@@ -72,7 +74,7 @@ export default function Login() {
   const getFieldError = (field) => fieldErrors[field]
 
   return (
-    <div className="max-w-md mx-auto">
+    <div className="app-container max-w-md mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
           Log in
@@ -132,9 +134,6 @@ export default function Login() {
           )}
         </div>
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-tafera-text mb-1">
-            Password
-          </label>
           <PasswordInput
             id="password"
             value={password}
@@ -142,7 +141,6 @@ export default function Login() {
             autoComplete="current-password"
             required
             placeholder="••••••••"
-            label="Password"
             aria-invalid={Boolean(getFieldError('password'))}
             aria-describedby={getFieldError('password') ? 'password-error' : undefined}
           />

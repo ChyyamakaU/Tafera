@@ -87,7 +87,7 @@ export default function PublicProfile() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto py-24">
+      <div className="app-container py-24">
         <div className="text-center">
           <div className="h-8 w-32 rounded-md border border-tafera-border bg-tafera-surface animate-pulse mx-auto" />
           <h2 className="mt-4 text-lg font-heading font-bold text-tafera-text">
@@ -103,7 +103,7 @@ export default function PublicProfile() {
 
   if (error || !profile) {
     return (
-      <div className="max-w-2xl mx-auto py-24 text-center">
+      <div className="app-container py-24 text-center">
         {error && (
           <p className="text-sm text-red-700">{error}</p>
         )}
@@ -120,7 +120,7 @@ export default function PublicProfile() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8 sm:px-6 lg:px-8">
+<div className="app-container py-8">
       <div className="mb-8">
         <Link
           to="/"
@@ -140,11 +140,23 @@ export default function PublicProfile() {
             <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
               {profile.fullName}
             </h1>
+            {profile.username && <p className="mt-1 text-sm text-tafera-text-muted">@{profile.username}</p>}
+            {(profile.city || profile.state) && <p className="mt-1 text-sm text-tafera-text-muted">{[profile.city, profile.state, 'Nigeria'].filter(Boolean).join(', ')}</p>}
             {profile.bio && (
               <p className="mt-2 text-tafera-text-muted leading-relaxed">
                 {profile.bio}
               </p>
             )}
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              {[
+                ['websiteUrl', 'Website'],
+                ['instagramUrl', 'Instagram'],
+                ['tiktokUrl', 'TikTok'],
+                ['youtubeUrl', 'YouTube'],
+              ].filter(([field]) => profile[field]).map(([field, label]) => (
+                <a key={field} href={profile[field]} target="_blank" rel="noreferrer" className="font-medium text-tafera-primary hover:underline">{label}</a>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-center hidden sm:block">

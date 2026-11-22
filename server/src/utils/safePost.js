@@ -51,6 +51,12 @@ const toPost = (post) => {
     content: source.content,
     author: toPublicProfile(author),
     destination: toPostDestination(source.destination),
+    images: (Array.isArray(source.images) ? source.images : []).map((image) => ({
+      id: image.id,
+      imageUrl: image.imageUrl,
+      altText: image.altText ?? null,
+      displayOrder: Number(image.displayOrder) || 0,
+    })),
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   }

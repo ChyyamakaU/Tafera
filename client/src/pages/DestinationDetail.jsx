@@ -41,7 +41,7 @@ export default function DestinationDetail() {
   if (loading) {
     return (
       <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div className="app-container">
           <div className="flex items-center justify-center py-24">
             <div
               className="w-full max-w-lg h-64 rounded-md border border-tafera-border bg-tafera-surface animate-pulse"
@@ -55,7 +55,7 @@ export default function DestinationDetail() {
   if (error || !destination) {
     return (
       <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div className="app-container">
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <p className="text-tafera-text-muted mb-6">
               {error || 'Destination not found.'}
@@ -74,7 +74,7 @@ export default function DestinationDetail() {
 
   return (
     <section className="bg-tafera-bg min-h-svh">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div className="app-container py-8">
         <Link
           to="/destinations"
           className="inline-flex items-center gap-1.5 text-sm font-nav text-tafera-text-muted hover:text-tafera-accent transition-colors mb-8"

@@ -20,6 +20,7 @@ const {
 const {
   createRequireVerifiedEmail,
 } = require('../middlewares/requireVerifiedEmail')
+const { destinationImageUpload } = require('../middlewares/destinationImageUpload')
 
 const createPostsRouter = ({
   postService,
@@ -47,6 +48,7 @@ const createPostsRouter = ({
   const router = express.Router()
 
   router.post('/', ...protectWrite, controller.create)
+  router.post('/:postId/images', ...protectWrite, destinationImageUpload, controller.uploadImage)
   router.get('/', controller.list)
   // /following is a read-only feed scoped to the authenticated user. It must
   // be registered before /:postId so it is never treated as a post ID.

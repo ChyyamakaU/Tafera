@@ -38,7 +38,7 @@ export default function Destinations() {
   if (loading) {
     return (
       <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div className="app-container">
           <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
             Destinations
           </h1>
@@ -62,7 +62,7 @@ export default function Destinations() {
   if (error) {
     return (
       <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="app-container">
           <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
             Destinations
           </h1>
@@ -99,7 +99,7 @@ export default function Destinations() {
   if (!destinations || destinations.length === 0) {
     return (
       <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="app-container">
           <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
             Destinations
           </h1>
@@ -120,7 +120,7 @@ export default function Destinations() {
 
   return (
     <section className="py-16 bg-tafera-bg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="app-container">
         <div className="mb-12">
           <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl mb-4">
             Destinations

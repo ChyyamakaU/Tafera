@@ -117,6 +117,37 @@ const createCommentService = ({
     }
   }
 
+  const listUserComments = async (userId, filters) => {
+    const { count, rows } = await commentModel.findAndCountAll({
+      where: { userId },
+      attributes: [...PUBLIC_COMMENT_FIELDS],
+      include: [
+        commentAuthorInclude,
+        {
+          model: postModel,
+          as: 'post',
+          attributes: ['id', 'content', 'createdAt'],
+          required: true,
+          include: [postAuthorInclude],
+        },
+      ],
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
+      limit: filters.limit,
+      offset: (filters.page - 1) * filters.limit,
+      distinct: true,
+    })
+
+    return {
+      comments: rows.map((row) => {
+        const comment = toComment(row)
+        if (!comment) return null
+        const post = row.get({ plain: true }).post
+        return { ...comment, post: { id: post.id, content: post.content, createdAt: post.createdAt } }
+      }).filter(Boolean),
+      pagination: createPagination({ page: filters.page, limit: filters.limit, total: count }),
+    }
+  }
+
   const createComment = async (userId, postId, input) => {
     const post = await assertPostVisible(postId)
     const recipientId = post.author.id
@@ -194,6 +225,7 @@ const createCommentService = ({
     createComment,
     deleteComment,
     listComments,
+    listUserComments,
     updateComment,
   }
 }

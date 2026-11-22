@@ -1,6 +1,7 @@
 'use strict'
 
 const { ProfileNotFoundError } = require('../utils/profileErrors')
+const { ValidationError } = require('../utils/authErrors')
 const {
   PUBLIC_PROFILE_FIELDS,
   toPublicProfile,
@@ -27,7 +28,14 @@ const createProfileService = ({ User } = {}) => {
   const updateOwnProfile = async (user, input) => {
     // The validator has already stripped every field outside the profile
     // allowlist. Never spread req.body into update().
-    await user.update(input)
+    try {
+      await user.update(input)
+    } catch (error) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new ValidationError([{ field: 'username', message: 'That username is already in use.' }])
+      }
+      throw error
+    }
 
     return user
   }

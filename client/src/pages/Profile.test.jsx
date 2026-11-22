@@ -6,6 +6,7 @@ import Profile from './Profile'
 import {
   getProfile,
   updateProfile,
+  uploadProfileImage,
   checkAuth,
 } from '../services/auth'
 
@@ -22,10 +23,18 @@ vi.mock('../services/auth', () => ({
   setPendingAction: vi.fn(),
   getProfile: vi.fn(),
   updateProfile: vi.fn(),
+  uploadProfileImage: vi.fn(),
 }))
+
+vi.mock('../services/users', () => ({
+  fetchUserComments: vi.fn(),
+  fetchUserMedia: vi.fn(),
+}))
+vi.mock('../services/posts', () => ({ fetchUserPosts: vi.fn() }))
 
 const mockGetProfile = vi.mocked(getProfile)
 const mockUpdateProfile = vi.mocked(updateProfile)
+const mockUploadProfileImage = vi.mocked(uploadProfileImage)
 const mockCheckAuth = vi.mocked(checkAuth)
 
 const renderProfile = () => {
@@ -52,7 +61,7 @@ afterEach(() => {
 })
 
 describe('Profile page rendering', () => {
-  it('renders profile form elements', async () => {
+  it('shows a read-only profile until editing is requested', async () => {
     mockGetProfile.mockResolvedValue({
       data: {
         user: {
@@ -66,11 +75,17 @@ describe('Profile page rendering', () => {
     })
     renderProfile()
     await waitFor(() => {
-      expect(screen.getByLabelText('Full name')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument()
     })
+    expect(screen.queryByLabelText('Full name')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Profile' }))
+    expect(screen.getByLabelText('Full name')).toBeInTheDocument()
     expect(screen.getByLabelText('Bio')).toBeInTheDocument()
-    expect(screen.getByLabelText('Profile image URL')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Upload profile photo')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Posts' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Media' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Comments' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeInTheDocument()
   })
 
   it('shows error when profile fetch fails', async () => {
@@ -102,12 +117,11 @@ describe('Profile page rendering', () => {
       },
     })
     renderProfile()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
     await waitFor(() => {
       expect(screen.getByLabelText('Full name')).toHaveValue('Ada Lovelace')
       expect(screen.getByLabelText('Bio')).toHaveValue('Mathematician and writer.')
-      expect(screen.getByLabelText('Profile image URL')).toHaveValue(
-        'https://example.com/ada.jpg'
-      )
+      expect(screen.getByLabelText('Upload profile photo')).toBeInTheDocument()
     })
   })
 })
@@ -141,6 +155,7 @@ describe('Profile update', () => {
       },
     })
     renderProfile()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
     await waitFor(() => {
       expect(screen.getByLabelText('Full name')).toHaveValue('Test User')
     })
@@ -150,15 +165,18 @@ describe('Profile update', () => {
     fireEvent.input(screen.getByLabelText('Bio'), {
       target: { value: 'Updated bio.' },
     })
-    fireEvent.input(screen.getByLabelText('Profile image URL'), {
-      target: { value: 'https://example.com/new.jpg' },
-    })
-    fireEvent.submit(screen.getByRole('button', { name: 'Save changes' }).closest('form'))
+    fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form'))
     await waitFor(() => {
       expect(mockUpdateProfile).toHaveBeenCalledWith({
         fullName: 'Updated Name',
+        username: null,
         bio: 'Updated bio.',
-        profileImage: 'https://example.com/new.jpg',
+        city: null,
+        state: null,
+        websiteUrl: null,
+        instagramUrl: null,
+        tiktokUrl: null,
+        youtubeUrl: null,
       })
     })
     await waitFor(() => {
@@ -184,13 +202,14 @@ describe('Profile update', () => {
     })
     mockUpdateProfile.mockRejectedValue(new Error('Profile update failed.'))
     renderProfile()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
     await waitFor(() => {
       expect(screen.getByLabelText('Full name')).toHaveValue('Test User')
     })
     fireEvent.input(screen.getByLabelText('Full name'), {
       target: { value: 'Updated Name' },
     })
-    fireEvent.submit(screen.getByRole('button', { name: 'Save changes' }).closest('form'))
+    fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form'))
     await waitFor(() => {
       expect(screen.getByText(/Profile update failed/)).toBeInTheDocument()
     })
@@ -213,6 +232,7 @@ describe('Profile update', () => {
       },
     })
     renderProfile()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
     await waitFor(() => {
       expect(screen.getByLabelText('Full name')).toHaveValue('Test User')
     })
@@ -220,9 +240,34 @@ describe('Profile update', () => {
     fireEvent.input(screen.getByLabelText('Full name'), {
       target: { value: '' },
     })
-    fireEvent.submit(screen.getByRole('button', { name: 'Save changes' }).closest('form'))
+    fireEvent.submit(screen.getByRole('button', { name: 'Save profile' }).closest('form'))
     await waitFor(() => {
       expect(mockUpdateProfile).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('Traveller profile content and photo', () => {
+  it('loads profile posts on tab selection without navigating', async () => {
+    const { fetchUserPosts } = await import('../services/posts')
+    vi.mocked(fetchUserPosts).mockResolvedValue({ posts: [{ id: 'post-1', content: 'A trip to Abuja', createdAt: '2026-01-01' }] })
+    mockCheckAuth.mockResolvedValue({ isAuthenticated: true, user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true } })
+    mockGetProfile.mockResolvedValue({ data: { user: { id: '1', fullName: 'Test User' } } })
+    renderProfile()
+    await screen.findByRole('tab', { name: 'Media' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Posts' }))
+    expect(await screen.findByText('A trip to Abuja')).toBeInTheDocument()
+    expect(fetchUserPosts).toHaveBeenCalledWith('1', { page: 1, limit: 20 })
+  })
+
+  it('uploads an accepted device photo through the profile upload service', async () => {
+    mockCheckAuth.mockResolvedValue({ isAuthenticated: true, user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true } })
+    mockGetProfile.mockResolvedValue({ data: { user: { id: '1', fullName: 'Test User' } } })
+    mockUploadProfileImage.mockResolvedValue({ id: '1', fullName: 'Test User', profileImage: 'https://images.example/avatar.jpg' })
+    renderProfile()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
+    const file = new File(['image-bytes'], 'avatar.png', { type: 'image/png' })
+    fireEvent.change(await screen.findByLabelText('Upload profile photo'), { target: { files: [file] } })
+    await waitFor(() => expect(mockUploadProfileImage).toHaveBeenCalledWith(file))
   })
 })

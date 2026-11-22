@@ -7,6 +7,8 @@ const {
   parseUpdatePost,
   parseUserId,
 } = require('../validators/social')
+const { z } = require('zod')
+const { parseWith } = require('../validators/auth')
 
 const asyncHandler = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next)
@@ -75,6 +77,13 @@ const createPostController = ({ postService }) => ({
     noStore(res).status(204).end()
   }),
 
+  uploadImage: asyncHandler(async (req, res) => {
+    const { postId } = parsePostId(req.params)
+    const input = parseWith(z.object({ altText: z.string().trim().max(255).optional() }), req.body || {})
+    const image = await postService.addPostImage(req.auth.userId, postId, req.file, input.altText)
+    noStore(res).status(201).json({ data: { image } })
+  }),
+
   listByUser: asyncHandler(async (req, res) => {
     const { userId } = parseUserId(req.params)
     const filters = parsePaginationQuery(req.query)
@@ -86,6 +95,13 @@ const createPostController = ({ postService }) => ({
     noStore(res).status(200).json({
       data: { posts, pagination },
     })
+  }),
+
+  listMediaByUser: asyncHandler(async (req, res) => {
+    const { userId } = parseUserId(req.params)
+    const filters = parsePaginationQuery(req.query)
+    const result = await postService.listUserMedia(userId, filters)
+    noStore(res).status(200).json({ data: result })
   }),
 })
 

@@ -111,7 +111,7 @@ export default function Registration() {
 
   if (registrationComplete) {
     return (
-      <div className="max-w-md mx-auto py-24">
+      <div className="app-container max-w-md mx-auto py-24">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Account created!
@@ -195,7 +195,7 @@ export default function Registration() {
   }
 
   return (
-    <div className="max-w-md mx-auto">
+    <div className="app-container max-w-md mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
           Create an account

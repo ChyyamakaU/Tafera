@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 
 import Layout from './components/layout/Layout'
-import Home from './pages/Home'
+import HomeRoute from './components/auth/HomeRoute'
 import Destinations from './pages/Destinations'
 import Trips from './pages/Trips'
 import GroupTravel from './pages/GroupTravel'
@@ -23,7 +23,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
-        <Route index element={<Home />} />
+        <Route index element={<HomeRoute />} />
         <Route path="destinations" element={<Destinations />} />
         <Route path="trips" element={<Trips />} />
         <Route path="trips/:tripId" element={<TripDetail />} />

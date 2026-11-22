@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { useAuth } from '../contexts/AuthContext'
@@ -7,13 +7,17 @@ import {
   createPostComment,
   deletePost,
   deletePostComment,
-  fetchFollowingPosts,
+  fetchPersonalizedPosts,
+  fetchPublicPosts,
   fetchPost,
   fetchPostComments,
   updatePost,
   updatePostComment,
+  uploadPostImage,
 } from '../services/posts'
 import { getErrorMessage } from '../services/errors'
+import { fetchFeaturedDestinations } from '../services/destinations'
+import { fetchPublicTrips, fetchMyTrips } from '../services/trips'
 
 const inputClass =
   'w-full rounded-lg border border-tafera-border bg-white px-4 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
@@ -232,6 +236,8 @@ function PostCard({ post, user, canWrite, onPostUpdated, onPostDeleted }) {
         <p className="mt-4 whitespace-pre-wrap break-words text-tafera-text">{detail.content}</p>
       )}
 
+      {!editing && detail.images?.length > 0 && <div className="mt-4 grid grid-cols-2 gap-2">{detail.images.map((image) => <img key={image.id} src={image.imageUrl} alt={image.altText || 'Travel photo shared with this post'} className="max-h-96 w-full rounded-md object-cover" loading="lazy" />)}</div>}
+
       {detail.destination && (
         <Link to={`/destinations/${detail.destination.slug}`} className="mt-3 inline-block text-sm font-medium text-tafera-primary hover:underline">
           {detail.destination.name}
@@ -319,8 +325,42 @@ export default function SocialFeed() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
   const [content, setContent] = useState('')
+  const [postPhoto, setPostPhoto] = useState(null)
+  const postPhotoPreview = useMemo(() => postPhoto ? URL.createObjectURL(postPhoto) : null, [postPhoto])
   const [posting, setPosting] = useState(false)
+  const [discovery, setDiscovery] = useState({ destinations: [], groups: [], stories: [], trips: [] })
   const canWrite = isAuthenticated && isEmailVerified
+
+  useEffect(() => () => {
+    if (postPhotoPreview) URL.revokeObjectURL(postPhotoPreview)
+  }, [postPhotoPreview])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setDiscovery({ destinations: [], groups: [], stories: [], trips: [] })
+      return
+    }
+    let active = true
+    Promise.allSettled([
+      fetchFeaturedDestinations(3),
+      fetchPublicTrips({ page: 1, limit: 6 }),
+      fetchPublicPosts(8),
+      fetchMyTrips({ page: 1, limit: 3 }),
+    ]).then(([destinationsResult, groupsResult, storiesResult, tripsResult]) => {
+      if (!active) return
+      setDiscovery({
+        destinations: destinationsResult.status === 'fulfilled' ? destinationsResult.value : [],
+        groups: groupsResult.status === 'fulfilled'
+          ? (groupsResult.value.trips || []).filter((trip) => trip.tripType === 'group').slice(0, 3)
+          : [],
+        stories: storiesResult.status === 'fulfilled' ? storiesResult.value : [],
+        trips: tripsResult.status === 'fulfilled'
+          ? (tripsResult.value.trips || []).filter((trip) => trip.tripType === 'personal').slice(0, 3)
+          : [],
+      })
+    })
+    return () => { active = false }
+  }, [isAuthenticated])
 
   const loadFeed = useCallback(async (requestedPage = 1, append = false) => {
     if (!isAuthenticated) {
@@ -333,8 +373,15 @@ export default function SocialFeed() {
     else setLoading(true)
     setError(null)
     try {
-      const result = await fetchFollowingPosts({ page: requestedPage })
-      setPosts((current) => append ? [...current, ...result.posts] : result.posts)
+      const result = await fetchPersonalizedPosts(user.id, { page: requestedPage })
+      setPosts((current) => {
+        if (!append) return result.posts
+        const byId = new Map(current.map((post) => [post.id, post]))
+        for (const post of result.posts) byId.set(post.id, post)
+        return [...byId.values()].sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+      })
       setPagination(result.pagination)
       setPage(requestedPage)
     } catch (err) {
@@ -343,7 +390,7 @@ export default function SocialFeed() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, user?.id])
 
   useEffect(() => {
     if (!authLoading) loadFeed()
@@ -355,11 +402,21 @@ export default function SocialFeed() {
     setPosting(true)
     setError(null)
     try {
-      const post = await createPost({ content: content.trim() })
+      let post = await createPost({ content: content.trim() })
+      setPosts((current) => [post, ...current.filter((item) => item.id !== post.id)])
+      if (postPhoto) {
+        try {
+          await uploadPostImage(post.id, postPhoto)
+          post = await fetchPost(post.id)
+        } catch (photoError) {
+          setError(`Your post was published, but its photo could not be uploaded: ${getErrorMessage(photoError)}`)
+        }
+      }
       // The following feed excludes authors the user does not follow (including
       // potentially the current user); show the successful post immediately.
       setPosts((current) => [post, ...current.filter((item) => item.id !== post.id)])
       setContent('')
+      setPostPhoto(null)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -372,14 +429,34 @@ export default function SocialFeed() {
   }
 
   if (authLoading) {
-    return <div className="mx-auto max-w-2xl py-16 text-center text-tafera-text-muted">Checking your session...</div>
+    return <div className="app-container py-10 text-center text-tafera-text-muted sm:py-16">Checking your session...</div>
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <header className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">Social Feed</h1>
-        <p className="mt-2 text-tafera-text-muted">Updates from the travellers you follow.</p>
+    <div className={`app-container grid grid-cols-1 gap-5 py-2 sm:py-4 lg:gap-6 ${isAuthenticated ? 'lg:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)_minmax(220px,0.95fr)]' : ''}`}>
+      {isAuthenticated && <aside className="order-2 space-y-4 lg:order-none lg:col-start-1 lg:row-start-1" aria-label="Your travel shortcuts">
+        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
+          <div className="flex items-center gap-3">
+            {user?.profileImage ? <img className="h-12 w-12 rounded-full object-cover" src={user.profileImage} alt="" /> : <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-tafera-bg text-lg font-semibold text-tafera-primary">{user?.fullName?.slice(0, 1) || 'T'}</span>}
+            <div className="min-w-0"><h2 className="truncate font-heading font-bold text-tafera-text">{user?.fullName || 'Your profile'}</h2><Link to="/profile" className="text-sm font-medium text-tafera-primary hover:underline">View profile</Link></div>
+          </div>
+          {user?.bio && <p className="mt-3 line-clamp-3 text-sm text-tafera-text-muted">{user.bio}</p>}
+          {!isEmailVerified && <p className="mt-3 text-xs text-tafera-text-muted"><Link to="/verify-email" className="text-tafera-primary hover:underline">Verify your email</Link> to post and join conversations.</p>}
+        </section>
+        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
+          <h2 className="mb-3 font-heading font-bold text-tafera-text">Your travel</h2>
+          <nav aria-label="Travel shortcuts" className="space-y-1">
+            <Link to="/trips" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">My trips{discovery.trips.length > 0 ? ` · ${discovery.trips.length}` : ''}</Link>
+            <Link to="/scrapbooks" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">Scrapbooks</Link>
+            <Link to="/destinations" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">Explore destinations</Link>
+            <Link to="/group-travel" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">Group trips</Link>
+          </nav>
+        </section>
+      </aside>}
+      <div className="order-1 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1">
+      <header className="mb-5 sm:mb-7">
+        <h1 className="font-heading text-xl font-bold text-tafera-text sm:text-2xl">Social Feed</h1>
+        <p className="mt-1 text-sm text-tafera-text-muted sm:mt-2 sm:text-base">Share your journeys, meet travellers, and follow their stories.</p>
       </header>
 
       {!isAuthenticated && (
@@ -390,9 +467,21 @@ export default function SocialFeed() {
       )}
 
       {canWrite ? (
-        <form onSubmit={submitPost} className="mb-6 rounded-lg border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:p-6">
+        <form onSubmit={submitPost} className="mb-5 rounded-lg border border-tafera-border bg-tafera-surface p-4 shadow-soft sm:mb-6 sm:p-6">
           <label htmlFor="new-post" className="mb-2 block font-semibold text-tafera-text">Share a travel update</label>
-          <textarea id="new-post" className={inputClass} rows="4" maxLength="5000" placeholder="What are you exploring?" value={content} onChange={(event) => setContent(event.target.value)} required />
+          <textarea id="new-post" className={inputClass} rows="3" maxLength="5000" placeholder="What are you exploring?" value={content} onChange={(event) => setContent(event.target.value)} required />
+          <label className="mt-3 block text-sm text-tafera-text-muted">Attach one travel photo (JPEG, PNG or WebP, up to 5 MB)<input className={`${inputClass} mt-1`} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (!file) return
+            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+              setError('Choose a JPEG, PNG or WebP image no larger than 5 MB.')
+              event.target.value = ''
+              return
+            }
+            setPostPhoto(file)
+            setError(null)
+          }} /></label>
+          {postPhotoPreview && <div className="mt-3 flex items-center gap-3"><img src={postPhotoPreview} alt="Selected post photo preview" className="h-20 w-20 rounded-md object-cover" /><button type="button" className="text-sm text-tafera-primary underline" onClick={() => setPostPhoto(null)}>Remove photo</button></div>}
           <div className="mt-3 flex items-center justify-between gap-3">
             <span className="text-xs text-tafera-text-muted">Up to 5,000 characters</span>
             <Button type="submit" disabled={posting || !content.trim()}>{posting ? 'Publishing...' : 'Publish post'}</Button>
@@ -417,16 +506,16 @@ export default function SocialFeed() {
       )}
 
       {loading ? (
-        <div className="space-y-4" aria-label="Loading feed">
+        <div className="space-y-3 sm:space-y-4" aria-label="Loading feed">
           {[1, 2, 3].map((item) => <div key={item} className="h-36 animate-pulse rounded-lg border border-tafera-border bg-tafera-surface" />)}
         </div>
       ) : posts.length === 0 && !error ? (
-        isAuthenticated && <div className="rounded-lg border border-tafera-border bg-tafera-surface px-6 py-12 text-center">
+        isAuthenticated && <div className="rounded-lg border border-tafera-border bg-tafera-surface px-4 py-8 text-center sm:px-6 sm:py-12">
           <h2 className="font-heading text-lg font-bold text-tafera-text">Your feed is quiet</h2>
           <p className="mt-2 text-sm text-tafera-text-muted">Follow travellers to see their travel updates here.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {posts.map((post) => (
             <PostCard
               key={post.id}
@@ -446,6 +535,31 @@ export default function SocialFeed() {
           )}
         </div>
       )}
+      </div>
+      {isAuthenticated && <aside className="order-3 space-y-4 lg:order-none lg:col-start-3 lg:row-start-1" aria-label="Discover travel community">
+        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-heading font-bold text-tafera-text">Travellers to discover</h2><Link to="/social" className="text-xs font-medium text-tafera-primary hover:underline">Stories</Link></div>
+          {(() => {
+            const seen = new Set([user?.id])
+            const people = discovery.stories.filter((post) => {
+              const author = post.author
+              if (!author?.id || seen.has(author.id)) return false
+              seen.add(author.id)
+              return true
+            }).slice(0, 4)
+            return people.length ? <ul className="space-y-3">{people.map((post) => <li key={post.author.id} className="flex min-w-0 items-center gap-3"><Link to={`/users/${post.author.id}`} className="flex min-w-0 items-center gap-2 hover:underline"><span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-tafera-bg font-semibold text-tafera-primary">{post.author.profileImage ? <img className="h-full w-full object-cover" src={post.author.profileImage} alt="" /> : post.author.fullName?.slice(0, 1) || '?'}</span><span className="truncate text-sm font-medium text-tafera-text">{post.author.fullName}</span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">Traveller profiles will appear here as public community stories become available.</p>
+          })()}
+          <p className="mt-3 text-xs text-tafera-text-muted">Open a profile to learn more and follow their journeys.</p>
+        </section>
+        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-heading font-bold text-tafera-text">Popular destinations</h2><Link to="/destinations" className="text-xs font-medium text-tafera-primary hover:underline">Explore</Link></div>
+          {discovery.destinations.length ? <ul className="space-y-3">{discovery.destinations.map((destination) => <li key={destination.id}><Link to={`/destinations/${destination.slug}`} className="group flex items-center gap-3">{destination.coverImage?.imageUrl ? <img className="h-12 w-14 shrink-0 rounded-md object-cover" src={destination.coverImage.imageUrl} alt={destination.coverImage.altText || ''} loading="lazy" /> : <span aria-hidden="true" className="h-12 w-14 shrink-0 rounded-md bg-white" />}<span className="min-w-0"><span className="block truncate text-sm font-semibold text-tafera-text group-hover:text-tafera-primary">{destination.name}</span><span className="block truncate text-xs text-tafera-text-muted">{destination.location || destination.country}</span></span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">No featured destinations are available right now.</p>}
+        </section>
+        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-heading font-bold text-tafera-text">Group trips</h2><Link to="/group-travel" className="text-xs font-medium text-tafera-primary hover:underline">See all</Link></div>
+          {discovery.groups.length ? <ul className="space-y-3">{discovery.groups.map((trip) => <li key={trip.id}><Link to={`/trips/${trip.id}`} className="block rounded-md bg-white p-3 hover:ring-1 hover:ring-tafera-primary"><span className="block truncate text-sm font-semibold text-tafera-text">{trip.title}</span><span className="mt-1 block text-xs text-tafera-text-muted">{trip.startDate} – {trip.endDate}</span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">No published group trips to discover yet.</p>}
+        </section>
+      </aside>}
     </div>
   )
 }

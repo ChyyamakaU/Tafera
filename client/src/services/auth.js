@@ -1,4 +1,4 @@
-import { request, API_BASE } from './api'
+import { request } from './api'
 
 export async function checkAuth() {
   try {
@@ -10,14 +10,8 @@ export async function checkAuth() {
 }
 
 export async function fetchCsrfToken() {
-  const res = await fetch(`${API_BASE}/api/auth/csrf`, {
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    throw new Error('Failed to fetch CSRF token')
-  }
-  const data = await res.json()
-  return data.data.csrfToken
+  const { data } = await request('/api/auth/csrf')
+  return data.csrfToken
 }
 
 export async function register({ fullName, email, password }) {
@@ -61,16 +55,26 @@ export async function getProfile() {
   return data
 }
 
-export async function updateProfile({ fullName, bio, profileImage }) {
+export async function updateProfile(input) {
   const csrfToken = await fetchCsrfToken()
   const { data } = await request('/api/users/me', {
     method: 'PATCH',
     headers: {
       'X-CSRF-Token': csrfToken,
     },
-    body: JSON.stringify({ fullName, bio, profileImage }),
+    body: JSON.stringify(input),
   })
   return data
+}
+
+export async function uploadProfileImage(file) {
+  const csrfToken = await fetchCsrfToken()
+  const body = new FormData()
+  body.append('image', file)
+  const { data } = await request('/api/users/me/profile-image', {
+    method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body,
+  })
+  return data.user
 }
 
 export async function verifyEmail({ token }) {

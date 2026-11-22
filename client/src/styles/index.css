@@ -42,6 +42,17 @@ html {
   scroll-behavior: smooth;
 }
 
+.app-container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: 15px;
+}
+
+/* Match the visitor homepage's section gutter (60px section + 15px inner). */
+@media (min-width: 768px) {
+  .app-container { padding-inline: 75px; }
+}
+
 body {
   font-family: var(--font-body);
   background-color: var(--color-tafera-bg);

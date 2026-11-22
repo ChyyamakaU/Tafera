@@ -27,34 +27,35 @@ export default function PasswordInput({
   const inputClassName = `w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors pr-12 ${className}`
 
   return (
-    <div className="relative w-full">
+    <div className="w-full">
       <label
         htmlFor={id}
         className="block text-sm font-medium text-tafera-text mb-1"
       >
         {label}
       </label>
-      <input
-        id={id}
-        type={visible ? 'text' : 'password'}
-        autoComplete={autoComplete}
-        required={required}
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        className={inputClassName}
-        placeholder={placeholder}
-        aria-describedby={ariaDescribedby}
-        aria-invalid={ariaInvalid}
-        {...inputProps}
-      />
-      <button
-        type="button"
-        onClick={toggleVisibility}
-        aria-label={visible ? 'Hide password' : 'Show password'}
-        aria-pressed={visible}
-        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-tafera-text-muted hover:text-tafera-text focus:outline-none focus:ring-2 focus:ring-tafera-primary focus:ring-offset-2 transition-colors"
-      >
+      <div className="relative">
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          required={required}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          className={inputClassName}
+          placeholder={placeholder}
+          aria-describedby={ariaDescribedby}
+          aria-invalid={ariaInvalid}
+          {...inputProps}
+        />
+        <button
+          type="button"
+          onClick={toggleVisibility}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          aria-pressed={visible}
+          className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-tafera-text-muted hover:text-tafera-text focus:outline-none focus:ring-2 focus:ring-tafera-primary focus:ring-offset-2 transition-colors"
+        >
         {visible ? (
           <svg
             className="w-4 h-4"
@@ -86,7 +87,8 @@ export default function PasswordInput({
             />
           </svg>
         )}
-      </button>
+        </button>
+      </div>
     </div>
   )
 }

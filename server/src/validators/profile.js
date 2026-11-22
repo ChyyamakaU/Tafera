@@ -5,7 +5,6 @@ const { fullNameSchema, parseWith } = require('./auth')
 
 const BIO_MAX_LENGTH = 500
 const PROFILE_IMAGE_MAX_LENGTH = 255
-
 const emptyStringToNull = (value) =>
   typeof value === 'string' && value.trim() === '' ? null : value
 
@@ -20,6 +19,21 @@ const isHttpUrl = (value) => {
     return false
   }
 }
+
+const optionalText = (max, label) => z.preprocess(
+  emptyStringToNull,
+  z.string({ message: `${label} must be a string.` }).trim().max(max, `${label} must be at most ${max} characters long.`).nullable(),
+).optional()
+
+const usernameSchema = z.preprocess(
+  emptyStringToNull,
+  z.string().trim().toLowerCase().regex(/^[a-z0-9_]{3,30}$/, 'Username must be 3–30 characters using letters, numbers or underscores.').nullable(),
+).optional()
+
+const optionalUrl = (label) => z.preprocess(
+  emptyStringToNull,
+  z.string().trim().max(500, `${label} must be at most 500 characters long.`).nullable().refine((value) => value === null || isHttpUrl(value), `Enter a valid http or https ${label.toLowerCase()}.`),
+).optional()
 
 const bioSchema = z
   .preprocess(
@@ -56,8 +70,15 @@ const profileImageSchema = z
 const updateProfileSchema = z
   .object({
     fullName: fullNameSchema.optional(),
+    username: usernameSchema,
     bio: bioSchema,
     profileImage: profileImageSchema,
+    city: optionalText(100, 'City'),
+    state: optionalText(100, 'State'),
+    websiteUrl: optionalUrl('website URL'),
+    instagramUrl: optionalUrl('Instagram URL'),
+    tiktokUrl: optionalUrl('TikTok URL'),
+    youtubeUrl: optionalUrl('YouTube URL'),
   })
   .refine((input) => Object.keys(input).length > 0, {
     message: 'Provide at least one profile field to update.',

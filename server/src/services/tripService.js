@@ -612,6 +612,7 @@ const createTripService = ({
     deleteTrip,
     getTrip,
     listTrips,
+    listPublicTrips,
     reorderStops,
     updateStop,
     updateTrip,

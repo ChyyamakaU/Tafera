@@ -25,6 +25,7 @@ const {
   toPublicScrapbookJournalSummary,
 } = require('../utils/safeScrapbook')
 const { createPagination } = require('../utils/pagination')
+const { uploadBuffer } = require('../utils/cloudinaryUpload')
 
 const MAX_IMAGES_PER_JOURNAL = 50
 
@@ -372,7 +373,8 @@ const createScrapbookService = ({
     // Upload to Cloudinary before creating the database record.
     let uploadResult
     try {
-      uploadResult = await cloudinaryServiceInstance.uploader.upload(
+      uploadResult = await uploadBuffer(
+        cloudinaryServiceInstance,
         file.buffer,
         {
           resource_type: 'image',
@@ -382,6 +384,12 @@ const createScrapbookService = ({
     } catch (error) {
       logSecurityEvent('cloudinary_upload_failed', {
         error: error.message,
+        providerCode: error.http_code || error.code || null,
+        cloudinaryConfigured: Boolean(
+          cloudinaryServiceInstance.config?.().cloud_name &&
+          cloudinaryServiceInstance.config?.().api_key &&
+          cloudinaryServiceInstance.config?.().api_secret,
+        ),
         journalId,
       })
       throw new CloudinaryUploadError()

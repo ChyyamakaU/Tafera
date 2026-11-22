@@ -8,6 +8,16 @@ export async function getPublicProfile(userId) {
   return data.user
 }
 
+export async function fetchUserComments(userId, { page = 1, limit = 20 } = {}) {
+  const { data } = await request(`/api/users/${userId}/comments?page=${page}&limit=${limit}`)
+  return data
+}
+
+export async function fetchUserMedia(userId, { page = 1, limit = 20 } = {}) {
+  const { data } = await request(`/api/users/${userId}/media?page=${page}&limit=${limit}`)
+  return data
+}
+
 export async function followUser(userId) {
   const csrfToken = await fetchCsrfToken()
   const { data } = await request(`/api/users/${userId}/follow`, {

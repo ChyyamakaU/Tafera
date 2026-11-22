@@ -1,34 +1,53 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { useAuth } from '../contexts/AuthContext'
-import { getProfile, updateProfile } from '../services/auth'
+import { getProfile, updateProfile, uploadProfileImage } from '../services/auth'
+import { fetchUserComments, fetchUserMedia } from '../services/users'
+import { fetchUserPosts } from '../services/posts'
 import { getErrorMessage, getFieldErrors } from '../services/errors'
+import { NIGERIAN_STATES } from '../constants/nigeriaStates'
+
+const PROFILE_FIELDS = ['fullName', 'username', 'bio', 'city', 'state', 'websiteUrl', 'instagramUrl', 'tiktokUrl', 'youtubeUrl']
+const initialForm = {
+  fullName: '', username: '', bio: '', city: '', state: '', websiteUrl: '',
+  instagramUrl: '', tiktokUrl: '', youtubeUrl: '',
+}
+const inputClass = 'w-full rounded-lg border border-tafera-border bg-white px-3 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const TABS = ['Posts', 'Media', 'Comments']
 
 export default function Profile() {
   const { isAuthenticated } = useAuth()
   const [profile, setProfile] = useState(null)
+  const [form, setForm] = useState(initialForm)
+  const [activeTab, setActiveTab] = useState('Posts')
+  const [tabData, setTabData] = useState({ Posts: [], Media: [], Comments: [] })
   const [loading, setLoading] = useState(true)
+  const [tabLoading, setTabLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
   const [success, setSuccess] = useState(false)
-  const [form, setForm] = useState({
-    fullName: '',
-    bio: '',
-    profileImage: '',
-  })
+  const [isEditing, setIsEditing] = useState(false)
+  const [avatarFile, setAvatarFile] = useState(null)
   const navigate = useNavigate()
+  const avatarPreview = useMemo(() => avatarFile ? URL.createObjectURL(avatarFile) : null, [avatarFile])
+
+  useEffect(() => () => { if (avatarPreview) URL.revokeObjectURL(avatarPreview) }, [avatarPreview])
+
+  const applyProfile = (user) => {
+    setProfile(user)
+    setForm(Object.fromEntries(PROFILE_FIELDS.map((field) => [field, user[field] || ''])))
+  }
 
   const loadProfile = async () => {
+    setLoading(true)
+    setError(null)
     try {
       const response = await getProfile()
-      const user = response.data.user
-      setProfile(user)
-      setForm({
-        fullName: user.fullName || '',
-        bio: user.bio || '',
-        profileImage: user.profileImage || '',
-      })
+      applyProfile(response.data.user)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -44,189 +63,121 @@ export default function Profile() {
     loadProfile()
   }, [isAuthenticated, navigate])
 
-  const handleChange = (field) => (e) => {
-    setForm({ ...form, [field]: e.target.value })
+  const loadTab = async (tab) => {
+    setActiveTab(tab)
+    if (!profile || tabData[tab]?.length) return
+    setTabLoading(true)
     setError(null)
-    setSuccess(false)
-    setFieldErrors({})
-  }
-
-  const validate = () => {
-    const { fullName } = form
-    if (!fullName || fullName.trim().length < 2) {
-      return 'Full name must be at least 2 characters long.'
+    try {
+      const load = tab === 'Posts'
+        ? fetchUserPosts(profile.id, { page: 1, limit: 20 })
+        : tab === 'Media'
+          ? fetchUserMedia(profile.id, { page: 1, limit: 20 })
+          : fetchUserComments(profile.id, { page: 1, limit: 20 })
+      const data = await load
+      setTabData((current) => ({ ...current, [tab]: data.posts || data.media || data.comments || [] }))
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setTabLoading(false)
     }
-    return null
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+  const handleSave = async (event) => {
+    event.preventDefault()
     setError(null)
     setSuccess(false)
     setFieldErrors({})
-
-    const validationError = validate()
-    if (validationError) {
-      setError(validationError)
-      setLoading(false)
+    if (form.fullName.trim().length < 2) {
+      setError('Full name must be at least 2 characters long.')
       return
     }
-
+    setSaving(true)
     try {
-      const response = await updateProfile({
-        fullName: form.fullName.trim(),
-        bio: form.bio.trim(),
-        profileImage: form.profileImage.trim(),
-      })
-      setProfile(response.data.user)
-      setForm({
-        fullName: response.data.user.fullName || '',
-        bio: response.data.user.bio || '',
-        profileImage: response.data.user.profileImage || '',
-      })
+      const input = Object.fromEntries(PROFILE_FIELDS.map((field) => [field, form[field].trim() || null]))
+      input.fullName = form.fullName.trim()
+      const response = await updateProfile(input)
+      applyProfile(response.data.user)
+      setSuccess(true)
+      setIsEditing(false)
+    } catch (err) {
+      setError(getErrorMessage(err))
+      setFieldErrors(Object.fromEntries(getFieldErrors(err).map((item) => [item.field, item.message])))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAvatar = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setError(null)
+    if (!IMAGE_TYPES.includes(file.type) || file.size > MAX_AVATAR_BYTES) {
+      setError('Choose a JPEG, PNG or WebP image no larger than 5 MB.')
+      event.target.value = ''
+      return
+    }
+    setAvatarFile(file)
+    setSaving(true)
+    try {
+      const updated = await uploadProfileImage(file)
+      applyProfile(updated)
+      setAvatarFile(null)
       setSuccess(true)
     } catch (err) {
       setError(getErrorMessage(err))
-      setFieldErrors(
-        Object.fromEntries(
-          getFieldErrors(err).map((fe) => [fe.field, fe.message])
-        )
-      )
     } finally {
-      setLoading(false)
+      setSaving(false)
+      event.target.value = ''
     }
   }
 
-  const getFieldError = (field) => fieldErrors[field]
-
-  if (loading) {
-    return (
-      <div className="max-w-md mx-auto py-24">
-        <div className="text-center">
-          <h2 className="text-2xl font-heading font-bold text-tafera-text">
-            Loading profile...
-          </h2>
-          <p className="mt-2 text-tafera-text-muted">
-            Please wait while we load your profile.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <main className="app-container py-16"><div className="animate-pulse rounded-lg border border-tafera-border bg-tafera-surface p-10 text-center">Loading your traveller profile…</div></main>
 
   return (
-    <div className="max-w-md mx-auto py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
-          Profile
-        </h1>
-        <p className="mt-2 text-tafera-text-muted">
-          Manage your profile settings.
-        </p>
-      </div>
+    <main className="app-container py-6 sm:py-10">
+      <header className="mb-6 sm:mb-8"><h1 className="font-heading text-2xl font-bold text-tafera-text sm:text-3xl">Traveller profile</h1><p className="mt-1 text-sm text-tafera-text-muted sm:text-base">Share who you are and the journeys you’ve made.</p></header>
+      {error && <div role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}<button onClick={loadProfile} className="ml-2 underline">Retry</button></div>}
+      {success && <p role="status" className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">Profile updated successfully.</p>}
 
-      {error && (
-        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
-          {error}
-        </div>
-      )}
+      <section className="overflow-hidden rounded-xl border border-tafera-border bg-tafera-surface">
+        {profile?.coverImage ? <img src={profile.coverImage} alt="Profile cover" className="h-24 w-full object-cover sm:h-36" /> : <div className="h-24 bg-gradient-to-r from-tafera-primary/15 via-tafera-accent/20 to-tafera-primary/10 sm:h-36" aria-hidden="true" />}
+        <div className="grid grid-cols-1 gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(200px,0.65fr)_minmax(0,1.7fr)]">
+          <div className="-mt-12 sm:-mt-16">
+            {profile?.profileImage ? <img src={profile.profileImage} alt={`${profile?.fullName || 'Your'} profile photo`} className="h-24 w-24 rounded-full border-4 border-tafera-surface bg-white object-cover sm:h-32 sm:w-32" /> : <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-tafera-surface bg-white text-3xl font-bold text-tafera-primary sm:h-32 sm:w-32">{profile?.fullName?.slice(0, 1) || 'T'}</div>}
+            <p className="mt-4 text-sm text-tafera-text-muted">Your traveller card</p>
+            <h2 className="mt-1 break-words font-heading text-xl font-bold text-tafera-text">{profile?.fullName}</h2>
+            {profile?.username && <p className="text-sm text-tafera-text-muted">@{profile.username}</p>}
+            {(profile?.city || profile?.state) && <p className="mt-2 text-sm text-tafera-text-muted">{[profile.city, profile.state, 'Nigeria'].filter(Boolean).join(', ')}</p>}
+            {profile?.bio && <p className="mt-3 whitespace-pre-wrap text-sm text-tafera-text">{profile.bio}</p>}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">{[['websiteUrl', 'Website'], ['instagramUrl', 'Instagram'], ['tiktokUrl', 'TikTok'], ['youtubeUrl', 'YouTube']].filter(([key]) => profile?.[key]).map(([key, label]) => <a key={key} href={profile[key]} target="_blank" rel="noreferrer" className="text-tafera-primary hover:underline">{label}</a>)}</div>
+            <Button className="mt-4" onClick={() => { setError(null); setIsEditing(true) }}>Edit Profile</Button>
+          </div>
 
-      {success && (
-        <div className="mb-6 p-3 rounded-md bg-green-50 border border-green-200 text-green-700 text-sm">
-          Profile updated successfully.
+          {isEditing && <form onSubmit={handleSave} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-tafera-text sm:col-span-2">Profile photo<div className="mt-1 flex items-center gap-3">{avatarPreview && <img src={avatarPreview} alt="Selected profile photo preview" className="h-12 w-12 rounded-full object-cover" />}<input className={inputClass} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatar} disabled={saving} aria-label="Upload profile photo" /></div><span className="text-xs text-tafera-text-muted">JPEG, PNG or WebP · up to 5 MB</span></label>
+            <label className="text-sm font-medium text-tafera-text">Full name<input className={inputClass} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required maxLength="100" aria-invalid={Boolean(fieldErrors.fullName)} /></label>
+            <label className="text-sm font-medium text-tafera-text">Username<input className={inputClass} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="e.g. ada_travels" maxLength="30" aria-describedby="username-help" aria-invalid={Boolean(fieldErrors.username)} /><span id="username-help" className="text-xs text-tafera-text-muted">3–30 letters, numbers or underscores.</span></label>
+            {fieldErrors.username && <p className="text-xs text-red-700 sm:col-span-2">{fieldErrors.username}</p>}
+            <label className="text-sm font-medium text-tafera-text sm:col-span-2">Bio<textarea className={inputClass} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} rows="3" maxLength="500" placeholder="A little about your travels…" /></label>
+            <label className="text-sm font-medium text-tafera-text">City<input className={inputClass} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} maxLength="100" placeholder="Lagos" /></label>
+            <label className="text-sm font-medium text-tafera-text">Nigerian state / territory<select className={inputClass} value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}><option value="">Select a state or territory</option>{NIGERIAN_STATES.map((state) => <option key={state} value={state}>{state}</option>)}</select></label>
+            {[['websiteUrl', 'Personal website'], ['instagramUrl', 'Instagram URL'], ['tiktokUrl', 'TikTok URL'], ['youtubeUrl', 'YouTube URL']].map(([field, label]) => <label key={field} className="text-sm font-medium text-tafera-text">{label}<input className={inputClass} type="url" value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} placeholder="https://…" /></label>)}
+            {Object.entries(fieldErrors).filter(([field]) => field !== 'username').map(([field, message]) => <p key={field} className="text-xs text-red-700 sm:col-span-2">{message}</p>)}
+            <div className="flex gap-2 sm:col-span-2"><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</Button><Button type="button" variant="ghost" onClick={() => { setIsEditing(false); setAvatarFile(null); setFieldErrors({}) }}>Cancel</Button></div>
+          </form>}
         </div>
-      )}
+      </section>
 
-      <form
-        className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6"
-        onSubmit={handleSubmit}
-      >
-        <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-tafera-text mb-1">
-            Full name
-          </label>
-          <input
-            id="fullName"
-            type="text"
-            autoComplete="name"
-            required
-            value={form.fullName}
-            onChange={handleChange('fullName')}
-            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
-              getFieldError('fullName') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
-            }`}
-            placeholder="Ada Lovelace"
-            aria-invalid={Boolean(getFieldError('fullName'))}
-            aria-describedby={getFieldError('fullName') ? 'fullName-error' : undefined}
-          />
-          {getFieldError('fullName') && (
-            <p id="fullName-error" className="mt-1 text-sm text-red-700">
-              {getFieldError('fullName')}
-            </p>
-          )}
+      <section className="mt-7 sm:mt-10" aria-label="Profile content">
+        <div role="tablist" aria-label="Traveller content" className="flex overflow-x-auto border-b border-tafera-border">
+          {TABS.map((tab) => <button key={tab} role="tab" id={`profile-tab-${tab.toLowerCase()}`} aria-selected={activeTab === tab} aria-controls="profile-tab-panel" onClick={() => loadTab(tab)} className={`min-w-[6rem] border-b-2 px-5 py-3 text-sm font-semibold ${activeTab === tab ? 'border-tafera-primary text-tafera-primary' : 'border-transparent text-tafera-text-muted hover:text-tafera-text'}`}>{tab}</button>)}
         </div>
-        <div>
-          <label htmlFor="bio" className="block text-sm font-medium text-tafera-text mb-1">
-            Bio
-          </label>
-          <textarea
-            id="bio"
-            autoComplete="off"
-            value={form.bio}
-            onChange={handleChange('bio')}
-            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
-              getFieldError('bio') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
-            }`}
-            rows={4}
-            placeholder="Tell us a bit about yourself..."
-            aria-invalid={Boolean(getFieldError('bio'))}
-            aria-describedby={getFieldError('bio') ? 'bio-error' : undefined}
-          />
-          {getFieldError('bio') && (
-            <p id="bio-error" className="mt-1 text-sm text-red-700">
-              {getFieldError('bio')}
-            </p>
-          )}
+        <div role="tabpanel" id="profile-tab-panel" aria-labelledby={`profile-tab-${activeTab.toLowerCase()}`} className="min-h-48 py-5">
+          {tabLoading ? <p className="py-10 text-center text-sm text-tafera-text-muted">Loading {activeTab.toLowerCase()}…</p> : activeTab === 'Posts' ? tabData.Posts.length ? <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">{tabData.Posts.map((post) => <li key={post.id} className="rounded-lg border border-tafera-border bg-tafera-surface p-4"><p className="whitespace-pre-wrap break-words text-sm text-tafera-text">{post.content}</p>{post.images?.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{post.images.map((image) => <img key={image.id} src={image.imageUrl} alt={image.altText || ''} className="aspect-square w-full rounded-md object-cover" loading="lazy" />)}</div>}<p className="mt-3 text-xs text-tafera-text-muted">{new Date(post.createdAt).toLocaleDateString()}</p></li>)}</ul> : <p className="py-10 text-center text-sm text-tafera-text-muted">You haven’t shared any posts yet.</p> : activeTab === 'Media' ? tabData.Media.length ? <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tabData.Media.map((media) => <li key={media.id} className="overflow-hidden rounded-lg border border-tafera-border bg-tafera-surface"><img src={media.imageUrl} alt={media.altText || 'Shared travel photo'} className="aspect-square w-full object-cover" loading="lazy" /><p className="line-clamp-2 p-2 text-xs text-tafera-text-muted">{media.post?.content}</p></li>)}</ul> : <p className="py-10 text-center text-sm text-tafera-text-muted">Photos shared with posts will appear here. Add a photo when publishing a post in the Social Feed.</p> : tabData.Comments.length ? <ul className="space-y-3">{tabData.Comments.map((comment) => <li key={comment.id} className="rounded-lg border border-tafera-border bg-tafera-surface p-4"><p className="whitespace-pre-wrap break-words text-sm text-tafera-text">{comment.content}</p><p className="mt-2 text-xs text-tafera-text-muted">On: “{comment.post?.content}” · {new Date(comment.createdAt).toLocaleDateString()}</p></li>)}</ul> : <p className="py-10 text-center text-sm text-tafera-text-muted">You haven’t commented on any posts yet.</p>}
         </div>
-        <div>
-          <label htmlFor="profileImage" className="block text-sm font-medium text-tafera-text mb-1">
-            Profile image URL
-          </label>
-          <input
-            id="profileImage"
-            type="url"
-            autoComplete="off"
-            value={form.profileImage}
-            onChange={handleChange('profileImage')}
-            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
-              getFieldError('profileImage') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
-            }`}
-            placeholder="https://example.com/photo.jpg"
-            aria-invalid={Boolean(getFieldError('profileImage'))}
-            aria-describedby={getFieldError('profileImage') ? 'profileImage-error' : undefined}
-          />
-          {getFieldError('profileImage') && (
-            <p id="profileImage-error" className="mt-1 text-sm text-red-700">
-              {getFieldError('profileImage')}
-            </p>
-          )}
-        </div>
-        <Button
-          type="submit"
-          variant="primary"
-          className="w-full"
-          disabled={loading}
-        >
-          {loading ? 'Saving...' : 'Save changes'}
-        </Button>
-      </form>
-
-      <div className="mt-10 flex justify-end">
-        <Link asChild to="/">
-          <Button variant="ghost">Back to home</Button>
-        </Link>
-      </div>
-    </div>
+      </section>
+      <div className="mt-6"><Link to="/" className="text-sm font-medium text-tafera-primary hover:underline">Back to home</Link></div>
+    </main>
   )
 }

@@ -46,6 +46,16 @@ describe('request() fetch options', () => {
     expect(init.headers['X-CSRF-Token']).toBe('csrf-token-123')
   })
 
+  it('leaves multipart Content-Type to the browser so the boundary is included', async () => {
+    fetch.mockResolvedValue(mockResponse(true, 201, { data: {} }))
+    const body = new FormData()
+    body.append('image', new File(['image'], 'photo.png', { type: 'image/png' }))
+    await request('/api/scrapbooks/journal-id/images', { method: 'POST', body })
+    const [, init] = fetch.mock.calls[0]
+    expect(init.body).toBe(body)
+    expect(init.headers['Content-Type']).toBeUndefined()
+  })
+
   it('retains credentials: include', async () => {
     fetch.mockResolvedValue(mockResponse(true, 200, { data: {} }))
 
@@ -84,6 +94,32 @@ describe('request() fetch options', () => {
     await expect(request('/api/auth/register', { method: 'POST', body: '{}' })).rejects.toThrow(
       'Bad request',
     )
+  })
+
+  it('extracts the wrapped backend authentication error and status', async () => {
+    fetch.mockResolvedValue(mockResponse(false, 401, {
+      error: {
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid email or password.',
+        status: 401,
+      },
+    }))
+
+    await expect(request('/api/auth/login', { method: 'POST', body: '{}' })).rejects.toMatchObject({
+      message: 'Invalid email or password.',
+      code: 'INVALID_CREDENTIALS',
+      status: 401,
+    })
+  })
+
+  it('wraps fetch failures as a clear network connection error', async () => {
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(request('/api/auth/csrf')).rejects.toMatchObject({
+      message: 'Unable to connect to the server. Please check your internet connection and try again.',
+      code: 'NETWORK_ERROR',
+      isNetworkError: true,
+    })
   })
 
   it('returns null for successful 204 responses without parsing an empty body', async () => {

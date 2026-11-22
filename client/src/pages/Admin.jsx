@@ -3,7 +3,7 @@ import { Button } from '../components/common/Button'
 
 export default function Admin() {
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="app-container max-w-2xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
           Admin

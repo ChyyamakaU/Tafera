@@ -3,7 +3,7 @@ import { Button } from '../components/common/Button'
 
 export default function NotFound() {
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="app-container max-w-2xl mx-auto">
       <div className="mb-8 text-center">
         <h1 className="text-6xl font-heading font-bold text-tafera-primary">
           404
