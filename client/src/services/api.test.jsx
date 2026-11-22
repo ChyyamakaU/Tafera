@@ -85,4 +85,12 @@ describe('request() fetch options', () => {
       'Bad request',
     )
   })
+
+  it('returns null for successful 204 responses without parsing an empty body', async () => {
+    const json = vi.fn()
+    fetch.mockResolvedValue({ ok: true, status: 204, json })
+
+    await expect(request('/api/posts/post-id', { method: 'DELETE' })).resolves.toBeNull()
+    expect(json).not.toHaveBeenCalled()
+  })
 })
