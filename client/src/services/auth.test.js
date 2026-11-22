@@ -10,6 +10,9 @@ import {
   setPendingAction,
   verifyEmail,
   resendVerification,
+  uploadProfileImage,
+  getProfile,
+  updateProfile,
 } from './auth'
 import { API_BASE } from './api'
 
@@ -172,6 +175,48 @@ describe('logout', () => {
       .mockResolvedValueOnce(mockResponse(false, 500, { message: 'Server error' }))
 
     await expect(logout()).rejects.toThrow('Server error')
+  })
+})
+
+describe('uploadProfileImage', () => {
+  it('posts the device image with CSRF and cookies and returns the response user', async () => {
+    const user = { id: 'user-1', profileImage: 'https://images.example/profile.jpg' }
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { user } }))
+    const file = new File(['image-data'], 'profile.jpg', { type: 'image/jpeg' })
+
+    await expect(uploadProfileImage(file)).resolves.toEqual(user)
+    expect(fetch).toHaveBeenNthCalledWith(1, `${API_BASE}/api/auth/csrf`, expect.objectContaining({ credentials: 'include' }))
+    const [url, options] = fetch.mock.calls[1]
+    expect(url).toBe(`${API_BASE}/api/users/me/profile-image`)
+    expect(options).toMatchObject({ method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': 'csrf-token' } })
+    expect(options.body).toBeInstanceOf(FormData)
+    expect(options.body.get('image')).toBe(file)
+  })
+})
+
+describe('profile API responses', () => {
+  it('unwraps the authenticated profile user from the API envelope', async () => {
+    const user = { id: 'user-1', fullName: 'Ada Lovelace' }
+    fetch.mockResolvedValueOnce(mockResponse(true, 200, { data: { user } }))
+
+    await expect(getProfile()).resolves.toEqual(user)
+    expect(fetch).toHaveBeenCalledWith(`${API_BASE}/api/users/me`, expect.objectContaining({
+      method: 'GET',
+      credentials: 'include',
+    }))
+  })
+
+  it('unwraps an updated profile user from the API envelope', async () => {
+    const user = { id: 'user-1', fullName: 'Ada Lovelace' }
+    fetch
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { csrfToken: 'csrf-token' } }))
+      .mockResolvedValueOnce(mockResponse(true, 200, { data: { user } }))
+
+    await expect(updateProfile({ fullName: user.fullName })).resolves.toEqual(user)
+    expect(fetch.mock.calls[1][0]).toBe(`${API_BASE}/api/users/me`)
+    expect(fetch.mock.calls[1][1].headers['X-CSRF-Token']).toBe('csrf-token')
   })
 })
 

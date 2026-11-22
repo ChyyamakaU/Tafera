@@ -37,8 +37,20 @@ class ScrapbookImageLimitExceededError extends AuthError {
   }
 }
 
+class ScrapbookImageUploadUnavailableError extends AuthError {
+  constructor() {
+    super({
+      message: 'Scrapbook photo storage is temporarily unavailable. Please try again later.',
+      code: 'SCRAPBOOK_IMAGE_UPLOAD_UNAVAILABLE',
+      status: 503,
+    })
+    this.name = 'ScrapbookImageUploadUnavailableError'
+  }
+}
+
 module.exports = {
   ScrapbookImageLimitExceededError,
   ScrapbookImageNotFoundError,
+  ScrapbookImageUploadUnavailableError,
   ScrapbookNotFoundError,
 }

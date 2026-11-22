@@ -111,7 +111,7 @@ export default function Registration() {
 
   if (registrationComplete) {
     return (
-      <div className="app-container max-w-md mx-auto py-24">
+      <div className="app-container max-w-3xl mx-auto py-16 sm:py-24">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Account created!
@@ -195,12 +195,13 @@ export default function Registration() {
   }
 
   return (
-    <div className="app-container max-w-md mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-tafera-text sm:text-3xl">
+    <div className="app-container max-w-3xl mx-auto py-8 sm:py-12 lg:py-16">
+      <div className="mb-8 text-center sm:mb-10">
+        <p className="inline-flex rounded-full bg-tafera-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">Join the community</p>
+        <h1 className="mt-4 text-3xl font-heading font-bold text-tafera-text sm:text-4xl lg:text-5xl">
           Create an account
         </h1>
-        <p className="mt-2 text-tafera-text-muted">
+        <p className="mx-auto mt-3 max-w-xl text-base text-tafera-text-muted sm:text-lg">
           Join Tafera and start planning your journeys.
         </p>
       </div>
@@ -212,11 +213,11 @@ export default function Registration() {
       )}
 
       <form
-        className="rounded-lg border border-tafera-border bg-tafera-surface p-8 shadow-soft space-y-6"
+        className="space-y-7 rounded-2xl border border-tafera-border bg-tafera-surface p-6 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-base"
         onSubmit={handleSubmit}
       >
         <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-tafera-text mb-1">
+          <label htmlFor="fullName" className="mb-2 block font-medium text-tafera-text">
             Full name
           </label>
           <input
@@ -226,7 +227,7 @@ export default function Registration() {
             required
             value={form.fullName}
             onChange={handleChange('fullName')}
-            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+            className={`h-14 w-full rounded-lg border border-tafera-border px-4 text-base focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
               getFieldError('fullName') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
             }`}
             placeholder="Ada Lovelace"
@@ -240,7 +241,7 @@ export default function Registration() {
           )}
         </div>
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-tafera-text mb-1">
+          <label htmlFor="email" className="mb-2 block font-medium text-tafera-text">
             Email address
           </label>
           <input
@@ -250,7 +251,7 @@ export default function Registration() {
             required
             value={form.email}
             onChange={handleChange('email')}
-            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+            className={`h-14 w-full rounded-lg border border-tafera-border px-4 text-base focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
               getFieldError('email') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
             }`}
             placeholder="you@example.com"
@@ -272,6 +273,7 @@ export default function Registration() {
             value={form.password}
             onChange={handleChange('password')}
             autoComplete="new-password"
+            className="h-14 text-base"
             required
             placeholder="••••••••"
             label="Password"
@@ -287,7 +289,7 @@ export default function Registration() {
         <Button
           type="submit"
           variant="primary"
-          className="w-full"
+          className="min-h-14 w-full text-base"
           disabled={loading}
         >
           {loading ? 'Creating account...' : 'Create account'}

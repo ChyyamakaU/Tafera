@@ -52,7 +52,7 @@ export async function getProfile() {
   const { data } = await request('/api/users/me', {
     method: 'GET',
   })
-  return data
+  return data.user
 }
 
 export async function updateProfile(input) {
@@ -64,7 +64,7 @@ export async function updateProfile(input) {
     },
     body: JSON.stringify(input),
   })
-  return data
+  return data.user
 }
 
 export async function uploadProfileImage(file) {

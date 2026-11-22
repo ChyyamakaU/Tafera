@@ -61,17 +61,26 @@ afterEach(() => {
 })
 
 describe('Profile page rendering', () => {
+  it('waits for session restoration before loading the current user profile', async () => {
+    let restoreSession
+    mockCheckAuth.mockReturnValue(new Promise((resolve) => { restoreSession = resolve }))
+    mockGetProfile.mockResolvedValue({ id: '1', fullName: 'Restored traveller' })
+    renderProfile()
+
+    expect(mockGetProfile).not.toHaveBeenCalled()
+    restoreSession({ isAuthenticated: true, user: { id: '1', fullName: 'Restored traveller' } })
+
+    expect(await screen.findByRole('button', { name: 'Edit Profile' })).toBeInTheDocument()
+    expect(mockGetProfile).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a read-only profile until editing is requested', async () => {
     mockGetProfile.mockResolvedValue({
-      data: {
-        user: {
           id: '1',
           email: 'test@example.com',
           fullName: 'Test User',
           bio: 'A test user.',
           profileImage: 'https://example.com/photo.jpg',
-        },
-      },
     })
     renderProfile()
     await waitFor(() => {
@@ -106,15 +115,11 @@ describe('Profile page rendering', () => {
       user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true },
     })
     mockGetProfile.mockResolvedValue({
-      data: {
-        user: {
           id: '1',
           email: 'test@example.com',
           fullName: 'Ada Lovelace',
           bio: 'Mathematician and writer.',
           profileImage: 'https://example.com/ada.jpg',
-        },
-      },
     })
     renderProfile()
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
@@ -133,26 +138,18 @@ describe('Profile update', () => {
       user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true },
     })
     mockGetProfile.mockResolvedValue({
-      data: {
-        user: {
           id: '1',
           email: 'test@example.com',
           fullName: 'Test User',
           bio: '',
           profileImage: '',
-        },
-      },
     })
     mockUpdateProfile.mockResolvedValue({
-      data: {
-        user: {
           id: '1',
           email: 'test@example.com',
           fullName: 'Updated Name',
           bio: 'Updated bio.',
           profileImage: 'https://example.com/new.jpg',
-        },
-      },
     })
     renderProfile()
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
@@ -190,15 +187,11 @@ describe('Profile update', () => {
       user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true },
     })
     mockGetProfile.mockResolvedValue({
-      data: {
-        user: {
           id: '1',
           email: 'test@example.com',
           fullName: 'Test User',
           bio: '',
           profileImage: '',
-        },
-      },
     })
     mockUpdateProfile.mockRejectedValue(new Error('Profile update failed.'))
     renderProfile()
@@ -221,15 +214,11 @@ describe('Profile update', () => {
       user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true },
     })
     mockGetProfile.mockResolvedValue({
-      data: {
-        user: {
           id: '1',
           email: 'test@example.com',
           fullName: 'Test User',
           bio: '',
           profileImage: '',
-        },
-      },
     })
     renderProfile()
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))
@@ -252,7 +241,7 @@ describe('Traveller profile content and photo', () => {
     const { fetchUserPosts } = await import('../services/posts')
     vi.mocked(fetchUserPosts).mockResolvedValue({ posts: [{ id: 'post-1', content: 'A trip to Abuja', createdAt: '2026-01-01' }] })
     mockCheckAuth.mockResolvedValue({ isAuthenticated: true, user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true } })
-    mockGetProfile.mockResolvedValue({ data: { user: { id: '1', fullName: 'Test User' } } })
+    mockGetProfile.mockResolvedValue({ id: '1', fullName: 'Test User' })
     renderProfile()
     await screen.findByRole('tab', { name: 'Media' })
     fireEvent.click(screen.getByRole('tab', { name: 'Posts' }))
@@ -262,7 +251,7 @@ describe('Traveller profile content and photo', () => {
 
   it('uploads an accepted device photo through the profile upload service', async () => {
     mockCheckAuth.mockResolvedValue({ isAuthenticated: true, user: { id: '1', email: 'test@example.com', fullName: 'Test User', emailVerified: true } })
-    mockGetProfile.mockResolvedValue({ data: { user: { id: '1', fullName: 'Test User' } } })
+    mockGetProfile.mockResolvedValue({ id: '1', fullName: 'Test User' })
     mockUploadProfileImage.mockResolvedValue({ id: '1', fullName: 'Test User', profileImage: 'https://images.example/avatar.jpg' })
     renderProfile()
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Profile' }))

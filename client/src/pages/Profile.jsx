@@ -19,7 +19,7 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const TABS = ['Posts', 'Media', 'Comments']
 
 export default function Profile() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState(initialForm)
   const [activeTab, setActiveTab] = useState('Posts')
@@ -47,7 +47,7 @@ export default function Profile() {
     setError(null)
     try {
       const response = await getProfile()
-      applyProfile(response.data.user)
+      applyProfile(response)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -56,12 +56,13 @@ export default function Profile() {
   }
 
   useEffect(() => {
+    if (authLoading) return
     if (!isAuthenticated) {
       navigate('/login')
       return
     }
     loadProfile()
-  }, [isAuthenticated, navigate])
+  }, [authLoading, isAuthenticated, navigate])
 
   const loadTab = async (tab) => {
     setActiveTab(tab)
@@ -97,7 +98,7 @@ export default function Profile() {
       const input = Object.fromEntries(PROFILE_FIELDS.map((field) => [field, form[field].trim() || null]))
       input.fullName = form.fullName.trim()
       const response = await updateProfile(input)
-      applyProfile(response.data.user)
+      applyProfile(response)
       setSuccess(true)
       setIsEditing(false)
     } catch (err) {

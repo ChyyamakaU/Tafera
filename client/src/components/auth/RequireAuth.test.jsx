@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthContext } from '../../contexts/AuthContext'
 import { RequireAuth, RequireAdmin } from './RequireAuth'
+import { AuthProvider } from '../../contexts/AuthContext'
 import {
   checkAuth as checkAuthService,
   setPendingAction,
@@ -58,6 +59,26 @@ afterEach(() => {
 })
 
 describe('RequireAuth', () => {
+  it('waits for server session restoration before allowing protected content or redirecting', async () => {
+    let restoreSession
+    mockCheckAuth.mockReturnValue(new Promise((resolve) => { restoreSession = resolve }))
+
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <AuthProvider>
+          <RequireAuth><div data-testid="protected-content">Profile</div></RequireAuth>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
+    expect(mockSetPendingAction).not.toHaveBeenCalled()
+    restoreSession({ isAuthenticated: true, user: { id: '1', role: 'user' } })
+
+    expect(await screen.findByTestId('protected-content')).toBeInTheDocument()
+    expect(mockSetPendingAction).not.toHaveBeenCalled()
+  })
+
   it('displays a loading state while authentication is being checked', () => {
     renderWithAuth(
       <RequireAuth>

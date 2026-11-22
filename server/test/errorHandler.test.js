@@ -13,6 +13,7 @@ const errorHandler = require('../src/middlewares/errorHandler')
 const {
   PasswordServiceBusyError,
 } = require('../src/services/passwordService')
+const { ScrapbookImageUploadUnavailableError } = require('../src/utils/scrapbookErrors')
 
 const createResponse = () => ({
   headersSent: false,
@@ -99,5 +100,27 @@ test('unrelated 503 responses remain generic', () => {
       res.body.error.message.includes('internal connection details'),
       false,
     )
+  })
+})
+
+test('scrapbook image storage failures return a useful safe 503 message', () => {
+  withSilencedErrorLog(() => {
+    const res = createResponse()
+    const error = new ScrapbookImageUploadUnavailableError()
+    error.providerMessage = 'must never be exposed'
+
+    errorHandler(error, { method: 'POST', originalUrl: '/api/scrapbooks/id/images' }, res, () => {
+      throw new Error('next must not be called')
+    })
+
+    assert.equal(res.statusCode, 503)
+    assert.deepEqual(res.body, {
+      error: {
+        code: 'SCRAPBOOK_IMAGE_UPLOAD_UNAVAILABLE',
+        message: 'Scrapbook photo storage is temporarily unavailable. Please try again later.',
+        status: 503,
+      },
+    })
+    assert.equal(JSON.stringify(res.body).includes('must never be exposed'), false)
   })
 })

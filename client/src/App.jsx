@@ -34,7 +34,7 @@ function App() {
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Registration />} />
         <Route path="verify-email" element={<VerifyEmail />} />
-        <Route path="profile" element={<Profile />} />
+        <Route path="profile" element={<RequireAuth><Profile /></RequireAuth>} />
         <Route path="users/:userId" element={<PublicProfile />} />
         <Route path="users/:userId/followers" element={<FollowList />} />
         <Route path="users/:userId/following" element={<FollowList />} />

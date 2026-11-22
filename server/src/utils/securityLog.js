@@ -8,6 +8,9 @@ const SAFE_FIELDS = Object.freeze([
   'errorCode',
   'operation',
   'outcome',
+  'providerCode',
+  'providerMessage',
+  'providerStatus',
   'reason',
   'role',
 ])

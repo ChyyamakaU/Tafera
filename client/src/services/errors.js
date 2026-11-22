@@ -51,6 +51,7 @@ const CODE_MESSAGES = {
   // Service / network
   SERVICE_UNAVAILABLE: 'The server is temporarily unavailable. Please try again later.',
   CLOUDINARY_UPLOAD_ERROR: 'This photo could not be uploaded because image storage is not configured. Please contact support or try again later.',
+  SCRAPBOOK_IMAGE_UPLOAD_UNAVAILABLE: 'Scrapbook photo storage is temporarily unavailable. Please try again later.',
   CLOUDINARY_DELETE_ERROR: 'This photo could not be deleted from image storage. Please try again later.',
   EMAIL_DELIVERY_UNAVAILABLE:
     'Email delivery is not available right now. Please try again later.',

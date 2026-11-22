@@ -461,10 +461,15 @@ const createHarness = async () => {
         ScrapbookImage,
         cloudinaryService: {
           uploader: {
-            upload: async function () {
+            upload_stream: function (options, callback) {
+              assert.equal(options.agent.options.family, 4)
               return {
-                secure_url: 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg',
-                public_id: 'tafera/scrapbooks/photo',
+                end: function () {
+                  callback(null, {
+                    secure_url: 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg',
+                    public_id: 'tafera/scrapbooks/photo',
+                  })
+                },
               }
             },
             destroy: async function () {
@@ -557,6 +562,14 @@ test('owner can upload a valid JPEG image to their journal', async (t) => {
     assert.equal(response.body.data.image.isCover, true)
     assert.equal(response.body.data.image.publicId, undefined)
     assert.equal(response.body.data.image.imageUrl, 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg')
+
+    // Reload the image list from the database, as the scrapbook UI does after
+    // an upload and when revisiting the journal.
+    const refreshed = await client.get(`/api/scrapbooks/${journal.id}/images`)
+    assert.equal(refreshed.status, 200)
+    assert.equal(refreshed.body.data.images.length, 1)
+    assert.equal(refreshed.body.data.images[0].id, response.body.data.image.id)
+    assert.equal(refreshed.body.data.images[0].imageUrl, response.body.data.image.imageUrl)
   } finally {
     await harness.close()
   }

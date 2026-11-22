@@ -52,6 +52,11 @@ afterEach(() => {
 describe('Login page rendering', () => {
   it('renders login form elements', () => {
     renderLogin()
+    const form = screen.getByRole('button', { name: 'Log in' }).closest('form')
+    expect(form.className).toContain('rounded-2xl')
+    expect(form.className).toContain('sm:p-10')
+    expect(screen.getByLabelText('Email address').className).toContain('h-14')
+    expect(screen.getByRole('button', { name: 'Log in' }).className).toContain('min-h-14')
     expect(screen.getByLabelText('Email address')).toBeInTheDocument()
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Log in' })).toBeInTheDocument()

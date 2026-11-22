@@ -65,6 +65,11 @@ afterEach(() => {
 describe('Registration rendering', () => {
   it('renders registration form elements', () => {
     renderRegistration()
+    const form = screen.getByRole('button', { name: 'Create account' }).closest('form')
+    expect(form.className).toContain('rounded-2xl')
+    expect(form.className).toContain('sm:p-10')
+    expect(screen.getByLabelText('Full name').className).toContain('h-14')
+    expect(screen.getByRole('button', { name: 'Create account' }).className).toContain('min-h-14')
     expect(screen.getByLabelText('Full name')).toBeInTheDocument()
     expect(screen.getByLabelText('Email address')).toBeInTheDocument()
     expect(screen.getByLabelText('Password')).toBeInTheDocument()

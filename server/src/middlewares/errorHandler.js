@@ -160,6 +160,15 @@ const normalizeError = (err) => {
     }
   }
 
+  if (err.code === 'SCRAPBOOK_IMAGE_UPLOAD_UNAVAILABLE' && status === 503) {
+    return {
+      status: 503,
+      code: 'SCRAPBOOK_IMAGE_UPLOAD_UNAVAILABLE',
+      message: 'Scrapbook photo storage is temporarily unavailable. Please try again later.',
+      isPublicServiceError: true,
+    }
+  }
+
   if (err.expose && status < 500) {
     return {
       status,

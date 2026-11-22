@@ -9,6 +9,7 @@ const { createScrapbookService } = require('../src/services/scrapbookService')
 const {
   ScrapbookImageLimitExceededError,
   ScrapbookImageNotFoundError,
+  ScrapbookImageUploadUnavailableError,
   ScrapbookNotFoundError,
 } = require('../src/utils/scrapbookErrors')
 const { MAX_IMAGES_PER_DESTINATION } = require('../src/validators/destination')
@@ -605,7 +606,7 @@ test('deleteScrapbookJournal deletes associated images', async () => {
 })
 
 test('addScrapbookImage adds an image to a journal', async () => {
-  const { service } = createService({
+  const { service, calls } = createService({
     journalFindOneResults: [buildJournal()],
   })
 
@@ -620,6 +621,62 @@ test('addScrapbookImage adds an image to a journal', async () => {
   assert.equal(result.altText, 'A scenic view')
   assert.equal(result.caption, 'A caption')
   assert.equal(result.takenAt, '2026-01-15')
+  assert.equal(calls.imageCreate.length, 1)
+  assert.equal(calls.imageCreate[0].journalId, JOURNAL_ID)
+  assert.equal(calls.imageCreate[0].imageUrl, result.imageUrl)
+  assert.equal(calls.imageCreate[0].publicId, 'tafera/scrapbooks/photo1')
+})
+
+test('addScrapbookImage uses the IPv4 Cloudinary agent and reports provider failure safely', async () => {
+  let optionsSeen
+  const cloudinaryService = {
+    uploader: {
+      upload_stream(options, callback) {
+        optionsSeen = options
+        return {
+          end() {
+            callback(null, {
+              secure_url: 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg',
+              public_id: 'tafera/scrapbooks/photo1',
+            })
+          },
+        }
+      },
+      destroy: async () => ({ result: 'ok' }),
+    },
+  }
+  const { service, calls } = createService({
+    cloudinaryService,
+    journalFindOneResults: [buildJournal()],
+  })
+
+  await service.addScrapbookImage(USER_ID, JOURNAL_ID, { buffer: Buffer.from('image') }, {})
+
+  assert.equal(optionsSeen.agent.options.family, 4)
+  assert.equal(optionsSeen.agent.options.keepAlive, true)
+  assert.equal(calls.imageCreate.length, 1)
+  assert.equal(calls.imageCreate[0].publicId, 'tafera/scrapbooks/photo1')
+
+  const failingService = createService({
+    cloudinaryService: {
+      uploader: {
+        upload_stream(_options, callback) {
+          return { end: () => callback(Object.assign(new Error('private transport details'), { code: 'ETIMEDOUT' })) }
+        },
+      },
+    },
+    journalFindOneResults: [buildJournal()],
+  }).service
+  await assert.rejects(
+    failingService.addScrapbookImage(USER_ID, JOURNAL_ID, { buffer: Buffer.from('image') }, {}),
+    (error) => {
+      assert.ok(error instanceof ScrapbookImageUploadUnavailableError)
+      assert.equal(error.status, 503)
+      assert.match(error.message, /temporarily unavailable/i)
+      assert.equal(error.message.includes('private transport details'), false)
+      return true
+    },
+  )
 })
 
 test('addScrapbookImage rejects when journal does not exist', async () => {

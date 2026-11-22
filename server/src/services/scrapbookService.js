@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 'use strict'
 
+const https = require('node:https')
 const { Op } = require('sequelize')
 const cloudinary = require('../config/cloudinary')
 const { logSecurityEvent } = require('../utils/securityLog')
@@ -8,10 +9,10 @@ const { ValidationError } = require('../utils/authErrors')
 const {
   ScrapbookImageLimitExceededError,
   ScrapbookImageNotFoundError,
+  ScrapbookImageUploadUnavailableError,
   ScrapbookNotFoundError,
 } = require('../utils/scrapbookErrors')
 const {
-  CloudinaryUploadError,
   CloudinaryDeleteError,
 } = require('../utils/destinationErrors')
 const {
@@ -28,6 +29,9 @@ const { createPagination } = require('../utils/pagination')
 const { uploadBuffer } = require('../utils/cloudinaryUpload')
 
 const MAX_IMAGES_PER_JOURNAL = 50
+// Match Cloudinary's known-good profile transport: this runtime cannot route
+// IPv6, and Node's default address-family racing abandons IPv4 connections.
+const scrapbookCloudinaryAgent = new https.Agent({ family: 4, keepAlive: true })
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -379,12 +383,13 @@ const createScrapbookService = ({
         {
           resource_type: 'image',
           folder: 'tafera/scrapbooks',
+          agent: scrapbookCloudinaryAgent,
         },
       )
     } catch (error) {
       logSecurityEvent('cloudinary_upload_failed', {
-        error: error.message,
-        providerCode: error.http_code || error.code || null,
+        providerCode: error.code || error.name || 'UNKNOWN',
+        ...(Number.isInteger(error.http_code) ? { providerStatus: error.http_code } : {}),
         cloudinaryConfigured: Boolean(
           cloudinaryServiceInstance.config?.().cloud_name &&
           cloudinaryServiceInstance.config?.().api_key &&
@@ -392,7 +397,7 @@ const createScrapbookService = ({
         ),
         journalId,
       })
-      throw new CloudinaryUploadError()
+      throw new ScrapbookImageUploadUnavailableError()
     }
 
     let createdImage
