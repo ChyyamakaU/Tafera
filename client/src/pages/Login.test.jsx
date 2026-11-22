@@ -133,6 +133,38 @@ describe('Login submission', () => {
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument()
     })
   })
+
+  it('displays the user-friendly message for incorrect credentials', async () => {
+    const err = new Error('Invalid email or password.')
+    err.code = 'INVALID_CREDENTIALS'
+    err.status = 401
+    mockLogin.mockRejectedValue(err)
+    renderLogin()
+    const emailInput = screen.getByLabelText('Email address')
+    const passwordInput = screen.getByLabelText('Password')
+    fireEvent.input(emailInput, { target: { value: 'test@example.com' } })
+    fireEvent.input(passwordInput, { target: { value: 'wrong' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Log in' }).closest('form'))
+    await waitFor(() => {
+      expect(screen.getByText(/The email or password you entered is incorrect/)).toBeInTheDocument()
+    })
+  })
+
+  it('displays the user-friendly message for an expired session', async () => {
+    const err = new Error('Your session is no longer valid. Please sign in again.')
+    err.code = 'SESSION_INVALID'
+    err.status = 401
+    mockLogin.mockRejectedValue(err)
+    renderLogin()
+    const emailInput = screen.getByLabelText('Email address')
+    const passwordInput = screen.getByLabelText('Password')
+    fireEvent.input(emailInput, { target: { value: 'test@example.com' } })
+    fireEvent.input(passwordInput, { target: { value: 'wrong' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Log in' }).closest('form'))
+    await waitFor(() => {
+      expect(screen.getByText('Your session has expired. Please sign in again.')).toBeInTheDocument()
+    })
+  })
 })
 
 describe('Login redirect behavior', () => {

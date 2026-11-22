@@ -108,6 +108,18 @@ describe('Registration rendering', () => {
       expect(screen.getByText('Password must be at least 12 characters long.')).toBeInTheDocument()
     })
   })
+
+  it('displays the user-friendly message when email is already registered', async () => {
+    const err = new Error('An account with this email already exists.')
+    err.code = 'EMAIL_IN_USE'
+    err.status = 409
+    mockRegister.mockRejectedValue(err)
+    renderRegistration()
+    fillAndSubmit()
+    await waitFor(() => {
+      expect(screen.getByText(/An account with this email address already exists/)).toBeInTheDocument()
+    })
+  })
 })
 
 describe('Registration authentication-state sync', () => {

@@ -3,12 +3,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { useAuth } from '../contexts/AuthContext'
 import { getProfile, updateProfile } from '../services/auth'
+import { getErrorMessage, getFieldErrors } from '../services/errors'
 
 export default function Profile() {
   const { isAuthenticated } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
   const [success, setSuccess] = useState(false)
   const [form, setForm] = useState({
     fullName: '',
@@ -28,7 +30,7 @@ export default function Profile() {
         profileImage: user.profileImage || '',
       })
     } catch (err) {
-      setError(err.message || 'Failed to load profile.')
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -46,6 +48,7 @@ export default function Profile() {
     setForm({ ...form, [field]: e.target.value })
     setError(null)
     setSuccess(false)
+    setFieldErrors({})
   }
 
   const validate = () => {
@@ -61,6 +64,7 @@ export default function Profile() {
     setLoading(true)
     setError(null)
     setSuccess(false)
+    setFieldErrors({})
 
     const validationError = validate()
     if (validationError) {
@@ -83,11 +87,18 @@ export default function Profile() {
       })
       setSuccess(true)
     } catch (err) {
-      setError(err.message || 'Failed to update profile.')
+      setError(getErrorMessage(err))
+      setFieldErrors(
+        Object.fromEntries(
+          getFieldErrors(err).map((fe) => [fe.field, fe.message])
+        )
+      )
     } finally {
       setLoading(false)
     }
   }
+
+  const getFieldError = (field) => fieldErrors[field]
 
   if (loading) {
     return (
@@ -142,9 +153,18 @@ export default function Profile() {
             required
             value={form.fullName}
             onChange={handleChange('fullName')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+              getFieldError('fullName') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+            }`}
             placeholder="Ada Lovelace"
+            aria-invalid={Boolean(getFieldError('fullName'))}
+            aria-describedby={getFieldError('fullName') ? 'fullName-error' : undefined}
           />
+          {getFieldError('fullName') && (
+            <p id="fullName-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('fullName')}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="bio" className="block text-sm font-medium text-tafera-text mb-1">
@@ -155,10 +175,19 @@ export default function Profile() {
             autoComplete="off"
             value={form.bio}
             onChange={handleChange('bio')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+              getFieldError('bio') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+            }`}
             rows={4}
             placeholder="Tell us a bit about yourself..."
+            aria-invalid={Boolean(getFieldError('bio'))}
+            aria-describedby={getFieldError('bio') ? 'bio-error' : undefined}
           />
+          {getFieldError('bio') && (
+            <p id="bio-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('bio')}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="profileImage" className="block text-sm font-medium text-tafera-text mb-1">
@@ -170,9 +199,18 @@ export default function Profile() {
             autoComplete="off"
             value={form.profileImage}
             onChange={handleChange('profileImage')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+              getFieldError('profileImage') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+            }`}
             placeholder="https://example.com/photo.jpg"
+            aria-invalid={Boolean(getFieldError('profileImage'))}
+            aria-describedby={getFieldError('profileImage') ? 'profileImage-error' : undefined}
           />
+          {getFieldError('profileImage') && (
+            <p id="profileImage-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('profileImage')}
+            </p>
+          )}
         </div>
         <Button
           type="submit"

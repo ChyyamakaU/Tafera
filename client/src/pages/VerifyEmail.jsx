@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/common/Button'
+import { getErrorMessage } from '../services/errors'
 
 export default function VerifyEmail() {
   const [loading, setLoading] = useState(true)
@@ -34,7 +35,7 @@ export default function VerifyEmail() {
         setLoading(false)
       })
       .catch((err) => {
-        setError(err.message || 'Verification failed.')
+        setError(getErrorMessage(err))
         setLoading(false)
       })
   }, [token, authVerifyEmail])
@@ -66,7 +67,7 @@ export default function VerifyEmail() {
       await authResendVerification()
       setResendLoading(false)
     } catch (err) {
-      setError(err.message || 'Failed to resend verification email.')
+      setError(getErrorMessage(err))
       setResendLoading(false)
     }
   }

@@ -1,13 +1,17 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Button } from '../components/common/Button'
+import { PasswordInput } from '../components/common/PasswordInput'
 import { useAuth } from '../contexts/AuthContext'
 import { getPendingAction, clearPendingAction } from '../services/auth'
+import { getErrorMessage, getFieldErrors } from '../services/errors'
 
 export default function Login() {
   const [pendingAction, setPendingAction] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [password, setPassword] = useState('')
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
 
@@ -21,7 +25,6 @@ export default function Login() {
 
   const validate = () => {
     const email = document.getElementById('email')?.value
-    const password = document.getElementById('password')?.value
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return 'Enter a valid email address.'
@@ -36,6 +39,7 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setFieldErrors({})
 
     const validationError = validate()
     if (validationError) {
@@ -45,7 +49,6 @@ export default function Login() {
     }
 
     const email = document.getElementById('email').value.trim().toLowerCase()
-    const password = document.getElementById('password').value
 
     try {
       await authLogin({ email, password })
@@ -56,10 +59,17 @@ export default function Login() {
         navigate('/')
       }
     } catch (err) {
-      setError(err.message || 'Login failed')
+      setError(getErrorMessage(err))
+      setFieldErrors(
+        Object.fromEntries(
+          getFieldErrors(err).map((fe) => [fe.field, fe.message])
+        )
+      )
       setLoading(false)
     }
   }
+
+  const getFieldError = (field) => fieldErrors[field]
 
   return (
     <div className="max-w-md mx-auto">
@@ -108,22 +118,39 @@ export default function Login() {
             type="email"
             autoComplete="email"
             required
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+              getFieldError('email') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+            }`}
             placeholder="you@example.com"
+            aria-invalid={Boolean(getFieldError('email'))}
+            aria-describedby={getFieldError('email') ? 'email-error' : undefined}
           />
+          {getFieldError('email') && (
+            <p id="email-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('email')}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-tafera-text mb-1">
             Password
           </label>
-          <input
+          <PasswordInput
             id="password"
-            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
             required
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
             placeholder="••••••••"
+            label="Password"
+            aria-invalid={Boolean(getFieldError('password'))}
+            aria-describedby={getFieldError('password') ? 'password-error' : undefined}
           />
+          {getFieldError('password') && (
+            <p id="password-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('password')}
+            </p>
+          )}
         </div>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm text-tafera-text-muted cursor-pointer">

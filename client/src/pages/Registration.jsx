@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
+import { PasswordInput } from '../components/common/PasswordInput'
 import { useAuth } from '../contexts/AuthContext'
 import {
   fetchCsrfToken,
@@ -8,11 +9,13 @@ import {
   clearPendingAction,
   resendVerification as resendVerificationService,
 } from '../services/auth'
+import { getErrorMessage, getFieldErrors } from '../services/errors'
 
 export default function Registration() {
   const [form, setForm] = useState({ fullName: '', email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
   const [csrfToken, setCsrfToken] = useState(null)
   const [pendingAction, setPendingAction] = useState(null)
   const [registrationComplete, setRegistrationComplete] = useState(false)
@@ -62,12 +65,14 @@ export default function Registration() {
   const handleChange = (field) => (e) => {
     setForm({ ...form, [field]: e.target.value })
     setError(null)
+    setFieldErrors({})
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setFieldErrors({})
 
     const validationError = validate()
     if (validationError) {
@@ -91,11 +96,18 @@ export default function Registration() {
       setEmailVerificationSent(response.emailVerificationSent === true)
       setRegistrationComplete(true)
     } catch (err) {
-      setError(err.message || 'Registration failed')
+      setError(getErrorMessage(err))
+      setFieldErrors(
+        Object.fromEntries(
+          getFieldErrors(err).map((fe) => [fe.field, fe.message])
+        )
+      )
       setLoading(false)
       await refreshCsrf()
     }
   }
+
+  const getFieldError = (field) => fieldErrors[field]
 
   if (registrationComplete) {
     return (
@@ -132,7 +144,7 @@ export default function Registration() {
                 try {
                   await authResendVerification()
                 } catch (err) {
-                  setError(err.message || 'Failed to resend verification email.')
+                  setError(getErrorMessage(err))
                 }
                 setLoading(false)
               }}
@@ -183,9 +195,18 @@ export default function Registration() {
             required
             value={form.fullName}
             onChange={handleChange('fullName')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+              getFieldError('fullName') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+            }`}
             placeholder="Ada Lovelace"
+            aria-invalid={Boolean(getFieldError('fullName'))}
+            aria-describedby={getFieldError('fullName') ? 'fullName-error' : undefined}
           />
+          {getFieldError('fullName') && (
+            <p id="fullName-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('fullName')}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-tafera-text mb-1">
@@ -198,24 +219,39 @@ export default function Registration() {
             required
             value={form.email}
             onChange={handleChange('email')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            className={`w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+              getFieldError('email') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+            }`}
             placeholder="you@example.com"
+            aria-invalid={Boolean(getFieldError('email'))}
+            aria-describedby={getFieldError('email') ? 'email-error' : undefined}
           />
+          {getFieldError('email') && (
+            <p id="email-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('email')}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-tafera-text mb-1">
             Password
           </label>
-          <input
+          <PasswordInput
             id="password"
-            type="password"
-            autoComplete="new-password"
-            required
             value={form.password}
             onChange={handleChange('password')}
-            className="w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors"
+            autoComplete="new-password"
+            required
             placeholder="••••••••"
+            label="Password"
+            aria-invalid={Boolean(getFieldError('password'))}
+            aria-describedby={getFieldError('password') ? 'password-error' : undefined}
           />
+          {getFieldError('password') && (
+            <p id="password-error" className="mt-1 text-sm text-red-700">
+              {getFieldError('password')}
+            </p>
+          )}
         </div>
         <Button
           type="submit"
