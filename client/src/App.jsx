@@ -13,6 +13,8 @@ import Login from './pages/Login'
 import Registration from './pages/Registration'
 import VerifyEmail from './pages/VerifyEmail'
 import Profile from './pages/Profile'
+import PublicProfile from './pages/PublicProfile'
+import FollowList from './pages/FollowList'
 import Admin from './pages/Admin'
 import NotFound from './pages/NotFound'
 import { RequireAuth, RequireAdmin } from './components/auth/RequireAuth'
@@ -33,6 +35,9 @@ function App() {
         <Route path="register" element={<Registration />} />
         <Route path="verify-email" element={<VerifyEmail />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="users/:userId" element={<PublicProfile />} />
+        <Route path="users/:userId/followers" element={<FollowList />} />
+        <Route path="users/:userId/following" element={<FollowList />} />
         <Route path="admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
       </Route>
       <Route path="*" element={<NotFound />} />

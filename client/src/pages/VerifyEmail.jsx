@@ -8,7 +8,14 @@ export default function VerifyEmail() {
   const [error, setError] = useState(null)
   const [verified, setVerified] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
-  const { verifyEmail: authVerifyEmail, resendVerification: authResendVerification, isAuthenticated } = useAuth()
+  const [redirecting, setRedirecting] = useState(false)
+  const {
+    verifyEmail: authVerifyEmail,
+    resendVerification: authResendVerification,
+    isAuthenticated,
+    isEmailVerified,
+    isLoading: authIsLoading,
+  } = useAuth()
   const navigate = useNavigate()
 
   const searchParams = new URLSearchParams(window.location.search)
@@ -31,6 +38,27 @@ export default function VerifyEmail() {
         setLoading(false)
       })
   }, [token, authVerifyEmail])
+
+  // An already-verified account has nothing to verify. Send it home instead of
+  // leaving it on the verification page. This only applies when there is no
+  // pending token to verify, so the normal email-link verification flow still
+  // shows its success screen. The redirect runs in an effect (not during
+  // render) so the rules of hooks are never violated.
+  useEffect(() => {
+    if (!authIsLoading && isAuthenticated && isEmailVerified && !token) {
+      setRedirecting(true)
+    }
+  }, [authIsLoading, isAuthenticated, isEmailVerified, token])
+
+  useEffect(() => {
+    if (redirecting) {
+      navigate('/')
+    }
+  }, [redirecting, navigate])
+
+  if (redirecting) {
+    return null
+  }
 
   const handleResend = async () => {
     setResendLoading(true)
