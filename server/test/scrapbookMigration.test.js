@@ -85,6 +85,13 @@ const createUsersTable = (scoped) =>
     `CREATE TABLE users (
        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
        full_name varchar(255) NOT NULL,
+          username varchar(30),
+          city varchar(100),
+          state varchar(100),
+          website_url varchar(500),
+          instagram_url varchar(500),
+          tiktok_url varchar(500),
+          youtube_url varchar(500),
        email varchar(255) NOT NULL,
        password_hash varchar(255) NOT NULL,
        role varchar(255) NOT NULL DEFAULT 'user',

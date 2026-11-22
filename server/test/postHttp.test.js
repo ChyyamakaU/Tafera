@@ -113,9 +113,17 @@ before(async () => {
       `CREATE TABLE "${schema}".users (
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          full_name varchar(255) NOT NULL,
+          username varchar(30),
+          city varchar(100),
+          state varchar(100),
+          website_url varchar(500),
+          instagram_url varchar(500),
+          tiktok_url varchar(500),
+          youtube_url varchar(500),
          email varchar(255) NOT NULL,
          password_hash varchar(255) NOT NULL,
          profile_image varchar(255),
+         profile_image_public_id varchar(255),
          bio text,
          role "${schema}".enum_users_role NOT NULL DEFAULT 'user',
          status "${schema}".enum_users_status NOT NULL DEFAULT 'active',
@@ -610,6 +618,7 @@ const assertPublicPost = (post, expectedAuthorId) => {
     'createdAt',
     'destination',
     'id',
+    'images',
     'updatedAt',
   ])
   assert.equal(post.userId, undefined)
@@ -632,6 +641,7 @@ const publicPostKeys = [
   'createdAt',
   'destination',
   'id',
+  'images',
   'updatedAt',
 ]
 

@@ -536,6 +536,38 @@ test('listTrips scopes to the owner and applies status and pagination', async ()
   })
 })
 
+test('listPublicTrips is exposed and filters published trips with capacity data', async () => {
+  const calls = []
+  const service = createService({
+    Trip: {
+      async findAndCountAll(options) {
+        calls.push(options)
+        return {
+          count: 1,
+          rows: [{
+            get: () => ({
+              ...buildTrip({ tripType: 'group', status: 'published', maxParticipants: 5 }),
+              creator: { id: 'owner-1', fullName: 'Trip Host', profileImage: null, bio: null, emailVerifiedAt: new Date() },
+            }),
+          }],
+        }
+      },
+    },
+    TripParticipant: {
+      async count(options) {
+        assert.deepEqual(options.where, { tripId: '10000000-0000-4000-8000-000000000001', status: 'approved' })
+        return 2
+      },
+    },
+  }).service
+
+  assert.equal(typeof service.listPublicTrips, 'function')
+  const result = await service.listPublicTrips(null, parseTripListQuery({ page: '1', limit: '10' }))
+  assert.deepEqual(calls[0].where, { status: 'published' })
+  assert.equal(result.trips[0].spotsRemaining, 3)
+  assert.equal(result.trips[0].creator.fullName, 'Trip Host')
+})
+
 test('getTrip applies public non-draft visibility and owner access', async () => {
   const calls = []
   const { service } = createService({

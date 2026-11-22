@@ -98,9 +98,17 @@ before(async () => {
       `CREATE TABLE "${schema}".users (
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          full_name varchar(255) NOT NULL,
+          username varchar(30),
+          city varchar(100),
+          state varchar(100),
+          website_url varchar(500),
+          instagram_url varchar(500),
+          tiktok_url varchar(500),
+          youtube_url varchar(500),
          email varchar(255) NOT NULL,
          password_hash varchar(255) NOT NULL,
          profile_image varchar(255),
+         profile_image_public_id varchar(255),
          bio text,
          role "${schema}".enum_users_role NOT NULL DEFAULT 'user',
          status "${schema}".enum_users_status NOT NULL DEFAULT 'active',
@@ -1959,15 +1967,22 @@ test('authenticated users can retrieve their own profile', async (t) => {
       Object.keys(profile).sort(),
       [
         'bio',
+        'city',
         'createdAt',
         'email',
         'emailVerified',
         'fullName',
         'id',
+        'instagramUrl',
         'profileImage',
         'role',
         'status',
+        'state',
+        'tiktokUrl',
         'updatedAt',
+        'username',
+        'websiteUrl',
+        'youtubeUrl',
       ].sort(),
     )
 
@@ -2195,7 +2210,7 @@ test('public profiles expose only public fields to anonymous callers', async (t)
     const profile = response.body.data.user
     assert.deepEqual(
       Object.keys(profile).sort(),
-      ['bio', 'createdAt', 'fullName', 'id', 'profileImage'].sort(),
+      ['bio', 'city', 'createdAt', 'fullName', 'id', 'instagramUrl', 'profileImage', 'state', 'tiktokUrl', 'username', 'websiteUrl', 'youtubeUrl'].sort(),
     )
     assert.equal(profile.id, user.id)
     assert.equal(profile.fullName, 'Ada Lovelace')
