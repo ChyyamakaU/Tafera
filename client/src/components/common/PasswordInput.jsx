@@ -15,6 +15,8 @@ export default function PasswordInput({
   disabled = false,
   className = '',
   'aria-describedby': ariaDescribedby,
+  'aria-invalid': ariaInvalid,
+  ...inputProps
 }) {
   const [visible, setVisible] = useState(false)
 
@@ -43,6 +45,8 @@ export default function PasswordInput({
         className={inputClassName}
         placeholder={placeholder}
         aria-describedby={ariaDescribedby}
+        aria-invalid={ariaInvalid}
+        {...inputProps}
       />
       <button
         type="button"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/common/Button'
@@ -10,6 +10,8 @@ export default function VerifyEmail() {
   const [verified, setVerified] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
+  const [resendMessage, setResendMessage] = useState(null)
+  const verificationAttempted = useRef(null)
   const {
     verifyEmail: authVerifyEmail,
     resendVerification: authResendVerification,
@@ -29,6 +31,11 @@ export default function VerifyEmail() {
       return
     }
 
+    if (verificationAttempted.current === token) return
+    verificationAttempted.current = token
+    setLoading(true)
+    setError(null)
+
     authVerifyEmail({ token })
       .then(() => {
         setVerified(true)
@@ -38,7 +45,10 @@ export default function VerifyEmail() {
         setError(getErrorMessage(err))
         setLoading(false)
       })
-  }, [token, authVerifyEmail])
+    // The token defines the request. AuthProvider recreates its wrapper methods
+    // on render, so including authVerifyEmail here would resubmit the token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
 
   // An already-verified account has nothing to verify. Send it home instead of
   // leaving it on the verification page. This only applies when there is no
@@ -63,11 +73,18 @@ export default function VerifyEmail() {
 
   const handleResend = async () => {
     setResendLoading(true)
+    setResendMessage(null)
     try {
-      await authResendVerification()
-      setResendLoading(false)
+      const result = await authResendVerification()
+      setResendMessage({
+        type: 'success',
+        text: result.sent
+          ? 'Verification email sent. Check your inbox.'
+          : 'Your email address is already verified.',
+      })
     } catch (err) {
-      setError(getErrorMessage(err))
+      setResendMessage({ type: 'error', text: getErrorMessage(err) })
+    } finally {
       setResendLoading(false)
     }
   }
@@ -117,6 +134,15 @@ export default function VerifyEmail() {
         {error && (
           <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
             {error}
+          </div>
+        )}
+
+        {resendMessage && (
+          <div
+            role={resendMessage.type === 'success' ? 'status' : 'alert'}
+            className={`mb-6 p-3 rounded-md border text-sm ${resendMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}
+          >
+            {resendMessage.text}
           </div>
         )}
 

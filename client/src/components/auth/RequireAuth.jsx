@@ -26,6 +26,7 @@ export function RequireAuth({ children }) {
 
 export function RequireAdmin({ children }) {
   const { user, isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
 
   if (isLoading) {
     return (

@@ -81,6 +81,10 @@ const formatRetryAfter = (retryAfterSeconds) => {
   const seconds = Number(retryAfterSeconds)
   if (!Number.isFinite(seconds) || seconds <= 0) return null
 
+  if (seconds < 60) {
+    return `${seconds} second${seconds > 1 ? 's' : ''}`
+  }
+
   const minutes = Math.ceil(seconds / 60)
   if (minutes >= 1) {
     return `${minutes} minute${minutes > 1 ? 's' : ''}`
@@ -117,16 +121,17 @@ const getErrorMessage = (error) => {
     return CODE_MESSAGES[error.code]
   }
 
-  // Next most specific: HTTP status.
-  if (error.status && STATUS_MESSAGES[error.status]) {
-    return STATUS_MESSAGES[error.status]
-  }
-
   // The backend normalises all responses, so a message accompanied by a code
   // is a safe operational message. Use it directly when no code-specific map
-  // entry exists.
+  // entry exists, before falling back to a generic status message.
   if (error.message && error.code) {
     return error.message
+  }
+
+  // Next most specific: HTTP status. This also ensures generic request errors
+  // such as "Request failed: 401" are never shown in place of a useful message.
+  if (error.status && STATUS_MESSAGES[error.status]) {
+    return STATUS_MESSAGES[error.status]
   }
 
   // A bare message with no code may come from the frontend itself; surface it

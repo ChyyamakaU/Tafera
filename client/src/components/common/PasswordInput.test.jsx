@@ -27,6 +27,14 @@ describe('PasswordInput rendering', () => {
     expect(screen.getByLabelText('Confirm password')).toBeInTheDocument()
   })
 
+  it('forwards accessibility and other input props', () => {
+    renderPasswordInput({ 'aria-invalid': true, 'aria-describedby': 'password-error', inputMode: 'text' })
+    const input = screen.getByLabelText('Password')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAttribute('aria-describedby', 'password-error')
+    expect(input).toHaveAttribute('inputmode', 'text')
+  })
+
   it('renders the show-password toggle button', () => {
     renderPasswordInput()
     expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument()
@@ -79,13 +87,15 @@ describe('PasswordInput visibility toggle', () => {
 
   it('updates the value through onChange while toggled visible', () => {
     const onChange = vi.fn()
+    let changedValue
+    onChange.mockImplementation((event) => { changedValue = event.target.value })
     renderPasswordInput({ value: 'secret123', onChange })
     fireEvent.click(screen.getByRole('button', { name: 'Show password' }))
     const input = screen.getByLabelText('Password')
 
     fireEvent.input(input, { target: { value: 'secret123updated' } })
-    expect(onChange).toHaveBeenCalledWith({ target: { value: 'secret123updated' } })
-    expect(input.value).toBe('secret123updated')
+    expect(changedValue).toBe('secret123updated')
+    expect(onChange).toHaveBeenCalledTimes(1)
   })
 
   it('applies accessible labels for show and hide states', () => {

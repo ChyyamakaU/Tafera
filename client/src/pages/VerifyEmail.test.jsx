@@ -55,6 +55,7 @@ describe('VerifyEmail page rendering', () => {
       expect(screen.getByText(/Email verified!/)).toBeInTheDocument()
     })
     expect(screen.getByText(/Your email address has been verified/)).toBeInTheDocument()
+    expect(mockVerifyEmail).toHaveBeenCalledTimes(1)
   })
 
   it('shows error when no token provided', () => {
@@ -87,6 +88,26 @@ describe('VerifyEmail resend', () => {
       expect(screen.getByText(/This verification link is invalid or has expired/)).toBeInTheDocument()
     })
     expect(screen.queryByText(/Resend verification email/)).not.toBeInTheDocument()
+  })
+
+  it('shows success feedback after a resend', async () => {
+    mockCheckAuth.mockResolvedValue({ isAuthenticated: true, user: { id: '1', emailVerified: false } })
+    mockVerifyEmail.mockRejectedValue(Object.assign(new Error('invalid'), { code: 'VERIFICATION_TOKEN_INVALID' }))
+    mockResendVerification.mockResolvedValue({ sent: true, alreadyVerified: false })
+    renderVerifyEmail()
+    await waitFor(() => screen.getByText(/invalid or has expired/i))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Resend verification email' })[0])
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/sent\. Check your inbox/))
+  })
+
+  it('shows backend delivery failure feedback after a resend', async () => {
+    mockCheckAuth.mockResolvedValue({ isAuthenticated: true, user: { id: '1', emailVerified: false } })
+    mockVerifyEmail.mockRejectedValue(Object.assign(new Error('invalid'), { code: 'VERIFICATION_TOKEN_INVALID' }))
+    mockResendVerification.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'EMAIL_DELIVERY_UNAVAILABLE', status: 503 }))
+    renderVerifyEmail()
+    await waitFor(() => screen.getByText(/invalid or has expired/i))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Resend verification email' })[0])
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Email delivery is not available/))
   })
 })
 

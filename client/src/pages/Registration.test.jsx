@@ -9,6 +9,7 @@ import {
   fetchCsrfToken,
   getPendingAction,
   clearPendingAction,
+  resendVerification as resendVerificationService,
 } from '../services/auth'
 
 vi.mock('../services/auth', () => ({
@@ -19,12 +20,14 @@ vi.mock('../services/auth', () => ({
   fetchCsrfToken: vi.fn().mockResolvedValue(undefined),
   getPendingAction: vi.fn(),
   clearPendingAction: vi.fn(),
+  resendVerification: vi.fn(),
 }))
 
 const mockRegister = vi.mocked(registerService)
 const mockFetchCsrfToken = vi.mocked(fetchCsrfToken)
 const mockGetPendingAction = vi.mocked(getPendingAction)
 const mockClearPendingAction = vi.mocked(clearPendingAction)
+const mockResendVerification = vi.mocked(resendVerificationService)
 
 const renderRegistration = () => {
   return render(
@@ -51,6 +54,7 @@ const fillAndSubmit = (
 beforeEach(() => {
   vi.resetAllMocks()
   mockFetchCsrfToken.mockResolvedValue(undefined)
+  mockResendVerification.mockResolvedValue({ sent: true, alreadyVerified: false })
   sessionStorage.clear()
 })
 
@@ -162,17 +166,17 @@ describe('Registration authentication-state sync', () => {
 })
 
 describe('Registration pending-action redirects', () => {
-  it('clears pending action when a returnTo is available', async () => {
+  it('preserves pending action until the user continues to its returnTo', async () => {
     mockRegister.mockResolvedValue({ user: { id: '1', email: 'test@example.com' }, csrfToken: 'csrf-token-123' })
     mockGetPendingAction.mockReturnValue({ action: 'create_trip', returnTo: '/trips/new' })
     renderRegistration()
     fillAndSubmit()
     await waitFor(() => {
-      expect(mockClearPendingAction).toHaveBeenCalledTimes(1)
-    })
-    await waitFor(() => {
       expect(screen.getByText('Profile')).toBeInTheDocument()
     })
+    expect(mockClearPendingAction).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(mockClearPendingAction).toHaveBeenCalledTimes(1)
   })
 
   it('does not clear pending action when none exists (homepage fallback)', async () => {
@@ -186,5 +190,28 @@ describe('Registration pending-action redirects', () => {
     await waitFor(() => {
       expect(screen.getByText('Profile')).toBeInTheDocument()
     })
+  })
+})
+
+describe('Registration verification delivery feedback', () => {
+  it('does not claim email was sent when registration delivery failed', async () => {
+    mockRegister.mockResolvedValue({ user: { id: '1' }, emailVerificationSent: false })
+    renderRegistration()
+    fillAndSubmit()
+    await waitFor(() => expect(screen.getByText(/could not send the verification email/i)).toBeInTheDocument())
+    expect(screen.queryByText(/Verification email sent to/)).not.toBeInTheDocument()
+  })
+
+  it('confirms a successful resend and reports a failed resend', async () => {
+    mockRegister.mockResolvedValue({ user: { id: '1' }, emailVerificationSent: true })
+    renderRegistration()
+    fillAndSubmit()
+    await waitFor(() => screen.getByText(/Verification email sent to/))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Resend verification email' })[0])
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/sent\. Check your inbox/))
+
+    mockResendVerification.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 'EMAIL_DELIVERY_UNAVAILABLE', status: 503 }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Resend verification email' })[0])
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Email delivery is not available/))
   })
 })

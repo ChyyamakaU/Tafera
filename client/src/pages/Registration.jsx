@@ -7,7 +7,6 @@ import {
   fetchCsrfToken,
   getPendingAction,
   clearPendingAction,
-  resendVerification as resendVerificationService,
 } from '../services/auth'
 import { getErrorMessage, getFieldErrors } from '../services/errors'
 
@@ -20,6 +19,7 @@ export default function Registration() {
   const [pendingAction, setPendingAction] = useState(null)
   const [registrationComplete, setRegistrationComplete] = useState(false)
   const [emailVerificationSent, setEmailVerificationSent] = useState(null)
+  const [resendMessage, setResendMessage] = useState(null)
   const navigate = useNavigate()
   const { register: authRegister, resendVerification: authResendVerification } = useAuth()
 
@@ -27,7 +27,6 @@ export default function Registration() {
     const action = getPendingAction()
     if (action) {
       setPendingAction(action)
-      clearPendingAction()
     }
     fetchCsrfToken()
       .then((token) => setCsrfToken(token))
@@ -95,6 +94,7 @@ export default function Registration() {
       // verification email. The backend confirms whether delivery succeeded.
       setEmailVerificationSent(response.emailVerificationSent === true)
       setRegistrationComplete(true)
+      setLoading(false)
     } catch (err) {
       setError(getErrorMessage(err))
       setFieldErrors(
@@ -121,15 +121,20 @@ export default function Registration() {
             access all features.
           </p>
           <p className="mt-2 text-sm text-tafera-text-muted">
-            Verification email sent to{' '}
-            <span className="font-semibold text-tafera-text">
-              {form.email.trim().toLowerCase()}
-            </span>
-          </p>
+            {emailVerificationSent ? (
+              <>
+                Verification email sent to{' '}
+                <span className="font-semibold text-tafera-text">
+                  {form.email.trim().toLowerCase()}
+                </span>.
+              </>
+            ) : (
+              'Your account was created, but we could not send the verification email.'
+            )}
+            </p>
           {!emailVerificationSent && (
             <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
-              Unable to send the verification email right now. You can request
-              another verification email below once it is available.
+              You can request another verification email below.
             </div>
           )}
           {error && (
@@ -137,14 +142,33 @@ export default function Registration() {
               {error}
             </div>
           )}
+          {resendMessage && (
+            <div
+              role={resendMessage.type === 'success' ? 'status' : 'alert'}
+              className={`mt-4 p-3 rounded-md border text-sm ${resendMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}
+            >
+              {resendMessage.text}
+            </div>
+          )}
           <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
             <Button
               onClick={async () => {
                 setLoading(true)
+                setError(null)
+                setResendMessage(null)
                 try {
-                  await authResendVerification()
+                  const result = await authResendVerification()
+                  setResendMessage({
+                    type: 'success',
+                    text: result.sent
+                      ? 'Verification email sent. Check your inbox.'
+                      : 'Your email address is already verified.',
+                  })
                 } catch (err) {
-                  setError(getErrorMessage(err))
+                  setResendMessage({
+                    type: 'error',
+                    text: getErrorMessage(err),
+                  })
                 }
                 setLoading(false)
               }}
@@ -154,9 +178,16 @@ export default function Registration() {
             >
               {loading ? 'Sending...' : 'Resend verification email'}
             </Button>
-            <Link asChild to="/" className="w-full sm:w-auto">
-              <Button variant="ghost">Continue to home</Button>
-            </Link>
+            <Button
+              variant="ghost"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                if (pendingAction) clearPendingAction()
+                navigate(pendingAction?.returnTo || '/')
+              }}
+            >
+              {pendingAction ? 'Continue' : 'Continue to home'}
+            </Button>
           </div>
         </div>
       </div>
