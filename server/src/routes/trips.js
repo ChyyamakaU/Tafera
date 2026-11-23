@@ -21,6 +21,7 @@ const {
 } = require('../middlewares/csrfProtection')
 const {
   createRequireVerifiedEmail,
+  createOptionalVerifiedSession,
 } = require('../middlewares/requireVerifiedEmail')
 
 const createTripsRouter = ({
@@ -45,6 +46,7 @@ const createTripsRouter = ({
   })
   const csrfProtection = createCsrfProtection()
   const requireVerifiedEmail = createRequireVerifiedEmail({ User })
+  const optionalVerifiedSession = createOptionalVerifiedSession({ User })
 
   const protectWrite = [
     authenticate,
@@ -55,13 +57,13 @@ const createTripsRouter = ({
   const router = express.Router()
 
   router.post('/', ...protectWrite, controller.create)
-  router.get('/', authenticate, controller.list)
+  router.get('/', authenticate, requireVerifiedEmail, controller.list)
   // Public listing: published trips are readable by anyone, while an
   // authenticated owner may also read their own drafts.
   router.get('/public', optionalAuthenticate, controller.listPublic)
   // Public detail: non-draft trips are readable by anyone, while an
   // authenticated owner may also read a draft.
-  router.get('/:tripId', optionalAuthenticate, controller.detail)
+  router.get('/:tripId', optionalAuthenticate, optionalVerifiedSession, controller.detail)
   router.patch('/:tripId', ...protectWrite, controller.update)
   router.delete('/:tripId', ...protectWrite, controller.remove)
 
@@ -99,11 +101,13 @@ const createTripsRouter = ({
   router.get(
     '/:tripId/participation',
     authenticate,
+    requireVerifiedEmail,
     participationController.getOwnParticipation,
   )
   router.get(
     '/:tripId/participants',
     authenticate,
+    requireVerifiedEmail,
     participationController.listParticipants,
   )
   router.patch(

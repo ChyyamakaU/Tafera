@@ -77,5 +77,31 @@ const createRequireVerifiedEmail = ({ User } = {}) => {
 
 const requireVerifiedEmail = createRequireVerifiedEmail()
 
+// Optional-auth public routes should behave exactly as they do for a visitor
+// when a supplied session belongs to an unverified account. Public resources
+// remain readable, but the session cannot grant private draft visibility.
+const createOptionalVerifiedSession = ({ User } = {}) => {
+  const userModel = User || require('../models').User
+
+  return async (req, res, next) => {
+    const userId = req.auth && req.auth.userId
+    if (typeof userId !== 'string' || !userId) return next()
+
+    try {
+      const user = await userModel.findByPk(userId)
+      if (!user || user.status !== 'active' || !user.emailVerifiedAt) {
+        req.auth = null
+        req.user = null
+      } else {
+        req.user = user
+      }
+      return next()
+    } catch (error) {
+      return next(error)
+    }
+  }
+}
+
 module.exports = requireVerifiedEmail
 module.exports.createRequireVerifiedEmail = createRequireVerifiedEmail
+module.exports.createOptionalVerifiedSession = createOptionalVerifiedSession

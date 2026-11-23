@@ -34,6 +34,7 @@ const createService = (params = {}) => {
     id: DESTINATION_ID,
     name: 'Test Destination',
     slug: 'test-destination',
+    status: 'published',
   } : params.destination
   const image = params.image || buildImage()
   const imageFindByPkResults = params.imageFindByPkResults || []
@@ -178,6 +179,7 @@ const createService = (params = {}) => {
   const service = createDestinationService({
     Destination,
     DestinationImage,
+    User: { name: 'User' },
     cloudinaryService,
   })
 
@@ -296,7 +298,7 @@ test('deleteDestinationImage deletes the image', async () => {
     imageFindByPkResults: [image, image],
   })
 
-  await service.deleteDestinationImage(IMAGE_ID)
+  await service.deleteDestinationImage(IMAGE_ID, { role: 'admin' })
 
   assert.equal(calls.imageDestroy.length, 1)
 })
@@ -402,7 +404,7 @@ test('deleteDestinationImage preserves DB record when Cloudinary deletion fails'
   })
 
   await rejectsWith(
-    service.deleteDestinationImage(IMAGE_ID),
+    service.deleteDestinationImage(IMAGE_ID, { role: 'admin' }),
     Error
   )
 })
@@ -427,7 +429,7 @@ test('deleteDestinationImage allows deletion when Cloudinary returns not found',
     imageFindByPkResults: [image, image],
   })
 
-  await service.deleteDestinationImage(IMAGE_ID)
+  await service.deleteDestinationImage(IMAGE_ID, { role: 'admin' })
 
   assert.equal(calls.imageDestroy.length, 1, 'DB record should be destroyed after Cloudinary not found')
 })
@@ -446,7 +448,7 @@ test('deleteDestinationImage promotes next image as cover within transaction', a
     images: [nextImage],
   })
 
-  await service.deleteDestinationImage(IMAGE_ID)
+  await service.deleteDestinationImage(IMAGE_ID, { role: 'admin' })
 
   // The next image should have been promoted to cover.
   assert.equal(nextImage.isCover, true, 'next image should be promoted to cover')

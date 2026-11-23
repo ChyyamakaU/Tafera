@@ -122,6 +122,7 @@ test('upload handler returns created image', async () => {
   const { next, getError } = createNext()
 
   const req = {
+    auth: { userId: 'user-1', role: 'user' },
     params: { destinationId: DESTINATION_ID },
     body: { altText: 'A scenic view', isCover: false },
     file: {
@@ -142,6 +143,9 @@ test('upload handler returns created image', async () => {
   assert.equal(res.body.data.image.isCover, false)
   assert.equal(calls.uploadDestinationImage.length, 1)
   assert.equal(calls.uploadDestinationImage[0][0], DESTINATION_ID)
+  assert.equal(calls.uploadDestinationImage[0][2].userId, 'user-1')
+  assert.equal(calls.uploadDestinationImage[0][2].role, 'user')
+  assert.equal(calls.uploadDestinationImage[0][2].isCover, undefined)
 })
 
 test('upload handler passes file and metadata to service', async () => {
@@ -153,6 +157,7 @@ test('upload handler passes file and metadata to service', async () => {
 
   const file = { buffer: Buffer.from('fake-image-data'), mimetype: 'image/png' }
   const req = {
+    auth: { userId: 'admin-1', role: 'admin' },
     params: { destinationId: DESTINATION_ID },
     body: { altText: 'Alt text', isCover: true },
     file,
@@ -167,6 +172,7 @@ test('upload handler passes file and metadata to service', async () => {
   assert.equal(calls.uploadDestinationImage[0][1], file)
   assert.equal(calls.uploadDestinationImage[0][2].altText, 'Alt text')
   assert.equal(calls.uploadDestinationImage[0][2].isCover, true)
+  assert.equal(calls.uploadDestinationImage[0][2].userId, 'admin-1')
 })
 
 test('list handler returns images for destination', async () => {
@@ -200,6 +206,7 @@ test('update handler updates image metadata', async () => {
   const { next, getError } = createNext()
 
   const req = {
+    auth: { userId: 'user-1', role: 'user' },
     params: { destinationId: DESTINATION_ID, imageId: IMAGE_ID },
     body: { altText: 'Updated alt', isCover: true },
   }
@@ -224,6 +231,7 @@ test('update handler rejects empty body via next', async () => {
   const { next, getError } = createNext()
 
   const req = {
+    auth: { userId: 'admin-1', role: 'admin' },
     params: { destinationId: DESTINATION_ID, imageId: IMAGE_ID },
     body: {},
   }
@@ -245,6 +253,7 @@ test('delete handler returns 204', async () => {
   const { next, getError } = createNext()
 
   const req = {
+    auth: { userId: 'user-1', role: 'user' },
     params: { destinationId: DESTINATION_ID, imageId: IMAGE_ID },
   }
   const res = createResponse()
@@ -256,6 +265,11 @@ test('delete handler returns 204', async () => {
   assert.equal(res.statusCode, 204)
   assert.equal(res.headers['Cache-Control'], 'no-store')
   assert.equal(calls.deleteDestinationImage[0][0], IMAGE_ID)
+  assert.deepEqual(calls.deleteDestinationImage[0][1], {
+    destinationId: DESTINATION_ID,
+    userId: 'user-1',
+    role: 'user',
+  })
 })
 
 test('reorder handler returns reordered images', async () => {
@@ -296,6 +310,7 @@ test('upload handler propagates destination not found via next', async () => {
   const { next, getError } = createNext()
 
   const req = {
+    auth: { userId: 'user-1', role: 'user' },
     params: { destinationId: DESTINATION_ID },
     body: {},
     file: { buffer: Buffer.from('fake'), mimetype: 'image/jpeg' },
@@ -321,6 +336,7 @@ test('upload handler propagates image limit exceeded via next', async () => {
   const { next, getError } = createNext()
 
   const req = {
+    auth: { userId: 'user-1', role: 'user' },
     params: { destinationId: DESTINATION_ID },
     body: {},
     file: { buffer: Buffer.from('fake'), mimetype: 'image/jpeg' },

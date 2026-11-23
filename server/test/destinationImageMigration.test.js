@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { Sequelize, QueryTypes } = require('sequelize')
 const { runtimeConfig } = require('../src/config/database')
 const migration = require('../src/migrations/20261112000002-add-destination-image-cover-index')
+const contributionMigration = require('../src/migrations/20261122000003-add-destination-photo-contributions')
 
 const TABLE = 'destination_images'
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
@@ -438,5 +439,52 @@ test('down removes the partial unique index without losing data', async (t) => {
         { public_id: 'tafera/destinations/b', is_cover: false },
       ],
     )
+  })
+})
+
+test('destination photo contribution migration stores captions and safely nulls deleted contributors', async (t) => {
+  if (!databaseAvailable) {
+    return t.skip('PostgreSQL is unavailable; migration integration test skipped')
+  }
+
+  await withTemporarySchema(async (scoped) => {
+    await createDestinationsTable(scoped)
+    await createDestinationImagesTable(scoped)
+    await scoped.query('CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid())', { logging: false })
+
+    const queryInterface = scoped.getQueryInterface()
+    await contributionMigration.up(queryInterface, Sequelize)
+
+    const columns = await queryInterface.describeTable('destination_images')
+    assert.ok(columns.user_id)
+    assert.equal(columns.user_id.allowNull, true)
+    assert.ok(columns.caption)
+
+    const [destination] = await scoped.query(
+      `INSERT INTO destinations (name, slug, country, description)
+       VALUES ('Kyoto', 'kyoto', 'Japan', 'Historic city') RETURNING id`,
+      { type: QueryTypes.SELECT, logging: false },
+    )
+    const [user] = await scoped.query(
+      'INSERT INTO users DEFAULT VALUES RETURNING id',
+      { type: QueryTypes.SELECT, logging: false },
+    )
+    await scoped.query(
+      `INSERT INTO destination_images (destination_id, user_id, image_url, public_id, caption)
+       VALUES (:destinationId, :userId, 'https://example.com/photo.jpg', 'gallery/photo', 'A Kyoto moment')`,
+      { replacements: { destinationId: destination.id, userId: user.id }, logging: false },
+    )
+    await scoped.query('DELETE FROM users WHERE id = :userId', {
+      replacements: { userId: user.id },
+      logging: false,
+    })
+
+    const [stored] = await scoped.query(
+      'SELECT user_id, caption FROM destination_images WHERE destination_id = :destinationId',
+      { replacements: { destinationId: destination.id }, type: QueryTypes.SELECT, logging: false },
+    )
+    assert.equal(stored.user_id, null)
+    assert.equal(stored.caption, 'A Kyoto moment')
+    await contributionMigration.down(queryInterface, Sequelize)
   })
 })

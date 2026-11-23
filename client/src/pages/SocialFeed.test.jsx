@@ -30,9 +30,11 @@ vi.mock('../services/posts', () => ({
 }))
 
 vi.mock('../services/destinations', () => ({ fetchFeaturedDestinations: vi.fn() }))
-vi.mock('../services/trips', () => ({ fetchPublicTrips: vi.fn(), fetchMyTrips: vi.fn() }))
+vi.mock('../services/trips', () => ({ fetchPublicTrips: vi.fn() }))
+vi.mock('../services/notifications', () => ({ fetchUnreadCount: vi.fn() }))
 import { fetchFeaturedDestinations } from '../services/destinations'
-import { fetchPublicTrips, fetchMyTrips } from '../services/trips'
+import { fetchPublicTrips } from '../services/trips'
+import { fetchUnreadCount } from '../services/notifications'
 
 const user = { id: 'current-user', fullName: 'Current User', role: 'user' }
 const post = {
@@ -74,7 +76,7 @@ beforeEach(() => {
   fetchPublicPosts.mockResolvedValue([post])
   fetchFeaturedDestinations.mockResolvedValue([])
   fetchPublicTrips.mockResolvedValue({ trips: [] })
-  fetchMyTrips.mockResolvedValue({ trips: [] })
+  fetchUnreadCount.mockResolvedValue(0)
   window.confirm = vi.fn(() => true)
 })
 
@@ -94,14 +96,35 @@ describe('SocialFeed', () => {
     expect(fetchPersonalizedPosts).toHaveBeenCalledWith(user.id, { page: 1 })
   })
 
-  it('shows real featured destinations and discoverable trips in the authenticated sidebars', async () => {
+  it('shows real featured destinations and the left-column travel navigation', async () => {
     fetchFeaturedDestinations.mockResolvedValueOnce([{ id: 'destination-1', name: 'Lagos', slug: 'lagos', country: 'Nigeria' }])
     fetchPublicTrips.mockResolvedValueOnce({ trips: [{ id: 'group-1', tripType: 'group', title: 'Explore Lagos', startDate: '2027-04-01', endDate: '2027-04-05' }] })
     renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
     await waitFor(() => expect(document.querySelector('a[href="/destinations/lagos"]')).toBeInTheDocument())
     expect(document.querySelector('a[href="/destinations/lagos"]')).toHaveTextContent('Lagos')
     expect(screen.getByRole('link', { name: /Explore Lagos/ })).toHaveAttribute('href', '/trips/group-1')
-    expect(screen.getByRole('link', { name: /My trips/ })).toHaveAttribute('href', '/trips')
+
+    const travels = screen.getByRole('button', { name: 'My Travels' })
+    expect(travels).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(travels)
+
+    expect(screen.getByRole('link', { name: 'My Trips' })).toHaveAttribute('href', '/trips')
+    expect(screen.getByRole('link', { name: 'Scrapbooks' })).toHaveAttribute('href', '/scrapbooks')
+    expect(screen.getByRole('link', { name: 'My Destinations' })).toHaveAttribute('href', '/my-destinations')
+    expect(screen.getByRole('link', { name: 'My Group Trips' })).toHaveAttribute('href', '/group-travel')
+  })
+
+  it('keeps Notifications visible below My Travels with its unread count', async () => {
+    fetchUnreadCount.mockResolvedValue(3)
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+
+    expect(await screen.findByLabelText('3 unread notifications')).toBeInTheDocument()
+    const navigation = screen.getByRole('navigation', { name: 'Travel shortcuts' })
+    expect(navigation.textContent.indexOf('My Travels')).toBeLessThan(
+      navigation.textContent.indexOf('Notifications'),
+    )
+    expect(screen.getByRole('link', { name: /Notifications/ })).toHaveAttribute('href', '/notifications')
+    expect(screen.queryByRole('link', { name: 'My Destinations' })).not.toBeInTheDocument()
   })
 
   it('shows an empty state and an error state', async () => {

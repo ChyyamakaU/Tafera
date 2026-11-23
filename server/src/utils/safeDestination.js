@@ -21,8 +21,11 @@ const PUBLIC_DESTINATION_IMAGE_FIELDS = Object.freeze([
   'id',
   'imageUrl',
   'altText',
+  'caption',
   'displayOrder',
   'isCover',
+  'uploadedAt',
+  'contributor',
 ])
 
 const toPlain = (value) => {
@@ -52,8 +55,18 @@ const toPublicDestinationImage = (image) => {
     id: source.id,
     imageUrl: source.imageUrl,
     altText: source.altText ?? null,
+    caption: source.caption ?? null,
     displayOrder: Number.isFinite(displayOrder) ? displayOrder : 0,
     isCover: Boolean(source.isCover),
+    uploadedAt: source.createdAt ?? null,
+    contributor: source.contributor
+      ? {
+          id: source.contributor.id,
+          fullName: source.contributor.fullName,
+          username: source.contributor.username ?? null,
+          profileImage: source.contributor.profileImage ?? null,
+        }
+      : null,
   }
 }
 
@@ -120,11 +133,58 @@ const toDestinationDetail = (destination) => {
   }
 }
 
+const toDestinationLocation = (destination) => {
+  const source = toPlain(destination)
+
+  if (!source) return null
+
+  return {
+    id: source.id,
+    name: source.name,
+    slug: source.slug,
+    country: source.country,
+    state: source.state ?? null,
+    location: source.location ?? null,
+  }
+}
+
+// Community gallery entries pair a public image with the destination it
+// belongs to, so public visitors can discover places from traveller photos.
+const toCommunityDestinationImage = (image) => {
+  const source = toPlain(image)
+
+  if (!source) return null
+
+  return {
+    ...toPublicDestinationImage(source),
+    destination: toDestinationLocation(source.destination),
+  }
+}
+
+// Personal contribution cards group the current user's images under the
+// existing destination record. Only that user's images are passed in here.
+const toContributionDestination = (destination) => {
+  const source = toPlain(destination)
+
+  if (!source) return null
+
+  const images = sortedPublicImages(source.images)
+
+  return {
+    ...toDestinationLocation(source),
+    contributedPhotoCount: images.length,
+    representativeImage: images.find((image) => image.isCover) || images[0] || null,
+  }
+}
+
 module.exports = {
   PUBLIC_DESTINATION_FIELDS,
   PUBLIC_DESTINATION_IMAGE_FIELDS,
   selectCoverImage,
+  toCommunityDestinationImage,
+  toContributionDestination,
   toDestinationDetail,
+  toDestinationLocation,
   toDestinationSummary,
   toPublicDestinationImage,
 }

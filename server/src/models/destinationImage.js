@@ -14,6 +14,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
+      userId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       imageUrl: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -24,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
       },
       altText: {
         type: DataTypes.STRING,
+        allowNull: true,
+      },
+      caption: {
+        type: DataTypes.STRING(500),
         allowNull: true,
       },
       displayOrder: {
@@ -49,6 +57,12 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'destinationId',
       as: 'destination',
       onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    })
+    DestinationImage.belongsTo(models.User, {
+      foreignKey: 'userId',
+      as: 'contributor',
+      onDelete: 'SET NULL',
       onUpdate: 'CASCADE',
     })
   }

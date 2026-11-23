@@ -178,6 +178,13 @@ module.exports = (sequelize, DataTypes) => {
       onUpdate: 'CASCADE',
     })
 
+    User.hasMany(models.DestinationImage, {
+      foreignKey: 'userId',
+      as: 'destinationImages',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
+    })
+
     User.hasMany(models.EmailVerificationToken, {
       foreignKey: 'userId',
       as: 'emailVerificationTokens',

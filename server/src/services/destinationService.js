@@ -1,7 +1,9 @@
 'use strict'
 
 const { Op } = require('sequelize')
+const https = require('node:https')
 const cloudinary = require('../config/cloudinary')
+const { uploadBuffer } = require('../utils/cloudinaryUpload')
 const { logSecurityEvent } = require('../utils/securityLog')
 const {
   CloudinaryDeleteError,
@@ -13,6 +15,8 @@ const {
 } = require('../utils/destinationErrors')
 const {
   PUBLIC_DESTINATION_FIELDS,
+  toCommunityDestinationImage,
+  toContributionDestination,
   toDestinationDetail,
   toDestinationSummary,
   toPublicDestinationImage,
@@ -25,6 +29,7 @@ const {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const destinationCloudinaryAgent = new https.Agent({ family: 4, keepAlive: true })
 
 const SORT_COLUMNS = Object.freeze({
   featured: 'featured',
@@ -98,11 +103,13 @@ const buildOrder = ({ sort, order }) => {
 const createDestinationService = ({
   Destination,
   DestinationImage,
+  User,
   cloudinaryService,
 } = {}) => {
   const destinationModel = Destination || require('../models').Destination
   const imageModel =
     DestinationImage || require('../models').DestinationImage
+  const userModel = User || imageModel.sequelize?.models?.User || require('../models').User
   const cloudinaryServiceInstance =
     cloudinaryService || require('../config/cloudinary')
 
@@ -113,9 +120,17 @@ const createDestinationService = ({
       'id',
       'imageUrl',
       'altText',
+      'caption',
       'displayOrder',
       'isCover',
+      'createdAt',
     ],
+    include: [{
+      model: userModel,
+      as: 'contributor',
+      attributes: ['id', 'fullName', 'username', 'profileImage'],
+      required: false,
+    }],
     required: false,
     separate: true,
     order: [
@@ -124,11 +139,24 @@ const createDestinationService = ({
     ],
   }
 
+  // The Explore list needs only the pre-existing public cover fields. Keeping
+  // the list projection independent from contribution metadata lets public
+  // destination discovery continue to work while a deployment is rolling out
+  // the additive gallery-contributor migration.
+  const destinationSummaryImageInclude = {
+    model: imageModel,
+    as: 'images',
+    attributes: ['id', 'imageUrl', 'altText', 'displayOrder', 'isCover'],
+    required: false,
+    separate: true,
+    order: [['displayOrder', 'ASC'], ['id', 'ASC']],
+  }
+
   const listDestinations = async (filters) => {
     const { count, rows } = await destinationModel.findAndCountAll({
       where: buildWhere(filters),
       attributes: [...PUBLIC_DESTINATION_FIELDS],
-      include: [imageInclude],
+      include: [destinationSummaryImageInclude],
       order: buildOrder(filters),
       limit: filters.limit,
       offset: (filters.page - 1) * filters.limit,
@@ -180,28 +208,31 @@ const createDestinationService = ({
   const uploadDestinationImage = async (
     destinationId,
     file,
-    { altText, isCover } = {},
+    { altText, caption, isCover, userId, role } = {},
   ) => {
-    // Verify destination exists.
+    // Travellers may contribute to published destinations. Admins retain the
+    // ability to manage images on drafts as before.
     const destination = await destinationModel.findByPk(destinationId)
-    if (!destination) {
+    if (!destination || (destination.status !== 'published' && role !== 'admin')) {
       throw new DestinationNotFoundError()
     }
 
     // Upload to Cloudinary before creating the database record.
     let uploadResult
     try {
-      uploadResult = await cloudinaryServiceInstance.uploader.upload(
+      uploadResult = await uploadBuffer(
+        cloudinaryServiceInstance,
         file.buffer,
         {
           resource_type: 'image',
           folder: 'tafera/destinations',
+          agent: destinationCloudinaryAgent,
         },
       )
     } catch (error) {
       logSecurityEvent('cloudinary_upload_failed', {
-        error: error.message,
-        destinationId,
+        providerCode: error.code || error.name || 'UNKNOWN',
+        ...(Number.isInteger(error.http_code) ? { providerStatus: error.http_code } : {}),
       })
       throw new CloudinaryUploadError()
     }
@@ -256,9 +287,11 @@ const createDestinationService = ({
 
           return imageModel.create({
             destinationId,
+            userId: userId || null,
             imageUrl: uploadResult.secure_url,
             publicId: uploadResult.public_id,
             altText: altText || null,
+            caption: caption || null,
             isCover: shouldBeCover,
             displayOrder: existingCount + 1,
           }, { transaction })
@@ -303,10 +336,151 @@ const createDestinationService = ({
 
     const images = await imageModel.findAll({
       where: { destinationId },
+      include: [{
+        model: userModel,
+        as: 'contributor',
+        attributes: ['id', 'fullName', 'username', 'profileImage'],
+        required: false,
+      }],
       order: [['displayOrder', 'ASC'], ['id', 'ASC']],
     })
 
     return images.map(toPublicDestinationImage)
+  }
+
+  // Public community gallery: every traveller-contributed photo across all
+  // published destinations. Deliberately not filtered by follows or by the
+  // caller's identity so public visitors can browse the whole community.
+  const listCommunityImages = async ({ q, country, state, page, limit }) => {
+    const destinationWhere = { status: 'published' }
+
+    if (country) {
+      destinationWhere.country = { [Op.iLike]: escapeLikePattern(country) }
+    }
+
+    if (state) {
+      destinationWhere.state = { [Op.iLike]: escapeLikePattern(state) }
+    }
+
+    if (q) {
+      const pattern = `%${escapeLikePattern(q)}%`
+      destinationWhere[Op.or] = [
+        'name',
+        'slug',
+        'country',
+        'state',
+        'location',
+      ].map((field) => ({ [field]: { [Op.iLike]: pattern } }))
+    }
+
+    const { count, rows } = await imageModel.findAndCountAll({
+      // Seeded/admin gallery images have no contributor. The community gallery
+      // shows only real traveller contributions.
+      where: { userId: { [Op.ne]: null } },
+      include: [
+        {
+          model: destinationModel,
+          as: 'destination',
+          where: destinationWhere,
+          required: true,
+          attributes: ['id', 'name', 'slug', 'country', 'state', 'location'],
+        },
+        {
+          model: userModel,
+          as: 'contributor',
+          attributes: ['id', 'fullName', 'username', 'profileImage'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC'], ['id', 'ASC']],
+      limit,
+      offset: (page - 1) * limit,
+      distinct: true,
+    })
+
+    const total = Number(count) || 0
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit)
+
+    return {
+      photos: rows.map(toCommunityDestinationImage).filter(Boolean),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1 && total > 0,
+      },
+    }
+  }
+
+  // Personal contributions: only destinations where this user has at least one
+  // image, grouped by the existing destination records.
+  const listMyDestinationContributions = async (userId) => {
+    // Resolve the distinct destination IDs first. A separate child query then
+    // loads only this user's images, so destinations without a contribution
+    // from the caller can never leak into the personal results.
+    const contributed = await imageModel.findAll({
+      where: { userId },
+      attributes: ['destinationId'],
+      group: ['destinationId'],
+      raw: true,
+    })
+
+    const destinationIds = contributed
+      .map((row) => row.destinationId)
+      .filter(Boolean)
+
+    if (destinationIds.length === 0) return []
+
+    const destinations = await destinationModel.findAll({
+      where: {
+        id: { [Op.in]: destinationIds },
+        status: 'published',
+      },
+      attributes: [...PUBLIC_DESTINATION_FIELDS],
+      include: [{
+        model: imageModel,
+        as: 'images',
+        where: { userId },
+        required: true,
+        attributes: [
+          'id',
+          'imageUrl',
+          'altText',
+          'caption',
+          'displayOrder',
+          'isCover',
+          'createdAt',
+        ],
+        separate: true,
+        order: [['displayOrder', 'ASC'], ['id', 'ASC']],
+      }],
+      order: [['name', 'ASC'], ['id', 'ASC']],
+    })
+
+    return destinations.map(toContributionDestination).filter(Boolean)
+  }
+
+  const getMyDestinationContributions = async (identifier, userId) => {
+    const destination = await getDestination(identifier)
+
+    const images = await imageModel.findAll({
+      where: { destinationId: destination.id, userId },
+      include: [{
+        model: userModel,
+        as: 'contributor',
+        attributes: ['id', 'fullName', 'username', 'profileImage'],
+        required: false,
+      }],
+      order: [['displayOrder', 'ASC'], ['id', 'ASC']],
+    })
+
+    return {
+      ...destination,
+      images: images.map(toPublicDestinationImage),
+      contributedPhotoCount: images.length,
+    }
   }
 
   const updateDestinationImage = async (
@@ -378,9 +552,20 @@ const createDestinationService = ({
     return toPublicDestinationImage(await imageModel.findByPk(imageId))
   }
 
-  const deleteDestinationImage = async (imageId) => {
+  const deleteDestinationImage = async (
+    imageId,
+    { destinationId, userId, role } = {},
+  ) => {
     const image = await imageModel.findByPk(imageId)
     if (!image) {
+      throw new DestinationImageNotFoundError()
+    }
+
+    if (destinationId && image.destinationId !== destinationId) {
+      throw new DestinationImageNotFoundError()
+    }
+
+    if (role !== 'admin' && (!userId || image.userId !== userId)) {
       throw new DestinationImageNotFoundError()
     }
 
@@ -513,6 +698,9 @@ const createDestinationService = ({
     listDestinations,
     uploadDestinationImage,
     listDestinationImages,
+    listCommunityImages,
+    listMyDestinationContributions,
+    getMyDestinationContributions,
     updateDestinationImage,
     deleteDestinationImage,
     reorderDestinationImages,

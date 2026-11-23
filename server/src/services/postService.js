@@ -5,7 +5,6 @@ const { DestinationNotFoundError } = require('../utils/destinationErrors')
 const { createPagination } = require('../utils/pagination')
 const {
   PUBLIC_DESTINATION_FIELDS,
-  PUBLIC_DESTINATION_IMAGE_FIELDS,
 } = require('../utils/safeDestination')
 const { PUBLIC_POST_FIELDS, toPost } = require('../utils/safePost')
 const { PUBLIC_PROFILE_FIELDS } = require('../utils/safeUser')
@@ -40,7 +39,7 @@ const createPostService = ({
   const destinationImagesInclude = {
     model: imageModel,
     as: 'images',
-    attributes: [...PUBLIC_DESTINATION_IMAGE_FIELDS],
+    attributes: ['id', 'imageUrl', 'altText', 'displayOrder', 'isCover'],
     required: false,
     separate: true,
     order: [

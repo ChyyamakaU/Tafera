@@ -22,7 +22,14 @@ const createDestinationImageController = ({ destinationImageService }) => {
     const image = await destinationImageService.uploadDestinationImage(
       destinationId,
       req.file,
-      input,
+      {
+        ...input,
+        userId: req.auth.userId,
+        role: req.auth.role,
+        // Community contributors may add photos and captions, but only admins
+        // can choose or change a destination's cover.
+        isCover: req.auth.role === 'admin' ? input.isCover : undefined,
+      },
     )
 
     noStore(res).status(201).json({
@@ -56,9 +63,14 @@ const createDestinationImageController = ({ destinationImageService }) => {
   })
 
   const remove = asyncHandler(async (req, res) => {
+    const { destinationId } = parseDestinationId(req.params)
     const { imageId } = parseImageId(req.params)
 
-    await destinationImageService.deleteDestinationImage(imageId)
+    await destinationImageService.deleteDestinationImage(imageId, {
+      destinationId,
+      userId: req.auth.userId,
+      role: req.auth.role,
+    })
 
     noStore(res).status(204).end()
   })

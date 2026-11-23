@@ -47,6 +47,7 @@ const createReportsRouter = ({
   const protectAdminWrite = [
     authenticate,
     csrfProtection,
+    requireVerifiedEmail,
     requireAdmin,
   ]
 
@@ -56,13 +57,13 @@ const createReportsRouter = ({
   router.post('/', ...protectWrite, controller.create)
 
   // Reporter views their own reports.
-  router.get('/mine', authenticate, controller.listMine)
+  router.get('/mine', authenticate, requireVerifiedEmail, controller.listMine)
 
   // Admin views the moderation queue.
-  router.get('/', authenticate, requireAdmin, controller.listAdmin)
+  router.get('/', authenticate, requireVerifiedEmail, requireAdmin, controller.listAdmin)
 
   // Reporter or admin views a single report.
-  router.get('/:reportId', authenticate, controller.getById)
+  router.get('/:reportId', authenticate, requireVerifiedEmail, controller.getById)
 
   // Admin updates a report's status.
   router.patch(

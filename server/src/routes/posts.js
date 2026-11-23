@@ -49,10 +49,12 @@ const createPostsRouter = ({
 
   router.post('/', ...protectWrite, controller.create)
   router.post('/:postId/images', ...protectWrite, destinationImageUpload, controller.uploadImage)
+  // Public post discovery remains public; the personalized /following feed
+  // below is the private, verified-account endpoint.
   router.get('/', controller.list)
   // /following is a read-only feed scoped to the authenticated user. It must
   // be registered before /:postId so it is never treated as a post ID.
-  router.get('/following', authenticate, controller.following)
+  router.get('/following', authenticate, requireVerifiedEmail, controller.following)
   // Comment routes are nested under their post. They are registered before
   // the parameterized post routes so the intent of the path hierarchy is
   // explicit.

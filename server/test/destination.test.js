@@ -68,10 +68,12 @@ const buildImage = (overrides = {}) => ({
   imageUrl: 'https://images.example.com/kyoto.jpg',
   publicId: 'tafera/seed/destinations/kyoto-1',
   altText: 'Kyoto temple',
+  caption: null,
   displayOrder: 0,
   isCover: true,
   createdAt: new Date('2026-01-15T00:00:00.000Z'),
   updatedAt: new Date('2026-01-16T00:00:00.000Z'),
+  contributor: null,
   ...overrides,
 })
 
@@ -341,8 +343,11 @@ test('image serialization uses an allowlist and normalizes display order', () =>
     id: 'd1000000-0000-4000-8000-000000000001',
     imageUrl: 'https://images.example.com/kyoto.jpg',
     altText: 'Kyoto temple',
+    caption: null,
     displayOrder: 3,
     isCover: true,
+    uploadedAt: new Date('2026-01-15T00:00:00.000Z'),
+    contributor: null,
   })
   assert.equal(Object.hasOwn(image, 'publicId'), false)
 })
@@ -381,6 +386,11 @@ test('destination service applies published-only filters and pagination', async 
   assert.deepEqual(options.attributes, [...PUBLIC_DESTINATION_FIELDS])
   assert.equal(options.include[0].as, 'images')
   assert.equal(options.include[0].separate, true)
+  assert.deepEqual(options.include[0].attributes, [
+    'id', 'imageUrl', 'altText', 'displayOrder', 'isCover',
+  ])
+  assert.equal(options.include[0].attributes.includes('caption'), false)
+  assert.equal(options.include[0].attributes.includes('userId'), false)
   assert.equal(
     options.include[0].attributes.includes('publicId'),
     false,

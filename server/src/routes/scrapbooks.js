@@ -18,6 +18,7 @@ const {
 const {
   createCsrfProtection,
 } = require('../middlewares/csrfProtection')
+const { createRequireVerifiedEmail } = require('../middlewares/requireVerifiedEmail')
 const {
   scrapbookImageUpload,
 } = require('../middlewares/scrapbookImageUpload')
@@ -37,22 +38,23 @@ const createScrapbooksRouter = ({
   })
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
   const csrfProtection = createCsrfProtection()
+  const requireVerifiedEmail = createRequireVerifiedEmail({ User })
 
-  // Scrapbook operations do not require email verification. Authentication
-  // and CSRF protection remain in place for state-changing requests.
+  // Private scrapbook reads and writes require a verified account.
   const protectScrapbookWrite = [
     authenticate,
     csrfProtection,
+    requireVerifiedEmail,
   ]
 
   const router = express.Router()
 
   // Journal-level routes
-  router.get('/', authenticate, journalController.list)
+  router.get('/', authenticate, requireVerifiedEmail, journalController.list)
 
   router.post('/', ...protectScrapbookWrite, journalController.create)
 
-  router.get('/:journalId', authenticate, journalController.get)
+  router.get('/:journalId', authenticate, requireVerifiedEmail, journalController.get)
 
   router.patch(
     '/:journalId',
@@ -89,6 +91,7 @@ const createScrapbooksRouter = ({
   router.get(
     '/:journalId/images',
     authenticate,
+    requireVerifiedEmail,
     imageController.list,
   )
 

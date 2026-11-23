@@ -10,6 +10,7 @@ const renderWithAuth = (
 ) => {
   const authValue = {
     isAuthenticated: authState.isAuthenticated,
+    isEmailVerified: authState.isEmailVerified ?? authState.isAuthenticated,
     isLoading: authState.isLoading,
     user: authState.user,
     login: vi.fn(),
@@ -103,6 +104,29 @@ describe('Header authenticated state', () => {
     }
     expect(screen.queryByRole('button', { name: 'Features' })).not.toBeInTheDocument()
     expect(screen.getByText('Profile')).toBeInTheDocument()
+  })
+
+  it('does not render Notifications in the header for authenticated users', () => {
+    renderWithAuth({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id: '1', email: 'test@example.com', role: 'user' },
+    })
+    expect(screen.queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument()
+  })
+
+  it('gives an unverified account public navigation plus verification and logout only', () => {
+    renderWithAuth({
+      isAuthenticated: true,
+      isEmailVerified: false,
+      isLoading: false,
+      user: { id: '1', email: 'test@example.com', role: 'user' },
+    })
+    expect(screen.queryByRole('link', { name: 'Feed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'My Trips' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Verify your email' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Log out' })).not.toHaveLength(0)
+    expect(screen.getAllByRole('button', { name: 'Resend verification email' })).not.toHaveLength(0)
   })
 
   it('closes the Profile menu on outside pointer and Escape without closing for inside pointer', () => {

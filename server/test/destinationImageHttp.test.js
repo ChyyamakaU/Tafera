@@ -158,9 +158,12 @@ before(async () => {
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          destination_id uuid NOT NULL REFERENCES "${schema}".destinations(id)
            ON DELETE CASCADE ON UPDATE CASCADE,
+         user_id uuid REFERENCES "${schema}".users(id)
+           ON DELETE SET NULL ON UPDATE CASCADE,
          image_url varchar(255) NOT NULL,
          public_id varchar(255) NOT NULL,
          alt_text varchar(255),
+         caption varchar(500),
          display_order integer NOT NULL DEFAULT 0,
          is_cover boolean NOT NULL DEFAULT false,
          created_at timestamptz NOT NULL DEFAULT now(),
@@ -190,6 +193,12 @@ before(async () => {
     Destination.hasMany(DestinationImage, {
       foreignKey: 'destinationId',
       as: 'images',
+    })
+    DestinationImage.belongsTo(User, {
+      foreignKey: 'userId',
+      as: 'contributor',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
     })
 
     databaseAvailable = true
@@ -469,10 +478,15 @@ const createHarness = async () => {
         DestinationImage,
         cloudinaryService: {
           uploader: {
-            upload: async function () {
+            upload_stream: function (options, callback) {
+              assert.equal(options.agent.options.family, 4)
               return {
-                secure_url: 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg',
-                public_id: 'tafera/test/photo',
+                end: function () {
+                  callback(null, {
+                    secure_url: 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg',
+                    public_id: 'tafera/test/photo',
+                  })
+                },
               }
             },
             destroy: async function () {
@@ -527,7 +541,7 @@ const createAdmin = async (overrides = {}) => {
     role: 'admin',
     status: 'active',
     authVersion: 1,
-    emailVerifiedAt: null,
+    emailVerifiedAt: new Date(),
     ...overrides,
     passwordHash,
   })
@@ -691,12 +705,38 @@ test('unauthenticated upload is rejected', async (t) => {
   }
 })
 
-test('non-admin upload is rejected', async (t) => {
+test('unverified traveller cannot upload destination gallery photos', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+  try {
+    const user = await createUser({ emailVerifiedAt: null })
+    const destination = await createDestination()
+    const client = harness.client()
+    await loginUser(client, user.email)
+    const boundary = `----WebKitFormBoundary${crypto.randomBytes(16).toString('hex')}`
+    const body = createMultipartBody(
+      { caption: 'Not allowed before verification' },
+      'image', JPEG_HEADER, 'image/jpeg', 'test.jpg', boundary,
+    )
+    const response = await client.post(
+      `/api/destinations/${destination.id}/images`,
+      body,
+      { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+    )
+    assert.equal(response.status, 403)
+    assert.equal(response.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
+    assert.equal(await DestinationImage.count({ where: { destinationId: destination.id } }), 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('authenticated traveller can upload a captioned photo to a published destination', async (t) => {
   if (skip(t)) return
   const harness = await createHarness()
 
   try {
-    const user = await createUser({ role: 'user' })
+    const user = await createUser({ role: 'user', emailVerifiedAt: new Date() })
     const destination = await createDestination()
 
     const client = harness.client()
@@ -704,7 +744,7 @@ test('non-admin upload is rejected', async (t) => {
 
     const boundary = `----WebKitFormBoundary${crypto.randomBytes(16).toString('hex')}`
     const body = createMultipartBody(
-      {},
+      { caption: 'My trip to Kyoto' },
       'image',
       JPEG_HEADER,
       'image/jpeg',
@@ -717,7 +757,18 @@ test('non-admin upload is rejected', async (t) => {
       { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
     )
 
-    assert.equal(response.status, 403)
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.image.caption, 'My trip to Kyoto')
+    const stored = await DestinationImage.findByPk(response.body.data.image.id)
+    assert.equal(stored.userId, user.id)
+    assert.equal(stored.caption, 'My trip to Kyoto')
+
+    const gallery = await client.get(`/api/destinations/${destination.id}`)
+    const contribution = gallery.body.data.destination.images.find((image) => image.id === stored.id)
+    assert.equal(contribution.contributor.id, user.id)
+    assert.equal(contribution.contributor.fullName, user.fullName)
+    assert.ok(contribution.uploadedAt)
+    assert.equal(contribution.caption, 'My trip to Kyoto')
   } finally {
     await harness.close()
   }
@@ -1074,6 +1125,40 @@ test('admin can delete an image', async (t) => {
       where: { destinationId: destination.id },
     })
     assert.equal(remaining, 0)
+  } finally {
+    await harness.close()
+  }
+})
+
+test('travellers can delete only their own destination photos', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const owner = await createUser({ emailVerifiedAt: new Date() })
+    const other = await createUser({ emailVerifiedAt: new Date() })
+    const destination = await createDestination()
+    const image = await DestinationImage.create({
+      id: crypto.randomUUID(),
+      destinationId: destination.id,
+      userId: owner.id,
+      imageUrl: 'https://res.cloudinary.com/test/image/upload/v1/photo.jpg',
+      publicId: 'tafera/test/photo',
+      caption: 'My contribution',
+      displayOrder: 1,
+      isCover: false,
+    })
+
+    const otherClient = harness.client()
+    await loginUser(otherClient, other.email)
+    const denied = await otherClient.delete(`/api/destinations/${destination.id}/images/${image.id}`)
+    assert.equal(denied.status, 404)
+
+    const ownerClient = harness.client()
+    await loginUser(ownerClient, owner.email)
+    const removed = await ownerClient.delete(`/api/destinations/${destination.id}/images/${image.id}`)
+    assert.equal(removed.status, 204)
+    assert.equal(await DestinationImage.count({ where: { id: image.id } }), 0)
   } finally {
     await harness.close()
   }

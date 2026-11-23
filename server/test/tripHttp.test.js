@@ -229,9 +229,11 @@ before(async () => {
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          destination_id uuid NOT NULL REFERENCES "${schema}".destinations(id)
            ON DELETE CASCADE ON UPDATE CASCADE,
+         user_id uuid REFERENCES "${schema}".users(id) ON DELETE SET NULL ON UPDATE CASCADE,
          image_url varchar(255) NOT NULL,
          public_id varchar(255) NOT NULL,
          alt_text varchar(255),
+         caption varchar(500),
          display_order integer NOT NULL DEFAULT 0,
          is_cover boolean NOT NULL DEFAULT false,
          created_at timestamptz NOT NULL DEFAULT now(),
@@ -1716,7 +1718,7 @@ test('trip validation rejects malformed payloads and query values', async (t) =>
   }
 })
 
-test('unverified users can read trips but cannot modify them', async (t) => {
+test('unverified users cannot read private trips or modify them', async (t) => {
   if (skip(t)) return
   const harness = await createHarness()
 
@@ -1736,12 +1738,11 @@ test('unverified users can read trips but cannot modify them', async (t) => {
     })
 
     const list = await client.get('/api/trips')
-    assert.equal(list.status, 200)
-    assert.equal(list.body.data.trips.length, 1)
+    assert.equal(list.status, 403)
+    assert.equal(list.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
 
     const detail = await client.get(`/api/trips/${trip.id}`)
-    assert.equal(detail.status, 200)
-    assert.equal(detail.body.data.trip.title, 'Private draft')
+    assert.equal(detail.status, 404)
 
     const update = await client.patch(`/api/trips/${trip.id}`, {
       title: 'Changed',
@@ -1854,6 +1855,10 @@ test('participation endpoints require authentication, CSRF and a verified email'
       'EMAIL_VERIFICATION_REQUIRED',
     )
 
+    const unverifiedParticipation = await unverifiedClient.get(`/api/trips/${tripId}/participation`)
+    assert.equal(unverifiedParticipation.status, 403)
+    assert.equal(unverifiedParticipation.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
+
     const unverifiedLeave = await leaveTrip(unverifiedClient, tripId)
     assert.equal(unverifiedLeave.status, 403)
 
@@ -1873,8 +1878,8 @@ test('participation endpoints require authentication, CSRF and a verified email'
       unverifiedClient,
       tripId,
     )
-    assert.equal(unverifiedStatus.status, 200)
-    assert.equal(unverifiedStatus.body.data.participation, null)
+    assert.equal(unverifiedStatus.status, 403)
+    assert.equal(unverifiedStatus.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
 
     const stored = await TripParticipant.findOne({
       where: { tripId, userId: joiner.id },

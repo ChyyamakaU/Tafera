@@ -7,7 +7,6 @@ const {
 } = require('../utils/destinationErrors')
 const {
   PUBLIC_DESTINATION_FIELDS,
-  PUBLIC_DESTINATION_IMAGE_FIELDS,
 } = require('../utils/safeDestination')
 const { createPagination } = require('../utils/pagination')
 const {
@@ -89,7 +88,7 @@ const createTripService = ({
   const destinationImagesInclude = {
     model: imageModel,
     as: 'images',
-    attributes: [...PUBLIC_DESTINATION_IMAGE_FIELDS],
+    attributes: ['id', 'imageUrl', 'altText', 'displayOrder', 'isCover'],
     required: false,
     separate: true,
     order: [

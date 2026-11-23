@@ -2325,7 +2325,7 @@ test('profile updates require CSRF and a valid session', async (t) => {
   }
 })
 
-test('unverified users can view and update their own profile', async (t) => {
+test('unverified users cannot access private profile functionality but public profiles remain visible', async (t) => {
   if (skip(t)) return
   const harness = await createHarness()
 
@@ -2338,22 +2338,21 @@ test('unverified users can view and update their own profile', async (t) => {
     await loginUser(client, user.email)
 
     const me = await client.get('/api/users/me')
-    assert.equal(me.status, 200)
-    assert.equal(me.body.data.user.emailVerified, false)
+    assert.equal(me.status, 403)
+    assert.equal(me.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
 
     const update = await client.patch('/api/users/me', {
       fullName: 'Ada Unverified',
       bio: 'Still setting up my profile',
     })
-    assert.equal(update.status, 200)
-    assert.equal(update.body.data.user.fullName, 'Ada Unverified')
-    assert.equal(update.body.data.user.emailVerified, false)
+    assert.equal(update.status, 403)
+    assert.equal(update.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
 
     const publicProfile = await harness
       .client()
       .get(`/api/users/${user.id}`)
     assert.equal(publicProfile.status, 200)
-    assert.equal(publicProfile.body.data.user.fullName, 'Ada Unverified')
+    assert.equal(publicProfile.body.data.user.fullName, user.fullName)
   } finally {
     await harness.close()
   }

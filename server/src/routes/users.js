@@ -52,12 +52,12 @@ const createUsersRouter = ({
   const router = express.Router()
 
   // /me must be registered before /:userId so it is never treated as an ID.
-  router.get('/me', authenticate, controller.me)
-  router.post('/me/profile-image', authenticate, csrfProtection, destinationImageUpload, controller.uploadProfileImage)
+  router.get('/me', authenticate, requireVerifiedEmail, controller.me)
+  router.post('/me/profile-image', authenticate, csrfProtection, requireVerifiedEmail, destinationImageUpload, controller.uploadProfileImage)
   // Updating a profile is account management, not a protected community
   // action, so it deliberately does not require a verified email. CSRF and
   // session authentication still apply.
-  router.patch('/me', authenticate, csrfProtection, controller.updateMe)
+  router.patch('/me', authenticate, csrfProtection, requireVerifiedEmail, controller.updateMe)
   // Public user-post listings are scoped by the user ID in the path. They do
   // not require a session or a verified email.
   router.get('/:userId/posts', postController.listByUser)

@@ -1,224 +1,320 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchDestinations } from '../services/destinations'
+import { fetchCommunityDestinationPhotos } from '../services/destinations'
 
-const PAGE_SIZE = 9
+const PAGE_SIZE = 12
+
+const formatUploadDate = (value) => {
+  if (!value) return 'Date unavailable'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+}
+
+const destinationLocation = (destination) => {
+  if (!destination) return ''
+  if (destination.location) return destination.location
+  if (destination.state) return `${destination.state}, ${destination.country}`
+  return destination.country || ''
+}
+
+const emptyFilters = { q: '', country: '', state: '' }
 
 export default function Destinations() {
-  const [destinations, setDestinations] = useState([])
+  const [photos, setPhotos] = useState([])
   const [pagination, setPagination] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [page, setPage] = useState(1)
+  const [form, setForm] = useState(emptyFilters)
+  const [filters, setFilters] = useState(emptyFilters)
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const loadDestinations = (pageNumber) => {
+  const loadPhotos = useCallback(async (pageNumber, activeFilters) => {
     setLoading(true)
     setError(null)
-    fetchDestinations({ page: pageNumber, limit: PAGE_SIZE })
-      .then((data) => {
-        setDestinations(data.destinations || [])
-        setPagination(data.pagination || null)
-        setPage(pageNumber)
-        setLoading(false)
+    try {
+      const data = await fetchCommunityDestinationPhotos({
+        ...activeFilters,
+        page: pageNumber,
+        limit: PAGE_SIZE,
       })
-      .catch((err) => {
-        setError(err.message || 'Failed to load destinations')
-        setLoading(false)
-      })
-  }
+      setPhotos(data.photos || [])
+      setPagination(data.pagination || null)
+    } catch (err) {
+      setError(err.message || 'Failed to load the community gallery')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    loadDestinations(page)
-  }, [page])
+    loadPhotos(page, filters)
+  }, [loadPhotos, page, filters, refreshKey])
+
+  const hasActiveFilters = Boolean(filters.q || filters.country || filters.state)
+
+  const submitSearch = (event) => {
+    event.preventDefault()
+    const nextFilters = {
+      q: form.q.trim(),
+      country: form.country.trim(),
+      state: form.state.trim(),
+    }
+    setPage(1)
+    setFilters(nextFilters)
+    setRefreshKey((key) => key + 1)
+  }
+
+  const clearFilters = () => {
+    setForm(emptyFilters)
+    setFilters(emptyFilters)
+    setPage(1)
+    setRefreshKey((key) => key + 1)
+  }
 
   const retry = () => {
-    loadDestinations(page)
-  }
-
-  if (loading) {
-    return (
-      <section className="py-16">
-<div className="app-container">
-          <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
-            Destinations
-          </h1>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="group">
-                <div
-                  className="aspect-video overflow-hidden rounded-md border border-tafera-border bg-tafera-surface animate-pulse mb-4"
-                />
-                <div className="h-6 w-3/4 bg-tafera-surface animate-pulse rounded-md" />
-                <div className="h-4 w-1/2 bg-tafera-surface animate-pulse rounded-md mt-2" />
-                <div className="h-4 w-1/3 bg-tafera-surface animate-pulse rounded-md mt-2" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  if (error) {
-    return (
-      <section className="py-16">
-        <div className="app-container">
-          <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
-            Destinations
-          </h1>
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <p className="text-tafera-text-muted mb-6">
-              {error}
-            </p>
-            <button
-              onClick={retry}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-nav font-medium hover:bg-tafera-surface hover:text-tafera-primary transition-colors"
-            >
-              <span>Try again</span>
-              <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
-                strokeWidth="1.5"
-                stroke="currentColor"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  if (!destinations || destinations.length === 0) {
-    return (
-      <section className="py-16">
-        <div className="app-container">
-          <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
-            Destinations
-          </h1>
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <p className="text-tafera-text-muted mb-6 max-w-sm">
-              No destinations available right now.
-            </p>
-            <Link to="/">
-              <span className="inline-block font-medium text-tafera-accent hover:underline">
-                Back to home &rarr;
-              </span>
-            </Link>
-          </div>
-        </div>
-      </section>
-    )
+    setRefreshKey((key) => key + 1)
   }
 
   return (
-    <section className="py-16 bg-tafera-bg">
+    <section className="bg-tafera-bg py-10 sm:py-14">
       <div className="app-container">
-        <div className="mb-12">
-          <h1 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl mb-4">
-            Destinations
+        <div className="mb-8 max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">
+            Community gallery
+          </p>
+          <h1 className="mt-1 text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
+            Explore Destinations
           </h1>
-          <p className="text-lg text-tafera-text-muted max-w-xl">
-            Browse and save travel destinations from around the world.
-            Discover places worth exploring, connect with fellow travellers,
-            and make memories along the way.
+          <p className="mt-3 text-base text-tafera-text-muted">
+            Real places, shared by Tafera travellers. Discover a destination
+            through the moments people have captured there.
           </p>
         </div>
 
-        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {destinations.map((destination) => (
-            <li key={destination.id} className="group">
-              <Link
-                to={`/destinations/${destination.slug}`}
-                className="block"
-              >
-                <div
-                  className="aspect-video overflow-hidden rounded-md border border-tafera-border bg-tafera-surface group-hover:border-tafera-accent transition-colors mb-4"
-                >
-                  {destination.coverImage ? (
-                    <img
-                      src={destination.coverImage.imageUrl}
-                      alt={
-                        destination.coverImage.altText || destination.name
-                      }
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.src = '/Tafera logo.svg'
-                        e.target.alt = 'Image unavailable'
-                      }}
-                    />
-                  ) : (
-                    <div
-                      className="w-full h-full bg-tafera-surface flex items-center justify-center"
-                    >
-                      <span className="text-tafera-text-muted text-sm">
-                        No image
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h3
-                    className="font-heading font-bold text-tafera-text text-lg group-hover:text-tafera-accent transition-colors mb-1"
-                  >
-                    {destination.name}
-                  </h3>
-                  <p className="text-sm text-tafera-text-muted mb-3">
-                    {destination.state
-                      ? `${destination.state}, ${destination.country}`
-                      : destination.country}
-                  </p>
-                  <p
-                    className="text-sm font-body text-tafera-text line-clamp-2 leading-relaxed"
-                  >
-                    {destination.description}
-                  </p>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-
-        {pagination && pagination.totalPages > 1 && (
-          <div
-            className="mt-12 flex items-center justify-between gap-4"
-            aria-label="Pagination"
-          >
+        <form
+          onSubmit={submitSearch}
+          className="mb-9 grid gap-3 rounded-2xl border border-tafera-border bg-tafera-surface p-4 sm:grid-cols-[1.4fr_1fr_1fr_auto] sm:items-end sm:p-5"
+          aria-label="Search community destination photos"
+        >
+          <label className="block text-sm font-semibold text-tafera-text">
+            Destination or location
+            <input
+              type="search"
+              value={form.q}
+              onChange={(event) => setForm((current) => ({ ...current, q: event.target.value }))}
+              placeholder="Kyoto, coast, mountains…"
+              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm font-normal text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+            />
+          </label>
+          <label className="block text-sm font-semibold text-tafera-text">
+            Country
+            <input
+              type="text"
+              value={form.country}
+              onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))}
+              placeholder="Japan"
+              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm font-normal text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+            />
+          </label>
+          <label className="block text-sm font-semibold text-tafera-text">
+            State or region
+            <input
+              type="text"
+              value={form.state}
+              onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))}
+              placeholder="Kyoto"
+              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm font-normal text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+            />
+          </label>
+          <div className="flex gap-2">
             <button
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={
-                !pagination.hasPreviousPage || pagination.page <= 1
-              }
-              className="px-4 py-2 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-nav font-medium disabled:opacity-50 disabled:pointer-events-none hover:bg-tafera-surface transition-colors"
-              aria-label="Previous page"
+              type="submit"
+              className="min-h-11 flex-1 rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-tafera-primary/90"
             >
-              Previous
+              Search photos
             </button>
-            <span className="text-sm font-nav text-tafera-text-muted">
-              Page {pagination.page} of {pagination.totalPages}
-            </span>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="min-h-11 rounded-lg border border-tafera-border bg-white px-3 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </form>
+
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="mb-5 text-tafera-text-muted">{error}</p>
             <button
-              onClick={() =>
-                setPage((p) => Math.min(p + 1, pagination.totalPages))
-              }
-              disabled={
-                !pagination.hasNextPage ||
-                pagination.page >= pagination.totalPages
-              }
-              className="px-4 py-2 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-nav font-medium disabled:opacity-50 disabled:pointer-events-none hover:bg-tafera-surface transition-colors"
-              aria-label="Next page"
+              type="button"
+              onClick={retry}
+              className="rounded-lg border border-tafera-border bg-white px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
             >
-              Next
+              Try again
             </button>
           </div>
+        ) : loading ? (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading community photos">
+            {[1, 2, 3, 4, 5, 6].map((item) => (
+              <div key={item} className="overflow-hidden rounded-xl border border-tafera-border bg-tafera-surface">
+                <div className="aspect-[4/3] animate-pulse bg-tafera-border/50" />
+                <div className="space-y-2 p-4">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-tafera-border/50" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-tafera-border/50" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : photos.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-tafera-border bg-tafera-surface px-6 py-16 text-center">
+            <h2 className="text-xl font-heading font-bold text-tafera-text">
+              {hasActiveFilters ? 'No photos match your search' : 'No community photos yet'}
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-tafera-text-muted">
+              {hasActiveFilters
+                ? 'Try a different destination, country or region, or clear the filters to see every traveller photo.'
+                : 'Traveller photos will appear here as people share them. Visit a destination and be the first to contribute.'}
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="rounded-lg border border-tafera-border bg-white px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+                >
+                  Clear filters
+                </button>
+              ) : (
+                <Link
+                  to="/"
+                  className="rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-tafera-primary/90"
+                >
+                  Discover destinations
+                </Link>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-tafera-text-muted">
+                {pagination?.total ?? photos.length}{' '}
+                {(pagination?.total ?? photos.length) === 1 ? 'traveller photo' : 'traveller photos'}
+              </p>
+              {pagination?.totalPages > 1 && (
+                <p className="text-sm text-tafera-text-muted">
+                  Page {pagination.page} of {pagination.totalPages}
+                </p>
+              )}
+            </div>
+
+            <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {photos.map((photo) => {
+                const destination = photo.destination
+                const contributor = photo.contributor
+                return (
+                  <li key={photo.id}>
+                    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-white shadow-soft">
+                      <Link
+                        to={destination ? `/destinations/${destination.slug}` : '/destinations'}
+                        className="block aspect-[4/3] overflow-hidden bg-tafera-surface"
+                        aria-label={`Explore ${destination?.name || 'destination'} gallery`}
+                      >
+                        <img
+                          src={photo.imageUrl}
+                          alt={photo.caption || photo.altText || destination?.name || 'Traveller destination photo'}
+                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                          loading="lazy"
+                          onError={(event) => {
+                            event.currentTarget.src = '/Tafera logo.svg'
+                            event.currentTarget.alt = 'Image unavailable'
+                          }}
+                        />
+                      </Link>
+                      <div className="flex flex-1 flex-col p-4">
+                        {destination && (
+                          <h2 className="font-heading text-lg font-bold text-tafera-text">
+                            <Link
+                              to={`/destinations/${destination.slug}`}
+                              className="hover:text-tafera-primary"
+                            >
+                              {destination.name}
+                            </Link>
+                          </h2>
+                        )}
+                        {destination && (
+                          <p className="mt-0.5 text-sm text-tafera-text-muted">
+                            {destinationLocation(destination)}
+                          </p>
+                        )}
+                        {photo.caption && (
+                          <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-tafera-text">
+                            {photo.caption}
+                          </p>
+                        )}
+                        <div className="mt-auto flex items-center gap-2.5 pt-4">
+                          {contributor?.profileImage ? (
+                            <img src={contributor.profileImage} alt="" className="h-8 w-8 rounded-full object-cover" />
+                          ) : (
+                            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-tafera-primary/10 text-xs font-bold text-tafera-primary">
+                              {(contributor?.fullName || 'T').slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            {contributor?.id ? (
+                              <Link
+                                to={`/users/${contributor.id}`}
+                                className="block truncate text-xs font-semibold text-tafera-text hover:text-tafera-primary"
+                              >
+                                {contributor.fullName || 'Tafera traveller'}
+                              </Link>
+                            ) : (
+                              <p className="truncate text-xs font-semibold text-tafera-text">
+                                Tafera traveller
+                              </p>
+                            )}
+                            <p className="text-xs text-tafera-text-muted">
+                              {formatUploadDate(photo.uploadedAt)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {pagination && pagination.totalPages > 1 && (
+              <div className="mt-10 flex items-center justify-between gap-4" aria-label="Pagination">
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(current - 1, 1))}
+                  disabled={!pagination.hasPreviousPage}
+                  className="rounded-md border border-tafera-border bg-white px-4 py-2 text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-tafera-text-muted">
+                  Page {pagination.page} of {pagination.totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
+                  disabled={!pagination.hasNextPage}
+                  className="rounded-md border border-tafera-border bg-white px-4 py-2 text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>

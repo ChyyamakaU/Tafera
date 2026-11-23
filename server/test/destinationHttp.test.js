@@ -147,9 +147,12 @@ before(async () => {
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          destination_id uuid NOT NULL REFERENCES "${schema}".destinations(id)
            ON DELETE CASCADE ON UPDATE CASCADE,
+         user_id uuid REFERENCES "${schema}".users(id)
+           ON DELETE SET NULL ON UPDATE CASCADE,
          image_url varchar(255) NOT NULL,
          public_id varchar(255) NOT NULL,
          alt_text varchar(255),
+         caption varchar(500),
          display_order integer NOT NULL DEFAULT 0,
          is_cover boolean NOT NULL DEFAULT false,
          created_at timestamptz NOT NULL DEFAULT now(),
@@ -181,6 +184,16 @@ before(async () => {
     Destination.hasMany(DestinationImage, {
       foreignKey: 'destinationId',
       as: 'images',
+    })
+    DestinationImage.belongsTo(Destination, {
+      foreignKey: 'destinationId',
+      as: 'destination',
+    })
+    DestinationImage.belongsTo(User, {
+      foreignKey: 'userId',
+      as: 'contributor',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
     })
 
     databaseAvailable = true
@@ -417,9 +430,11 @@ const createHarness = async () => {
   app.use(
     '/api/destinations',
     createDestinationsRouter({
+      User,
       destinationService: createDestinationService({
         Destination,
         DestinationImage,
+        User,
       }),
     }),
   )
@@ -791,10 +806,13 @@ test('detail lookup supports UUID and slug and hides draft destinations', async 
         Object.keys(image).sort(),
         [
           'altText',
+          'caption',
+          'contributor',
           'displayOrder',
           'id',
           'imageUrl',
           'isCover',
+          'uploadedAt',
         ].sort(),
       )
     }
@@ -1006,6 +1024,162 @@ test('unverified authenticated users can read destinations', async (t) => {
       detail.body.data.destination.id,
       destination.id,
     )
+  } finally {
+    await harness.close()
+  }
+})
+
+test('public community gallery shows every traveller contribution without following', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const contributorA = await createUser({
+      fullName: 'Ada Traveller',
+      emailVerifiedAt: new Date(),
+    })
+    const contributorB = await createUser({
+      fullName: 'Maya Traveller',
+      emailVerifiedAt: new Date(),
+    })
+    const kyoto = await createDestination({
+      slug: 'kyoto-community',
+      name: 'Kyoto',
+      country: 'Japan',
+    })
+    const lagos = await createDestination({
+      slug: 'lagos-community',
+      name: 'Lagos',
+      country: 'Nigeria',
+      state: 'Lagos',
+      location: 'Lagos, Nigeria',
+    })
+
+    await createImage(kyoto.id, {
+      userId: contributorA.id,
+      caption: 'Evening in Gion',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+    })
+    await createImage(lagos.id, {
+      userId: contributorB.id,
+      caption: 'Sunset over the lagoon',
+      createdAt: new Date('2026-06-02T00:00:00.000Z'),
+    })
+    // Seeded/admin images have no contributor and must not appear in the
+    // community gallery.
+    await createImage(kyoto.id, {
+      userId: null,
+      caption: 'Seeded gallery image',
+      createdAt: new Date('2026-06-03T00:00:00.000Z'),
+    })
+
+    const client = harness.client()
+    const response = await client.get('/api/destinations/community')
+
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.photos.length, 2)
+    assert.deepEqual(
+      response.body.data.photos.map((photo) => photo.caption),
+      ['Sunset over the lagoon', 'Evening in Gion'],
+    )
+    assert.equal(response.body.data.pagination.total, 2)
+
+    const byCaption = Object.fromEntries(
+      response.body.data.photos.map((photo) => [photo.caption, photo]),
+    )
+
+    assert.equal(byCaption['Evening in Gion'].destination.name, 'Kyoto')
+    assert.equal(byCaption['Evening in Gion'].destination.slug, 'kyoto-community')
+    assert.equal(byCaption['Evening in Gion'].contributor.fullName, 'Ada Traveller')
+    assert.equal(byCaption['Sunset over the lagoon'].destination.name, 'Lagos')
+    assert.equal(byCaption['Sunset over the lagoon'].contributor.fullName, 'Maya Traveller')
+    assert.ok(byCaption['Evening in Gion'].uploadedAt)
+
+    const search = await client.get('/api/destinations/community?q=Lagos')
+    assert.equal(search.status, 200)
+    assert.equal(search.body.data.photos.length, 1)
+    assert.equal(search.body.data.photos[0].caption, 'Sunset over the lagoon')
+
+    const country = await client.get('/api/destinations/community?country=Japan')
+    assert.equal(country.status, 200)
+    assert.equal(country.body.data.photos.length, 1)
+    assert.equal(country.body.data.photos[0].caption, 'Evening in Gion')
+  } finally {
+    await harness.close()
+  }
+})
+
+test('My Destinations returns only the authenticated user contributions', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+
+  try {
+    const owner = await createUser({
+      fullName: 'Ada Traveller',
+      emailVerifiedAt: new Date(),
+    })
+    const other = await createUser({
+      fullName: 'Maya Traveller',
+      emailVerifiedAt: new Date(),
+    })
+    const kyoto = await createDestination({
+      slug: 'kyoto-mine',
+      name: 'Kyoto',
+      country: 'Japan',
+    })
+    const lagos = await createDestination({
+      slug: 'lagos-theirs',
+      name: 'Lagos',
+      country: 'Nigeria',
+      state: 'Lagos',
+      location: 'Lagos, Nigeria',
+    })
+
+    const ownPhoto = await createImage(kyoto.id, {
+      userId: owner.id,
+      caption: 'My Kyoto photo',
+      isCover: true,
+    })
+    await createImage(kyoto.id, {
+      userId: other.id,
+      caption: 'Someone else in Kyoto',
+      displayOrder: 2,
+    })
+    await createImage(lagos.id, {
+      userId: other.id,
+      caption: 'Someone else in Lagos',
+    })
+
+    const anonymous = await harness.client().get('/api/destinations/mine')
+    assert.equal(anonymous.status, 401)
+
+    const unverified = await createUser({ emailVerifiedAt: null })
+    const unverifiedClient = harness.client()
+    await loginUser(unverifiedClient, unverified.email)
+    const unverifiedResponse = await unverifiedClient.get('/api/destinations/mine')
+    assert.equal(unverifiedResponse.status, 403)
+
+    const client = harness.client()
+    const login = await loginUser(client, owner.email)
+    assert.equal(login.status, 200)
+
+    const mine = await client.get('/api/destinations/mine')
+    assert.equal(mine.status, 200)
+    assert.equal(mine.body.data.destinations.length, 1)
+    assert.equal(mine.body.data.destinations[0].id, kyoto.id)
+    assert.equal(mine.body.data.destinations[0].contributedPhotoCount, 1)
+    assert.equal(mine.body.data.destinations[0].representativeImage.id, ownPhoto.id)
+
+    const detail = await client.get(`/api/destinations/mine/${kyoto.slug}`)
+    assert.equal(detail.status, 200)
+    assert.equal(detail.body.data.destination.id, kyoto.id)
+    assert.equal(detail.body.data.destination.images.length, 1)
+    assert.equal(detail.body.data.destination.images[0].id, ownPhoto.id)
+    assert.equal(detail.body.data.destination.contributedPhotoCount, 1)
+
+    const otherDestination = await client.get(`/api/destinations/mine/${lagos.slug}`)
+    assert.equal(otherDestination.status, 200)
+    assert.equal(otherDestination.body.data.destination.images.length, 0)
   } finally {
     await harness.close()
   }

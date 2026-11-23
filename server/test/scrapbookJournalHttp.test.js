@@ -1194,7 +1194,7 @@ test('image modifications remain owner-only', async (t) => {
   }
 })
 
-test('scrapbook write operations work without verified email', async (t) => {
+test('unverified users cannot access private scrapbook reads or writes', async (t) => {
   if (skip(t)) return
   const harness = await createHarness()
 
@@ -1206,30 +1206,14 @@ test('scrapbook write operations work without verified email', async (t) => {
     // Verify the user is unverified
     assert.equal(user.emailVerifiedAt, null)
 
-    // Create journal should work without verified email
     const createResponse = await client.post('/api/scrapbooks', {
       title: 'Unverified Journal',
     })
-    assert.equal(createResponse.status, 201)
-
-    const journalId = createResponse.body.data.journal.id
-
-    // Update journal should work without verified email
-    const updateResponse = await client.patch(`/api/scrapbooks/${journalId}`, {
-      title: 'Updated Unverified Journal',
-    })
-    assert.equal(updateResponse.status, 200)
-
-    // Change visibility should work without verified email
-    const visibilityResponse = await client.patch(
-      `/api/scrapbooks/${journalId}/visibility`,
-      { isPublic: true },
-    )
-    assert.equal(visibilityResponse.status, 200)
-
-    // List images should work without verified email
-    const listResponse = await client.get(`/api/scrapbooks/${journalId}/images`)
-    assert.equal(listResponse.status, 200)
+    assert.equal(createResponse.status, 403)
+    assert.equal(createResponse.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
+    const listResponse = await client.get('/api/scrapbooks')
+    assert.equal(listResponse.status, 403)
+    assert.equal(listResponse.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
   } finally {
     await harness.close()
   }

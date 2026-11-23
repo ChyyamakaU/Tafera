@@ -15,6 +15,7 @@ const {
 const {
   createCsrfProtection,
 } = require('../middlewares/csrfProtection')
+const { createRequireVerifiedEmail } = require('../middlewares/requireVerifiedEmail')
 
 const createNotificationsRouter = ({
   notificationService,
@@ -29,21 +30,24 @@ const createNotificationsRouter = ({
   })
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
   const csrfProtection = createCsrfProtection()
+  const requireVerifiedEmail = createRequireVerifiedEmail({ User })
 
   const router = express.Router()
 
-  router.get('/', authenticate, controller.list)
+  router.get('/', authenticate, requireVerifiedEmail, controller.list)
   // Static routes are registered before the parameterized read route.
-  router.get('/unread-count', authenticate, controller.unreadCount)
+  router.get('/unread-count', authenticate, requireVerifiedEmail, controller.unreadCount)
   router.patch(
     '/read-all',
     authenticate,
+    requireVerifiedEmail,
     csrfProtection,
     controller.markAllAsRead,
   )
   router.patch(
     '/:notificationId/read',
     authenticate,
+    requireVerifiedEmail,
     csrfProtection,
     controller.markAsRead,
   )

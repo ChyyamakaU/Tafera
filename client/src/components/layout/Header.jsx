@@ -65,6 +65,7 @@ export default function Header() {
   const featuresDropdownRef = useRef(null)
   const profileDropdownRef = useRef(null)
   const mobileAccountRef = useRef(null)
+  const platformAuthenticated = isAuthenticated && isEmailVerified
 
   const isActive = (to) => location.pathname === to
 
@@ -381,7 +382,7 @@ export default function Header() {
       aria-label="Mobile navigation"
     >
       <div className="px-3 py-4 space-y-4">
-        {isAuthenticated ? AUTHENTICATED_NAV.map((item) => (
+        {platformAuthenticated ? AUTHENTICATED_NAV.map((item) => (
           <Link
             key={item.to}
             to={item.to}
@@ -554,7 +555,9 @@ export default function Header() {
           </div>
 
           <nav className="hidden lg:flex justify-self-center items-center gap-1">
-            {(isAuthenticated ? AUTHENTICATED_NAV : PUBLIC_NAV).map(navLinkItem)}
+          {(platformAuthenticated ? AUTHENTICATED_NAV : PUBLIC_NAV).map((item) =>
+            navLinkItem(item)
+          )}
           </nav>
 
           <div className="justify-self-end hidden lg:flex">

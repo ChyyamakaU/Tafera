@@ -1,6 +1,7 @@
 'use strict'
 
 const {
+  parseCommunityGalleryQuery,
   parseDestinationIdentifier,
   parseDestinationListQuery,
 } = require('../validators/destination')
@@ -26,6 +27,38 @@ const createDestinationController = ({ destinationService }) => ({
     const { idOrSlug } = parseDestinationIdentifier(req.params)
     const destination =
       await destinationService.getDestination(idOrSlug)
+
+    noStore(res).status(200).json({
+      data: { destination },
+    })
+  }),
+
+  listCommunity: asyncHandler(async (req, res) => {
+    const filters = parseCommunityGalleryQuery(req.query)
+    const { photos, pagination } =
+      await destinationService.listCommunityImages(filters)
+
+    noStore(res).status(200).json({
+      data: { photos, pagination },
+    })
+  }),
+
+  listMine: asyncHandler(async (req, res) => {
+    const destinations =
+      await destinationService.listMyDestinationContributions(req.auth.userId)
+
+    noStore(res).status(200).json({
+      data: { destinations },
+    })
+  }),
+
+  mineDetail: asyncHandler(async (req, res) => {
+    const { idOrSlug } = parseDestinationIdentifier(req.params)
+    const destination =
+      await destinationService.getMyDestinationContributions(
+        idOrSlug,
+        req.auth.userId,
+      )
 
     noStore(res).status(200).json({
       data: { destination },

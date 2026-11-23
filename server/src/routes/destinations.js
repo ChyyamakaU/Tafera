@@ -21,6 +21,7 @@ const {
 const {
   createRequireAdmin,
 } = require('../middlewares/requireAdmin')
+const { createRequireVerifiedEmail } = require('../middlewares/requireVerifiedEmail')
 const {
   destinationImageUpload,
 } = require('../middlewares/destinationImageUpload')
@@ -40,6 +41,7 @@ const createDestinationsRouter = ({
   })
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
   const csrfProtection = createCsrfProtection()
+  const requireVerifiedEmail = createRequireVerifiedEmail({ User })
   const requireAdmin = createRequireAdmin()
 
   const protectAdminWrite = [
@@ -53,6 +55,22 @@ const createDestinationsRouter = ({
   // Destination pages are public reads. No session, CSRF or verified-email
   // middleware applies.
   router.get('/', controller.list)
+
+  // Community gallery is public: every traveller contribution is visible
+  // without authentication or following its contributor.
+  router.get('/community', controller.listCommunity)
+
+  // Personal contributions are private to the authenticated, verified user.
+  // These static paths are registered before /:idOrSlug so "community" and
+  // "mine" are never interpreted as destination slugs.
+  router.get('/mine', authenticate, requireVerifiedEmail, controller.listMine)
+  router.get(
+    '/mine/:idOrSlug',
+    authenticate,
+    requireVerifiedEmail,
+    controller.mineDetail,
+  )
+
   router.get('/:idOrSlug', controller.detail)
 
   // Image listing is public and consistent with the published destination
@@ -64,7 +82,9 @@ const createDestinationsRouter = ({
   // /:imageId route so it is never mistaken for an image ID.
   router.post(
     '/:destinationId/images',
-    ...protectAdminWrite,
+    authenticate,
+    csrfProtection,
+    requireVerifiedEmail,
     destinationImageUpload,
     imageController.upload,
   )
@@ -80,7 +100,9 @@ const createDestinationsRouter = ({
   )
   router.delete(
     '/:destinationId/images/:imageId',
-    ...protectAdminWrite,
+    authenticate,
+    csrfProtection,
+    requireVerifiedEmail,
     imageController.delete,
   )
 

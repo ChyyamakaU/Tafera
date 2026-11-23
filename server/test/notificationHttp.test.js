@@ -614,6 +614,23 @@ test('notification reads and writes require authentication', async (t) => {
   }
 })
 
+test('notification endpoints reject authenticated users whose email is unverified', async (t) => {
+  if (skip(t)) return
+  const harness = await createHarness()
+  try {
+    const { client } = await createAuthenticatedClient(harness, { emailVerifiedAt: null })
+    for (const response of [
+      await client.get('/api/notifications'),
+      await client.get('/api/notifications/unread-count'),
+    ]) {
+      assert.equal(response.status, 403)
+      assert.equal(response.body.error.code, 'EMAIL_VERIFICATION_REQUIRED')
+    }
+  } finally {
+    await harness.close()
+  }
+})
+
 test('notification list is paginated, ordered and scoped to the caller', async (t) => {
   if (skip(t)) return
   const harness = await createHarness()

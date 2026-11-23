@@ -165,9 +165,11 @@ before(async () => {
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          destination_id uuid NOT NULL REFERENCES "${schema}".destinations(id)
            ON DELETE CASCADE ON UPDATE CASCADE,
+         user_id uuid REFERENCES "${schema}".users(id) ON DELETE SET NULL ON UPDATE CASCADE,
          image_url varchar(255) NOT NULL,
          public_id varchar(255) NOT NULL,
          alt_text varchar(255),
+         caption varchar(500),
          display_order integer NOT NULL DEFAULT 0,
          is_cover boolean NOT NULL DEFAULT false,
          created_at timestamptz NOT NULL DEFAULT now(),

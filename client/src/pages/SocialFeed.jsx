@@ -17,7 +17,8 @@ import {
 } from '../services/posts'
 import { getErrorMessage } from '../services/errors'
 import { fetchFeaturedDestinations } from '../services/destinations'
-import { fetchPublicTrips, fetchMyTrips } from '../services/trips'
+import { fetchPublicTrips } from '../services/trips'
+import TravelNavigation from '../components/social/TravelNavigation'
 
 const inputClass =
   'w-full rounded-lg border border-tafera-border bg-white px-4 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
@@ -328,7 +329,7 @@ export default function SocialFeed() {
   const [postPhoto, setPostPhoto] = useState(null)
   const postPhotoPreview = useMemo(() => postPhoto ? URL.createObjectURL(postPhoto) : null, [postPhoto])
   const [posting, setPosting] = useState(false)
-  const [discovery, setDiscovery] = useState({ destinations: [], groups: [], stories: [], trips: [] })
+  const [discovery, setDiscovery] = useState({ destinations: [], groups: [], stories: [] })
   const canWrite = isAuthenticated && isEmailVerified
 
   useEffect(() => () => {
@@ -337,7 +338,7 @@ export default function SocialFeed() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      setDiscovery({ destinations: [], groups: [], stories: [], trips: [] })
+      setDiscovery({ destinations: [], groups: [], stories: [] })
       return
     }
     let active = true
@@ -345,8 +346,7 @@ export default function SocialFeed() {
       fetchFeaturedDestinations(3),
       fetchPublicTrips({ page: 1, limit: 6 }),
       fetchPublicPosts(8),
-      fetchMyTrips({ page: 1, limit: 3 }),
-    ]).then(([destinationsResult, groupsResult, storiesResult, tripsResult]) => {
+    ]).then(([destinationsResult, groupsResult, storiesResult]) => {
       if (!active) return
       setDiscovery({
         destinations: destinationsResult.status === 'fulfilled' ? destinationsResult.value : [],
@@ -354,9 +354,6 @@ export default function SocialFeed() {
           ? (groupsResult.value.trips || []).filter((trip) => trip.tripType === 'group').slice(0, 3)
           : [],
         stories: storiesResult.status === 'fulfilled' ? storiesResult.value : [],
-        trips: tripsResult.status === 'fulfilled'
-          ? (tripsResult.value.trips || []).filter((trip) => trip.tripType === 'personal').slice(0, 3)
-          : [],
       })
     })
     return () => { active = false }
@@ -445,12 +442,7 @@ export default function SocialFeed() {
         </section>
         <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
           <h2 className="mb-3 font-heading font-bold text-tafera-text">Your travel</h2>
-          <nav aria-label="Travel shortcuts" className="space-y-1">
-            <Link to="/trips" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">My trips{discovery.trips.length > 0 ? ` · ${discovery.trips.length}` : ''}</Link>
-            <Link to="/scrapbooks" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">Scrapbooks</Link>
-            <Link to="/destinations" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">Explore destinations</Link>
-            <Link to="/group-travel" className="block rounded-md px-3 py-2 text-sm font-medium text-tafera-text hover:bg-white hover:text-tafera-primary">Group trips</Link>
-          </nav>
+          <TravelNavigation />
         </section>
       </aside>}
       <div className="order-1 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1">

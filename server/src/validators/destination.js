@@ -64,6 +64,16 @@ const imageAltTextSchema = z
   .max(255, 'Alt text must be at most 255 characters long.')
   .optional()
 
+const imageCaptionSchema = z
+  .preprocess(
+    emptyToUndefined,
+    z.string({ message: 'Caption must be a string.' })
+      .trim()
+      .min(1, 'Caption must not be empty.')
+      .max(500, 'Caption must be at most 500 characters long.')
+      .optional(),
+  )
+
 const booleanFromForm = (value) => {
   if (value === undefined || value === '') return undefined
   if (value === true || value === 'true') return true
@@ -97,6 +107,7 @@ const destinationIdParamsSchema = z.object({
 
 const createImageSchema = z.object({
   altText: imageAltTextSchema,
+  caption: imageCaptionSchema,
   isCover: isCoverSchema,
 })
 
@@ -233,6 +244,19 @@ const parseDestinationListQuery = (input) => {
   }
 }
 
+// The community gallery is photo-first, so it supports destination/location
+// search and pagination but not destination sorting.
+const communityGalleryQuerySchema = z.object({
+  q: optionalText(SEARCH_MAX_LENGTH, 'Search query'),
+  country: optionalText(LOCATION_FILTER_MAX_LENGTH, 'Country'),
+  state: optionalText(LOCATION_FILTER_MAX_LENGTH, 'State'),
+  page: pageSchema,
+  limit: limitSchema,
+})
+
+const parseCommunityGalleryQuery = (input) =>
+  parseWith(communityGalleryQuerySchema, input)
+
 const parseDestinationIdentifier = (input) =>
   parseWith(identifierParamsSchema, input)
 
@@ -258,6 +282,8 @@ module.exports = {
   isUuid,
   listQuerySchema,
   identifierParamsSchema,
+  communityGalleryQuerySchema,
+  parseCommunityGalleryQuery,
   parseCreateImage,
   parseDestinationId,
   parseDestinationIdentifier,
