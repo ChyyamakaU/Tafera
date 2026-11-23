@@ -18,6 +18,12 @@ import Profile from './pages/Profile'
 import PublicProfile from './pages/PublicProfile'
 import FollowList from './pages/FollowList'
 import Admin from './pages/Admin'
+import AdminLayout from './components/admin/AdminLayout'
+import AdminOverview from './pages/admin/AdminOverview'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminDestinations from './pages/admin/AdminDestinations'
+import AdminModeration from './pages/admin/AdminModeration'
+import AdminTrips from './pages/admin/AdminTrips'
 import Notifications from './pages/Notifications'
 import NotFound from './pages/NotFound'
 import { RequireAdmin } from './components/auth/RequireAuth'
@@ -45,7 +51,23 @@ function App() {
         <Route path="users/:userId" element={<PublicProfile />} />
         <Route path="users/:userId/followers" element={<FollowList />} />
         <Route path="users/:userId/following" element={<FollowList />} />
-        <Route path="admin" element={<RequireVerifiedEmail><RequireAdmin><Admin /></RequireAdmin></RequireVerifiedEmail>} />
+      </Route>
+      <Route
+        path="/admin"
+        element={
+          <RequireVerifiedEmail>
+            <RequireAdmin>
+              <AdminLayout />
+            </RequireAdmin>
+          </RequireVerifiedEmail>
+        }
+      >
+        <Route index element={<AdminOverview />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="destinations" element={<AdminDestinations />} />
+        <Route path="moderation" element={<AdminModeration />} />
+        <Route path="trips" element={<AdminTrips />} />
+        <Route path="stories" element={<Admin />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

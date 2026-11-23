@@ -13,7 +13,8 @@
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:migrate:status": "sequelize-cli db:migrate:status",
     "db:seed": "sequelize-cli db:seed:all",
-    "db:seed:undo": "sequelize-cli db:seed:undo:all"
+    "db:seed:undo": "sequelize-cli db:seed:undo:all",
+    "admin:init": "node src/scripts/createInitialAdmin.js"
   },
   "dependencies": {
     "argon2": "^0.45.2",

@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       targetType: {
-        type: DataTypes.ENUM('user', 'post', 'comment'),
+        type: DataTypes.ENUM('user', 'post', 'comment', 'trip'),
         allowNull: false,
       },
       targetId: {
@@ -38,7 +38,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       status: {
-        type: DataTypes.ENUM('pending', 'reviewed', 'resolved', 'dismissed'),
+        type: DataTypes.ENUM('pending', 'under_review', 'resolved', 'dismissed'),
         allowNull: false,
         defaultValue: 'pending',
       },
