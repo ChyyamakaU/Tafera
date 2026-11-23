@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { getFollowers, getFollowing } from '../services/users'
 
@@ -17,9 +17,10 @@ const LIST_CONFIG = {
 }
 
 export default function FollowList() {
-  const { userId, type } = useParams()
-  const navigate = useNavigate()
-  const config = LIST_CONFIG[type]
+  const { userId, type: paramType } = useParams()
+  const location = useLocation()
+  const type = paramType || (location.pathname.endsWith('/following') ? 'following' : 'followers')
+  const config = LIST_CONFIG[type] || LIST_CONFIG.followers
 
   const [items, setItems] = useState([])
   const [pagination, setPagination] = useState(null)
@@ -58,7 +59,7 @@ export default function FollowList() {
   if (error) {
     return (
       <div className="app-container py-24 text-center">
-        <p className="text-sm text-red-700">{error}</p>
+        <p className="text-sm text-red-500">{error}</p>
         <div className="mt-8 flex justify-center">
           <Link asChild to={`/users/${userId}`}>
             <Button variant="ghost">Back to profile</Button>

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/common/Button'
 import ProfileActivitySections from '../components/profile/ProfileActivitySections'
+import FollowConnectionsModal from '../components/profile/FollowConnectionsModal'
 import {
   getPublicProfile,
   followUser,
@@ -10,19 +11,31 @@ import {
   getFollowers,
   getFollowing,
 } from '../services/users'
+import { getErrorMessage } from '../services/errors'
+
+const isAlreadyFollowingError = (err) =>
+  err?.code === 'FOLLOW_EXISTS' ||
+  err?.status === 409 ||
+  /already follow/i.test(err?.message || '')
+
+const isNotFollowingError = (err) =>
+  err?.code === 'FOLLOW_NOT_FOUND' || err?.status === 404
 
 export default function PublicProfile() {
   const { userId } = useParams()
   const { user, isAuthenticated } = useAuth()
-  const navigate = useNavigate()
 
   const [profile, setProfile] = useState(null)
   const [followers, setFollowers] = useState([])
   const [following, setFollowing] = useState([])
-  const [isFollowing, setIsFollowing] = useState(null)
+  const [followersTotal, setFollowersTotal] = useState(0)
+  const [followingTotal, setFollowingTotal] = useState(0)
+  const [isFollowing, setIsFollowing] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [loadError, setLoadError] = useState(null)
+  const [followNotice, setFollowNotice] = useState(null)
   const [followLoading, setFollowLoading] = useState(false)
+  const [connectionsModal, setConnectionsModal] = useState({ open: false, type: 'followers' })
   const loadVersionRef = useRef(0)
 
   const isOwner = isAuthenticated && user && user.id === userId
@@ -31,67 +44,104 @@ export default function PublicProfile() {
     if (!userId) return
     loadVersionRef.current += 1
     const version = loadVersionRef.current
-    if (showLoading) setLoading(true)
+    if (showLoading) {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
-      setError(null)
       const [profileData, followersData, followingData] = await Promise.all([
         getPublicProfile(userId),
         getFollowers(userId, { page: 1, limit: 10 }),
         getFollowing(userId, { page: 1, limit: 10 }),
       ])
       if (loadVersionRef.current !== version) return
+      const followerRows = followersData?.followers || []
+      const followingRows = followingData?.following || []
       setProfile(profileData)
-      setFollowers(followersData.followers || [])
-      setFollowing(followingData.following || [])
+      setFollowers(followerRows)
+      setFollowing(followingRows)
+      setFollowersTotal(followersData?.pagination?.total ?? followerRows.length)
+      setFollowingTotal(followingData?.pagination?.total ?? followingRows.length)
+      if (showLoading && user?.id && followerRows.some((row) => row.user?.id === user.id)) {
+        setIsFollowing(true)
+      }
     } catch (err) {
       if (loadVersionRef.current !== version) return
-      setError(err.message || 'Failed to load profile.')
+      if (showLoading) {
+        setLoadError(err.message || 'Failed to load profile.')
+      }
     } finally {
       if (loadVersionRef.current === version) setLoading(false)
     }
-  }, [userId])
+  }, [userId, user?.id])
 
-  // A public profile can be viewed by anyone, but the follow state and action
-  // are only relevant to an authenticated viewer looking at someone else.
+  // Reset per-profile follow state only when navigating to a different user profile.
   useEffect(() => {
     if (!userId) return
+    setIsFollowing(false)
+    setFollowNotice(null)
+    setConnectionsModal({ open: false, type: 'followers' })
     loadProfile({ showLoading: true })
   }, [userId, loadProfile])
 
   useEffect(() => {
-    if (!isAuthenticated || isOwner || !profile) {
-      setIsFollowing(null)
-      return
+    if (!isAuthenticated || isOwner) {
+      setIsFollowing(false)
     }
-    // The public profile does not expose whether the viewer follows the user,
-    // so start in an "unknown" state; the button toggles optimistically and
-    // the follow/unfollow endpoints are the source of truth.
-    setIsFollowing(null)
-  }, [isAuthenticated, isOwner, profile])
+  }, [isAuthenticated, isOwner])
 
   const handleFollow = async () => {
     if (!isAuthenticated || isOwner || followLoading) return
     setFollowLoading(true)
-    setError(null)
+    setFollowNotice(null)
     try {
-      if (isFollowing === false || isFollowing === null) {
+      if (!isFollowing) {
         await followUser(userId)
         setIsFollowing(true)
+        setFollowersTotal((count) => count + 1)
+        setFollowNotice({
+          type: 'success',
+          message: `You're now following ${profile?.fullName || 'this traveller'}.`,
+        })
       } else {
         await unfollowUser(userId)
         setIsFollowing(false)
+        setFollowersTotal((count) => Math.max(0, count - 1))
+        setFollowNotice({
+          type: 'info',
+          message: `You unfollowed ${profile?.fullName || 'this traveller'}.`,
+        })
       }
-      // Refresh counts so the displayed totals stay accurate without unmounting profile activity.
+      // Refresh counts silently without resetting the button state or unmounting content.
       loadProfile({ showLoading: false })
     } catch (err) {
-      setError(err.message || 'Failed to update follow status.')
+      if (!isFollowing && isAlreadyFollowingError(err)) {
+        // Keep the user on this profile, sync button state to Following, and show inline feedback.
+        setIsFollowing(true)
+        setFollowNotice({
+          type: 'info',
+          message: "You're already following this traveller.",
+        })
+        loadProfile({ showLoading: false })
+      } else if (isFollowing && isNotFollowingError(err)) {
+        setIsFollowing(false)
+        setFollowNotice({
+          type: 'info',
+          message: "You're not following this traveller.",
+        })
+        loadProfile({ showLoading: false })
+      } else {
+        setFollowNotice({
+          type: 'error',
+          message: err?.message || getErrorMessage(err) || 'Failed to update follow status.',
+        })
+      }
     } finally {
       setFollowLoading(false)
     }
   }
 
-  const viewFollowers = () => navigate(`/users/${userId}/followers`)
-  const viewFollowing = () => navigate(`/users/${userId}/following`)
+  const openConnections = (type) => setConnectionsModal({ open: true, type })
 
   if (loading) {
     return (
@@ -109,13 +159,13 @@ export default function PublicProfile() {
     )
   }
 
-  if (error || !profile) {
+  if (loadError || !profile) {
     return (
       <div className="app-container py-24 text-center">
-        {error && (
-          <p className="text-sm text-red-500">{error}</p>
+        {loadError && (
+          <p className="text-sm text-red-500">{loadError}</p>
         )}
-        {!error && (
+        {!loadError && (
           <p className="text-tafera-text-muted">This profile could not be found.</p>
         )}
         <div className="mt-8 flex justify-center">
@@ -166,45 +216,70 @@ export default function PublicProfile() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-center hidden sm:block">
-              <p className="text-sm font-semibold text-tafera-text">
-                {followers.length}
-              </p>
-              <p
-                onClick={viewFollowers}
-                className="mt-1 text-xs text-tafera-primary hover:underline cursor-pointer"
-              >
-                Followers
-              </p>
-            </div>
-            <div className="text-center hidden sm:block">
-              <p className="text-sm font-semibold text-tafera-text">
-                {following.length}
-              </p>
-              <p
-                onClick={viewFollowing}
-                className="mt-1 text-xs text-tafera-primary hover:underline cursor-pointer"
-              >
-                Following
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => openConnections('followers')}
+              className="flex min-w-[5.25rem] flex-col items-center rounded-lg border border-tafera-border bg-tafera-card px-3.5 py-2 text-center transition-colors hover:border-tafera-primary"
+            >
+              <span className="text-sm font-bold text-tafera-text">{followersTotal}</span>
+              <span className="text-xs font-medium text-tafera-text-muted">Followers</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => openConnections('following')}
+              className="flex min-w-[5.25rem] flex-col items-center rounded-lg border border-tafera-border bg-tafera-card px-3.5 py-2 text-center transition-colors hover:border-tafera-primary"
+            >
+              <span className="text-sm font-bold text-tafera-text">{followingTotal}</span>
+              <span className="text-xs font-medium text-tafera-text-muted">Following</span>
+            </button>
             {!isOwner && isAuthenticated && (
               <Button
                 onClick={handleFollow}
                 disabled={followLoading}
                 variant={isFollowing ? 'outline' : 'primary'}
+                aria-pressed={isFollowing}
               >
-                {followLoading ? (isFollowing ? 'Unfollowing...' : 'Following...') : isFollowing ? 'Unfollow' : 'Follow'}
+                {followLoading
+                  ? isFollowing
+                    ? 'Unfollowing...'
+                    : 'Following...'
+                  : isFollowing
+                    ? 'Following'
+                    : 'Follow'}
               </Button>
             )}
           </div>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-6 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
-          {error}
+      {followNotice && (
+        <div
+          role={followNotice.type === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+          className={`mb-6 flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm text-tafera-text ${
+            followNotice.type === 'error'
+              ? 'border-red-500/30 bg-red-500/10'
+              : 'border-tafera-border bg-tafera-card shadow-soft'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {followNotice.type !== 'error' && (
+              <span
+                aria-hidden="true"
+                className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-tafera-accent"
+              />
+            )}
+            <span>{followNotice.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFollowNotice(null)}
+            className="rounded-md px-2 py-1 text-xs font-medium text-tafera-text-muted transition-colors hover:bg-tafera-surface hover:text-tafera-text"
+            aria-label="Dismiss notification"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -216,9 +291,20 @@ export default function PublicProfile() {
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-tafera-border bg-tafera-surface p-6 shadow-soft">
-          <h2 className="font-heading font-bold text-lg text-tafera-text mb-4">
-            Followers ({followers.length})
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="font-heading font-bold text-lg text-tafera-text">
+              Followers ({followersTotal})
+            </h2>
+            {followersTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => openConnections('followers')}
+                className="text-xs font-semibold text-tafera-primary hover:underline"
+              >
+                View all
+              </button>
+            )}
+          </div>
           {followers.length > 0 ? (
             <ul className="space-y-3">
               {followers.map((follow) => (
@@ -252,9 +338,20 @@ export default function PublicProfile() {
         </div>
 
         <div className="rounded-lg border border-tafera-border bg-tafera-surface p-6 shadow-soft">
-          <h2 className="font-heading font-bold text-lg text-tafera-text mb-4">
-            Following ({following.length})
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="font-heading font-bold text-lg text-tafera-text">
+              Following ({followingTotal})
+            </h2>
+            {followingTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => openConnections('following')}
+                className="text-xs font-semibold text-tafera-primary hover:underline"
+              >
+                View all
+              </button>
+            )}
+          </div>
           {following.length > 0 ? (
             <ul className="space-y-3">
               {following.map((follow) => (
@@ -287,6 +384,20 @@ export default function PublicProfile() {
           )}
         </div>
       </div>
+
+      <FollowConnectionsModal
+        isOpen={connectionsModal.open}
+        type={connectionsModal.type}
+        userId={profile.id || userId}
+        profileName={profile.fullName || 'Traveller'}
+        canUnfollow={Boolean(isOwner)}
+        onClose={() => setConnectionsModal((current) => ({ ...current, open: false }))}
+        onTypeChange={(nextType) => setConnectionsModal({ open: true, type: nextType })}
+        onFollowingChanged={(delta) => {
+          setFollowingTotal((count) => Math.max(0, count + delta))
+          loadProfile({ showLoading: false })
+        }}
+      />
 
       <div className="mt-10 flex justify-end">
         <Link asChild to="/">

@@ -198,7 +198,7 @@ describe('PublicProfile follow actions (authenticated viewer)', () => {
     })
   })
 
-  it('shows error when follow fails', async () => {
+  it('shows error inline on the same page when follow fails', async () => {
     mockGetPublicProfile.mockResolvedValue({
       id: 'user-2',
       fullName: 'Ada Lovelace',
@@ -220,8 +220,47 @@ describe('PublicProfile follow actions (authenticated viewer)', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Follow' }))
     await waitFor(() => {
-      expect(screen.getByText(/Follow failed/)).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent(/Follow failed/)
     })
+    // User remains on Ada Lovelace's profile page
+    expect(screen.getByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+  })
+
+  it('stays on the same page, shows inline status, and syncs button to Following on FOLLOW_EXISTS', async () => {
+    mockGetPublicProfile.mockResolvedValue({
+      id: 'user-2',
+      fullName: 'Ada Lovelace',
+      bio: 'Explorer',
+      profileImage: '',
+    })
+    mockGetFollowers.mockResolvedValue({
+      followers: [],
+      pagination: { page: 1, limit: 10, total: 1, pages: 1 },
+    })
+    mockGetFollowing.mockResolvedValue({
+      following: [],
+      pagination: { page: 1, limit: 10, total: 0, pages: 0 },
+    })
+    const conflictErr = new Error('You already follow this user.')
+    conflictErr.code = 'FOLLOW_EXISTS'
+    conflictErr.status = 409
+    mockFollowUser.mockRejectedValueOnce(conflictErr)
+    mockUnfollowUser.mockResolvedValueOnce(undefined)
+
+    renderPublicProfile('user-2')
+    fireEvent.click(await screen.findByRole('button', { name: 'Follow' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      "You're already following this traveller.",
+    )
+    expect(screen.getByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    const syncedButton = screen.getByRole('button', { name: 'Following' })
+    expect(syncedButton).toHaveAttribute('aria-pressed', 'true')
+
+    // Clicking the synced Following button now triggers unfollow cleanly
+    fireEvent.click(syncedButton)
+    await waitFor(() => expect(mockUnfollowUser).toHaveBeenCalledWith('user-2'))
+    expect(await screen.findByRole('button', { name: 'Follow' })).toBeInTheDocument()
   })
 })
 

@@ -9,7 +9,13 @@ import {
   uploadProfileImage,
   checkAuth,
 } from '../services/auth'
-import { fetchUserComments, fetchUserMedia } from '../services/users'
+import {
+  fetchUserComments,
+  fetchUserMedia,
+  getFollowers,
+  getFollowing,
+  unfollowUser,
+} from '../services/users'
 import { fetchUserPosts } from '../services/posts'
 
 vi.mock('../services/auth', () => ({
@@ -31,6 +37,9 @@ vi.mock('../services/auth', () => ({
 vi.mock('../services/users', () => ({
   fetchUserComments: vi.fn(),
   fetchUserMedia: vi.fn(),
+  getFollowers: vi.fn(),
+  getFollowing: vi.fn(),
+  unfollowUser: vi.fn(),
 }))
 vi.mock('../services/posts', () => ({
   fetchUserPosts: vi.fn(),
@@ -51,6 +60,9 @@ const mockCheckAuth = vi.mocked(checkAuth)
 const mockFetchUserPosts = vi.mocked(fetchUserPosts)
 const mockFetchUserMedia = vi.mocked(fetchUserMedia)
 const mockFetchUserComments = vi.mocked(fetchUserComments)
+const mockGetFollowers = vi.mocked(getFollowers)
+const mockGetFollowing = vi.mocked(getFollowing)
+const mockUnfollowUser = vi.mocked(unfollowUser)
 
 const renderProfile = () => {
   return render(
@@ -72,6 +84,8 @@ beforeEach(() => {
   mockFetchUserPosts.mockResolvedValue({ posts: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
   mockFetchUserMedia.mockResolvedValue({ media: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
   mockFetchUserComments.mockResolvedValue({ comments: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
+  mockGetFollowers.mockResolvedValue({ followers: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
+  mockGetFollowing.mockResolvedValue({ following: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
 })
 
 afterEach(() => {
@@ -332,5 +346,53 @@ describe('Traveller profile content and photo', () => {
     const file = new File(['image-bytes'], 'avatar.png', { type: 'image/png' })
     fireEvent.change(await screen.findByLabelText('Upload profile photo'), { target: { files: [file] } })
     await waitFor(() => expect(mockUploadProfileImage).toHaveBeenCalledWith(file))
+  })
+
+  it('displays clickable Followers and Following counts and opens each connections list', async () => {
+    mockGetProfile.mockResolvedValue({ id: '1', fullName: 'Test User' })
+    mockGetFollowers.mockResolvedValue({
+      followers: [
+        {
+          user: { id: 'user-2', fullName: 'Chidi Okafor', username: 'chidi_travels', bio: 'Lagos walker' },
+          followedAt: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+      pagination: { page: 1, limit: 20, total: 2, hasNextPage: false },
+    })
+    mockGetFollowing.mockResolvedValue({
+      following: [
+        {
+          user: { id: 'user-3', fullName: 'Amina Bello', username: 'amina_roams' },
+          followedAt: '2026-02-05T00:00:00.000Z',
+        },
+      ],
+      pagination: { page: 1, limit: 20, total: 1, hasNextPage: false },
+    })
+    mockUnfollowUser.mockResolvedValue(undefined)
+
+    renderProfile()
+
+    const followersButton = await screen.findByRole('button', { name: /2\s*Followers/i })
+    const followingButton = await screen.findByRole('button', { name: /1\s*Following/i })
+    expect(followersButton).toBeInTheDocument()
+    expect(followingButton).toBeInTheDocument()
+
+    // Open Followers list
+    fireEvent.click(followersButton)
+    const dialog = await screen.findByRole('dialog')
+    const followerLink = await within(dialog).findByRole('link', { name: /Chidi Okafor/i })
+    expect(followerLink).toHaveAttribute('href', '/users/user-2')
+
+    // Switch to Following list and unfollow
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Following' }))
+    const followingLink = await within(dialog).findByRole('link', { name: /Amina Bello/i })
+    expect(followingLink).toHaveAttribute('href', '/users/user-3')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Unfollow' }))
+    await waitFor(() => expect(mockUnfollowUser).toHaveBeenCalledWith('user-3'))
+    await waitFor(() => {
+      expect(within(dialog).getByText('Not following anyone yet.')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /0\s*Following/i })).toBeInTheDocument()
   })
 })

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import ProfileActivitySections from '../components/profile/ProfileActivitySections'
+import FollowConnectionsModal from '../components/profile/FollowConnectionsModal'
 import { useAuth } from '../contexts/AuthContext'
 import { getProfile, updateProfile, uploadProfileImage } from '../services/auth'
+import { getFollowers, getFollowing } from '../services/users'
 import { getErrorMessage, getFieldErrors } from '../services/errors'
 import { NIGERIAN_STATES } from '../constants/nigeriaStates'
 
@@ -27,6 +29,10 @@ export default function Profile() {
   const [success, setSuccess] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [avatarFile, setAvatarFile] = useState(null)
+  const [followersCount, setFollowersCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const [countsLoading, setCountsLoading] = useState(false)
+  const [connectionsModal, setConnectionsModal] = useState({ open: false, type: 'followers' })
   const navigate = useNavigate()
   const avatarPreview = useMemo(() => avatarFile ? URL.createObjectURL(avatarFile) : null, [avatarFile])
 
@@ -58,6 +64,30 @@ export default function Profile() {
     }
     loadProfile()
   }, [authLoading, isAuthenticated, navigate])
+
+  useEffect(() => {
+    if (!profile?.id) return undefined
+    let active = true
+    setCountsLoading(true)
+    Promise.allSettled([
+      getFollowers(profile.id, { page: 1, limit: 1 }),
+      getFollowing(profile.id, { page: 1, limit: 1 }),
+    ]).then(([followersResult, followingResult]) => {
+      if (!active) return
+      if (followersResult.status === 'fulfilled') {
+        const data = followersResult.value
+        setFollowersCount(data?.pagination?.total ?? data?.followers?.length ?? 0)
+      }
+      if (followingResult.status === 'fulfilled') {
+        const data = followingResult.value
+        setFollowingCount(data?.pagination?.total ?? data?.following?.length ?? 0)
+      }
+      setCountsLoading(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [profile?.id])
 
   const handleSave = async (event) => {
     event.preventDefault()
@@ -127,6 +157,28 @@ export default function Profile() {
             {(profile?.city || profile?.state) && <p className="mt-2 text-sm text-tafera-text-muted">{[profile.city, profile.state, 'Nigeria'].filter(Boolean).join(', ')}</p>}
             {profile?.bio && <p className="mt-3 whitespace-pre-wrap text-sm text-tafera-text">{profile.bio}</p>}
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">{[['websiteUrl', 'Website'], ['instagramUrl', 'Instagram'], ['tiktokUrl', 'TikTok'], ['youtubeUrl', 'YouTube']].filter(([key]) => profile?.[key]).map(([key, label]) => <a key={key} href={profile[key]} target="_blank" rel="noreferrer" className="text-tafera-primary hover:underline">{label}</a>)}</div>
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConnectionsModal({ open: true, type: 'followers' })}
+                className="flex min-w-[5.25rem] flex-col items-center rounded-lg border border-tafera-border bg-tafera-card px-3.5 py-2 text-center transition-colors hover:border-tafera-primary"
+              >
+                <span className="text-sm font-bold text-tafera-text">
+                  {countsLoading ? '…' : followersCount}
+                </span>
+                <span className="text-xs font-medium text-tafera-text-muted">Followers</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConnectionsModal({ open: true, type: 'following' })}
+                className="flex min-w-[5.25rem] flex-col items-center rounded-lg border border-tafera-border bg-tafera-card px-3.5 py-2 text-center transition-colors hover:border-tafera-primary"
+              >
+                <span className="text-sm font-bold text-tafera-text">
+                  {countsLoading ? '…' : followingCount}
+                </span>
+                <span className="text-xs font-medium text-tafera-text-muted">Following</span>
+              </button>
+            </div>
             <Button className="mt-4" onClick={() => { setError(null); setIsEditing(true) }}>Edit Profile</Button>
           </div>
 
@@ -146,11 +198,25 @@ export default function Profile() {
       </section>
 
       {profile?.id && (
-        <ProfileActivitySections
-          userId={profile.id}
-          isOwnProfile
-          profileName={profile.fullName || 'Your'}
-        />
+        <>
+          <ProfileActivitySections
+            userId={profile.id}
+            isOwnProfile
+            profileName={profile.fullName || 'Your'}
+          />
+          <FollowConnectionsModal
+            isOpen={connectionsModal.open}
+            type={connectionsModal.type}
+            userId={profile.id}
+            profileName={profile.fullName || 'Your profile'}
+            canUnfollow
+            onClose={() => setConnectionsModal((current) => ({ ...current, open: false }))}
+            onTypeChange={(nextType) => setConnectionsModal({ open: true, type: nextType })}
+            onFollowingChanged={(delta) =>
+              setFollowingCount((count) => Math.max(0, count + delta))
+            }
+          />
+        </>
       )}
       <div className="mt-6"><Link to="/" className="text-sm font-medium text-tafera-primary hover:underline">Back to home</Link></div>
     </main>
