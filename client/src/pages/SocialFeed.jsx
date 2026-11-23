@@ -675,7 +675,7 @@ function PostCard({
             className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary disabled:cursor-not-allowed disabled:opacity-60 ${
               likeState.isLiked
                 ? 'border-tafera-primary bg-tafera-bg text-tafera-primary'
-                : 'border-tafera-border bg-tafera-bg text-tafera-text-muted hover:text-tafera-primary'
+                : 'border-tafera-border bg-tafera-card text-tafera-text hover:text-tafera-primary'
             }`}
           >
             <HeartIcon filled={likeState.isLiked} />
@@ -699,7 +699,7 @@ function PostCard({
             className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary disabled:cursor-not-allowed disabled:opacity-60 ${
               isSaved
                 ? 'border-tafera-primary bg-tafera-bg text-tafera-primary'
-                : 'border-tafera-border bg-tafera-bg text-tafera-text-muted hover:text-tafera-primary'
+                : 'border-tafera-border bg-tafera-card text-tafera-text hover:text-tafera-primary'
             }`}
           >
             <BookmarkIcon filled={isSaved} />
@@ -725,7 +725,7 @@ function PostCard({
       {expanded && (
         <section className="mt-4 border-t border-tafera-border pt-4" aria-label={`Details and comments for ${post.author?.fullName}'s post`}>
           {detailLoading && <p className="text-sm text-tafera-text-muted">Loading post and comments...</p>}
-          {error && <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {error && <div role="alert" className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-tafera-text">{error}</div>}
           {!detailLoading && (
             <>
               <h3 className="mb-3 font-semibold text-tafera-text">Comments ({commentPagination?.total ?? comments.length})</h3>
@@ -734,7 +734,7 @@ function PostCard({
               ) : (
                 <ul className="space-y-3">
                   {comments.map((comment) => (
-                    <li key={comment.id} className="rounded-md bg-white p-3">
+                    <li key={comment.id} className="rounded-md border border-tafera-border bg-tafera-card p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <Author author={comment.author} />
@@ -1265,11 +1265,11 @@ export default function SocialFeed() {
         </section>
         <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
           <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-heading font-bold text-tafera-text">Popular destinations</h2><Link to="/destinations" className="text-xs font-medium text-tafera-primary hover:underline">Explore</Link></div>
-          {discovery.destinations.length ? <ul className="space-y-3">{discovery.destinations.map((destination) => <li key={destination.id}><Link to={`/destinations/${destination.slug}`} className="group flex items-center gap-3">{destination.coverImage?.imageUrl ? <img className="h-12 w-14 shrink-0 rounded-md object-cover" src={destination.coverImage.imageUrl} alt={destination.coverImage.altText || ''} loading="lazy" /> : <span aria-hidden="true" className="h-12 w-14 shrink-0 rounded-md bg-white" />}<span className="min-w-0"><span className="block truncate text-sm font-semibold text-tafera-text group-hover:text-tafera-primary">{destination.name}</span><span className="block truncate text-xs text-tafera-text-muted">{destination.location || destination.country}</span></span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">No featured destinations are available right now.</p>}
+          {discovery.destinations.length ? <ul className="space-y-3">{discovery.destinations.map((destination) => <li key={destination.id}><Link to={`/destinations/${destination.slug}`} className="group flex items-center gap-3">{destination.coverImage?.imageUrl ? <img className="h-12 w-14 shrink-0 rounded-md object-cover" src={destination.coverImage.imageUrl} alt={destination.coverImage.altText || ''} loading="lazy" /> : <span aria-hidden="true" className="h-12 w-14 shrink-0 rounded-md bg-tafera-card" />}<span className="min-w-0"><span className="block truncate text-sm font-semibold text-tafera-text group-hover:text-tafera-primary">{destination.name}</span><span className="block truncate text-xs text-tafera-text-muted">{destination.location || destination.country}</span></span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">No featured destinations are available right now.</p>}
         </section>
         <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
           <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-heading font-bold text-tafera-text">Group trips</h2><Link to="/group-travel" className="text-xs font-medium text-tafera-primary hover:underline">See all</Link></div>
-          {discovery.groups.length ? <ul className="space-y-3">{discovery.groups.map((trip) => <li key={trip.id}><Link to={`/trips/${trip.id}`} className="block rounded-md bg-white p-3 hover:ring-1 hover:ring-tafera-primary"><span className="block truncate text-sm font-semibold text-tafera-text">{trip.title}</span><span className="mt-1 block text-xs text-tafera-text-muted">{trip.startDate} – {trip.endDate}</span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">No published group trips to discover yet.</p>}
+          {discovery.groups.length ? <ul className="space-y-3">{discovery.groups.map((trip) => <li key={trip.id}><Link to={`/trips/${trip.id}`} className="block rounded-md border border-tafera-border bg-tafera-card p-3 hover:ring-1 hover:ring-tafera-primary"><span className="block truncate text-sm font-semibold text-tafera-text">{trip.title}</span><span className="mt-1 block text-xs text-tafera-text-muted">{trip.startDate} – {trip.endDate}</span></Link></li>)}</ul> : <p className="text-sm text-tafera-text-muted">No published group trips to discover yet.</p>}
         </section>
       </aside>}
     </div>

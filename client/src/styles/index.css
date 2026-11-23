@@ -1,45 +1,97 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600&family=Manrope:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @theme {
-  /* Tafera ocean-inspired brand palette — light theme (default) */
-  --color-tafera-primary: #0F4C81;    /* Deep ocean blue — primary brand */
-  --color-tafera-bg: #FFFFFF;         /* Clean white — main background */
-  --color-tafera-surface: #F1F5F9;    /* Cool grey-blue surface — secondary background */
-  --color-tafera-text: #0B2A4A;       /* Deep slate — primary text */
-  --color-tafera-text-muted: #64748B; /* Muted slate — secondary text */
-  --color-tafera-accent: #38BDF8;     /* Bright ocean blue — sparing accent */
-  --color-tafera-border: #E2E8F0;     /* Light cool grey border */
+  /* Tafera two-mode visual system — Light mode (default) */
+  --color-tafera-primary: #0D7A5B;       /* High-contrast deep mint for links/labels on light surfaces */
+  --color-tafera-accent: #28E1AD;        /* Primary brand mint (#28E1AD) */
+  --color-tafera-lime: #DDFC84;          /* Supporting brand lime (#DDFC84) */
+  --color-tafera-ink: #171B20;           /* Dark charcoal ink (#171B20) */
+  --color-tafera-dark-bg: #1C2424;       /* Dark canvas reference (#1C2424) */
+  --color-tafera-light-bg: #F7F5EF;      /* Light canvas reference (#F7F5EF) */
+  --color-tafera-on-primary: #FFFFFF;    /* Contrast ink on primary fills in light mode */
+  --color-tafera-on-accent: #171B20;     /* Contrast dark charcoal ink on mint/lime fills */
 
-  /* Typography — Outfit headings, Manrope body, Inter navigation */
-  --font-heading: "Outfit", ui-sans-serif, system-ui, -apple-system,
+  --color-tafera-bg: #F7F5EF;            /* Warm light background (#F7F5EF) */
+  --color-tafera-surface: #EFECE4;       /* Secondary warm surface */
+  --color-tafera-card: #FFFFFF;          /* Elevated card, input, dropdown & modal surface (#FFFFFF) */
+  --color-tafera-text: #171B20;          /* Primary dark charcoal text (#171B20) */
+  --color-tafera-text-muted: #5C6460;    /* Muted secondary text (#5C6460) */
+  --color-tafera-border: #E2DFD5;        /* Subtle warm hairline border (#E2DFD5) */
+
+  /* Typography — Manrope headings, DM Sans body & navigation */
+  --font-heading: "Manrope", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-body: "Manrope", ui-sans-serif, system-ui, -apple-system,
+  --font-body: "DM Sans", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-nav: "Inter", ui-sans-serif, system-ui, -apple-system,
+  --font-nav: "DM Sans", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
   /* Border radius — minimal, restrained */
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
 
-  /* Shadows — very subtle, almost none */
-  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  /* Shadows — subtle depth */
+  --shadow-card: 0 2px 10px -2px rgb(23 27 32 / 0.08);
+  --shadow-soft: 0 1px 3px 0 rgb(23 27 32 / 0.06);
 }
 
 html[data-theme="dark"] {
-  --color-tafera-primary: #7DD3FC;
-  --color-tafera-bg: #020617;
-  --color-tafera-surface: #0F172A;
-  --color-tafera-text: #F8FAFC;
-  --color-tafera-text-muted: #94A3B8;
-  --color-tafera-accent: #22D3EE;
-  --color-tafera-border: #334155;
+  color-scheme: dark;
+  --color-tafera-primary: #28E1AD;       /* Primary mint shines directly on dark surfaces */
+  --color-tafera-accent: #28E1AD;
+  --color-tafera-lime: #DDFC84;
+  --color-tafera-on-primary: #171B20;    /* Dark charcoal ink on #28E1AD */
+  --color-tafera-on-accent: #171B20;
+
+  --color-tafera-bg: #1C2424;            /* Dark background (#1C2424) */
+  --color-tafera-surface: #171B20;       /* Dark charcoal surface (#171B20) */
+  --color-tafera-card: #252F2F;          /* Elevated card, dropdown & modal surface (#252F2F) */
+  --color-tafera-text: #F7F5EF;          /* Warm light primary text (#F7F5EF) */
+  --color-tafera-text-muted: #9BA6A2;    /* Accessible muted text on dark surfaces (#9BA6A2) */
+  --color-tafera-border: #334040;        /* Restrained dark hairline border (#334040) */
+
+  --shadow-card: 0 4px 16px -4px rgb(0 0 0 / 0.45);
+  --shadow-soft: 0 1px 4px 0 rgb(0 0 0 / 0.35);
 }
 
-html {
-  scroll-behavior: smooth;
+@layer base {
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-tafera-bg);
+    color: var(--color-tafera-text);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    color: var(--color-tafera-text);
+  }
+
+  a {
+    color: var(--color-tafera-primary);
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--color-tafera-accent);
+  }
+
+  select,
+  option {
+    background-color: var(--color-tafera-card);
+    color: var(--color-tafera-text);
+  }
 }
 
 .app-container {
@@ -50,38 +102,23 @@ html {
 
 /* Match the visitor homepage's section gutter (60px section + 15px inner). */
 @media (min-width: 768px) {
-  .app-container { padding-inline: 75px; }
+  .app-container {
+    padding-inline: 75px;
+  }
 }
 
-body {
-  font-family: var(--font-body);
-  background-color: var(--color-tafera-bg);
-  color: var(--color-tafera-text);
+/* Hide scrollbars cleanly for horizontal carousels while keeping scroll functional */
+.no-scrollbar {
+  scrollbar-width: none;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-heading);
-  color: var(--color-tafera-text);
-}
-
-a {
-  color: var(--color-tafera-primary);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-a:hover {
-  color: var(--color-tafera-accent);
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Visible focus styles for keyboard navigation */
 :focus-visible {
-  outline: 2px solid var(--color-tafera-primary);
+  outline: 2px solid var(--color-tafera-accent);
   outline-offset: 2px;
 }
 

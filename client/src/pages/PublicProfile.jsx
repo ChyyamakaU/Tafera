@@ -195,7 +195,7 @@ export default function PublicProfile() {
       </div>
 
       {error && (
-        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div className="mb-6 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
           {error}
         </div>
       )}

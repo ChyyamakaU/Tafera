@@ -90,7 +90,7 @@ export default function MyDestinationDetail() {
             </p>
             <Link
               to="/my-destinations"
-              className="rounded-lg border border-tafera-border bg-white px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+              className="rounded-lg border border-tafera-border bg-tafera-card px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
             >
               Back to My Destinations
             </Link>
@@ -130,7 +130,7 @@ export default function MyDestinationDetail() {
             </span>
             <Link
               to={`/destinations/${destination.slug}`}
-              className="rounded-lg border border-tafera-border bg-white px-4 py-2 text-sm font-semibold text-tafera-primary hover:bg-tafera-primary/5"
+              className="rounded-lg border border-tafera-border bg-tafera-card px-4 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface hover:text-tafera-primary"
             >
               View public gallery
             </Link>
@@ -138,12 +138,12 @@ export default function MyDestinationDetail() {
         </div>
 
         {actionError && (
-          <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p role="alert" className="mt-5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-tafera-text">
             {actionError}
           </p>
         )}
         {actionSuccess && (
-          <p role="status" className="mt-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <p role="status" className="mt-5 rounded-lg border border-tafera-primary/30 bg-tafera-primary/10 px-4 py-3 text-sm text-tafera-text">
             {actionSuccess}
           </p>
         )}
@@ -159,7 +159,7 @@ export default function MyDestinationDetail() {
             </p>
             <Link
               to="/destinations"
-              className="mt-6 inline-flex rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-tafera-primary/90"
+              className="mt-6 inline-flex rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-tafera-on-primary hover:bg-tafera-primary/90"
             >
               Explore destinations
             </Link>
@@ -168,7 +168,7 @@ export default function MyDestinationDetail() {
           <ul className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {images.map((image) => (
               <li key={image.id}>
-                <article className="flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-white shadow-soft">
+                <article className="flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-tafera-card shadow-soft">
                   <div className="aspect-[4/3] overflow-hidden bg-tafera-surface">
                     <img
                       src={image.imageUrl}
@@ -195,7 +195,7 @@ export default function MyDestinationDetail() {
                         type="button"
                         onClick={() => removePhoto(image)}
                         disabled={deletingId === image.id}
-                        className="rounded-md px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        className="rounded-md px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                         aria-label={`Delete photo ${image.caption || ''}`}
                       >
                         {deletingId === image.id ? 'Removing…' : 'Delete'}

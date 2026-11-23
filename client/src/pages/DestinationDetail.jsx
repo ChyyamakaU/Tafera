@@ -135,7 +135,7 @@ export default function DestinationDetail() {
               <p className="text-xs text-tafera-text-muted">{formatUploadDate(image.uploadedAt)}</p>
             </div>
             {canDelete && (
-              <button type="button" onClick={() => removePhoto(image)} disabled={deletingImageId === image.id} className="rounded-md px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`Delete photo ${image.caption || ''}`}>
+              <button type="button" onClick={() => removePhoto(image)} disabled={deletingImageId === image.id} className="rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50" aria-label={`Delete photo ${image.caption || ''}`}>
                 {deletingImageId === image.id ? 'Removing…' : 'Delete'}
               </button>
             )}
@@ -243,13 +243,13 @@ export default function DestinationDetail() {
               {destination.description}
             </div>
             <div className="mb-5 flex flex-wrap gap-3">
-              <a href="#destination-gallery" className="inline-flex min-h-10 items-center justify-center rounded-lg border border-tafera-border bg-white px-4 py-2 text-sm font-semibold text-tafera-primary hover:bg-tafera-primary/5">Browse traveller photos</a>
-              {canContribute && <a href="#destination-photo" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-white hover:bg-tafera-primary/90">Upload photos</a>}
+              <a href="#destination-gallery" className="inline-flex min-h-10 items-center justify-center rounded-lg border border-tafera-border bg-tafera-card px-4 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface hover:text-tafera-primary">Browse traveller photos</a>
+              {canContribute && <a href="#destination-photo" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-tafera-on-primary hover:bg-tafera-primary/90">Upload photos</a>}
             </div>
             <Link
               to="/destinations"
               onClick={() => navigate('/destinations')}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-nav font-medium hover:bg-tafera-surface hover:text-tafera-primary transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md border border-tafera-border bg-tafera-card text-tafera-text font-nav font-medium hover:bg-tafera-surface hover:text-tafera-primary transition-colors"
             >
               Back to destinations
             </Link>
@@ -268,8 +268,8 @@ export default function DestinationDetail() {
             <span className="text-sm text-tafera-text-muted">{images.length} {images.length === 1 ? 'photo' : 'photos'}</span>
           </div>
 
-          {galleryError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{galleryError}</p>}
-          {gallerySuccess && <p role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{gallerySuccess}</p>}
+          {galleryError && <p role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-tafera-text">{galleryError}</p>}
+          {gallerySuccess && <p role="status" className="mb-4 rounded-lg border border-tafera-primary/30 bg-tafera-primary/10 px-4 py-3 text-sm text-tafera-text">{gallerySuccess}</p>}
 
           {canContribute ? (
             <form onSubmit={submitPhoto} className="mb-9 grid gap-4 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:grid-cols-[1fr_1.2fr_auto] sm:items-end sm:p-6">
@@ -281,7 +281,7 @@ export default function DestinationDetail() {
                   accept="image/jpeg,image/png,image/webp"
                   required
                   onChange={(event) => setPhotoFile(event.target.files?.[0] || null)}
-                  className="block w-full text-sm text-tafera-text file:mr-3 file:rounded-lg file:border-0 file:bg-tafera-primary/10 file:px-4 file:py-2.5 file:font-semibold file:text-tafera-primary hover:file:bg-tafera-primary/15"
+                  className="block w-full text-sm text-tafera-text file:mr-3 file:rounded-lg file:border file:border-tafera-border file:bg-tafera-card file:px-4 file:py-2.5 file:font-semibold file:text-tafera-text hover:file:bg-tafera-bg"
                 />
                 <p className="mt-1 text-xs text-tafera-text-muted">JPEG, PNG or WebP · up to 5 MB</p>
               </div>
@@ -294,17 +294,17 @@ export default function DestinationDetail() {
                   value={caption}
                   onChange={(event) => setCaption(event.target.value)}
                   placeholder="What made this moment memorable?"
-                  className="h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+                  className="h-11 w-full rounded-lg border border-tafera-border bg-tafera-card px-3 text-sm text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
                 />
               </div>
-              <button type="submit" disabled={!photoFile || uploading} className="min-h-11 rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-tafera-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={!photoFile || uploading} className="min-h-11 rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-tafera-on-primary transition-colors hover:bg-tafera-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
                 {uploading ? 'Uploading…' : 'Upload photo'}
               </button>
             </form>
           ) : (
             <div className="mb-9 flex flex-col gap-3 rounded-2xl border border-tafera-border bg-tafera-surface p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <p className="text-sm text-tafera-text-muted">Have a photo from this destination? Sign in to share it with other travellers.</p>
-              <Link to="/login" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-white hover:bg-tafera-primary/90">Sign in to contribute</Link>
+              <Link to="/login" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-tafera-on-primary hover:bg-tafera-primary/90">Sign in to contribute</Link>
             </div>
           )}
 

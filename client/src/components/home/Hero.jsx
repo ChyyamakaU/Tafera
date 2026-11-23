@@ -23,7 +23,7 @@ export default function Hero() {
         >
           {/* Left column — tagline, headline, description, CTA */}
           <div className="lg:col-span-6">
-            <span className="inline-flex items-center gap-1 rounded-md bg-tafera-accent px-3 py-1 text-xs font-nav font-semibold text-white uppercase tracking-wider mb-3 block">
+            <span className="inline-flex items-center gap-1 rounded-md bg-tafera-accent px-3 py-1 text-xs font-nav font-semibold text-tafera-on-accent uppercase tracking-wider mb-3 block">
               EXPLORE BEYOND THE FAMILIAR.
             </span>
             <h1 className="mt-0 mb-6 text-4xl sm:text-5xl lg:text-6xl font-nav font-semibold text-tafera-text leading-tight">
@@ -45,7 +45,7 @@ export default function Hero() {
                   type="text"
                   name="destination"
                   placeholder="Where do you want to explore?"
-                  className="w-full px-4 py-3 rounded-md border border-tafera-border text-tafera-text focus:outline-none focus:ring-2 focus:ring-tafera-primary transition-colors sm:text-base pr-10"
+                  className="w-full px-4 py-3 rounded-md border border-tafera-border bg-tafera-card text-tafera-text placeholder:text-tafera-text-muted focus:outline-none focus:ring-2 focus:ring-tafera-primary transition-colors sm:text-base pr-10"
                 />
                 <button
                   type="submit"

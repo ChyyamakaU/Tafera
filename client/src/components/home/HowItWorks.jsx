@@ -20,34 +20,51 @@ const STEPS = [
 
 export default function HowItWorks() {
   return (
-    <section className="px-0 md:px-15 py-16">
-      <div className="px-[15px]">
-        <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl text-center mb-16">
-          How it works
-        </h2>
-        <div className="flex flex-col lg:flex-row gap-12 items-start lg:items-center justify-between">
+    <section
+      className="border-t border-tafera-border bg-tafera-bg py-14 sm:py-20 transition-colors"
+      aria-labelledby="how-it-works-heading"
+    >
+      <div className="app-container">
+        <div className="mx-auto mb-12 max-w-2xl text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tafera-primary">
+            Simple from start to finish
+          </p>
+          <h2
+            id="how-it-works-heading"
+            className="mt-2 font-heading text-3xl font-bold text-tafera-text sm:text-4xl"
+          >
+            How it works
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {STEPS.map((step) => (
-            <div key={step.number} className="flex flex-col items-center text-center lg:text-left lg:max-w-[220px]">
-              <span className="w-10 h-10 rounded-full bg-tafera-primary text-white flex items-center justify-center font-heading font-bold text-lg mb-4">
+            <div
+              key={step.number}
+              className="rounded-xl border border-tafera-border bg-tafera-card p-6 shadow-soft"
+            >
+              <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-tafera-accent font-heading text-base font-bold text-tafera-on-accent">
                 {step.number}
               </span>
-              <h3 className="text-lg font-heading font-bold text-tafera-text mb-2">
+              <h3 className="font-heading text-lg font-bold text-tafera-text">
                 {step.title}
               </h3>
-              <p className="text-sm text-tafera-text-muted leading-relaxed">
+              <p className="mt-2 text-sm leading-relaxed text-tafera-text-muted">
                 {step.description}
               </p>
             </div>
           ))}
         </div>
-        <div className="mt-12 text-center">
-          <p className="text-tafera-text-muted mb-4">
+
+        <div className="mt-10 text-center">
+          <p className="mb-3 text-sm text-tafera-text-muted">
             Ready to start? Create your account and begin your journey.
           </p>
-          <Link to="/register">
-            <span className="inline-block font-medium text-tafera-primary hover:underline">
-              Sign up →
-            </span>
+          <Link
+            to="/register"
+            className="inline-block text-sm font-semibold text-tafera-primary hover:underline"
+          >
+            Sign up →
           </Link>
         </div>
       </div>

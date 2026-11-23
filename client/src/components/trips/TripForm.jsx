@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../common/Button'
 
-const fieldClass = 'w-full rounded-lg border border-tafera-border px-4 py-2 focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
+const fieldClass = 'w-full rounded-lg border border-tafera-border bg-tafera-card px-4 py-2 text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
 
 export default function TripForm({
   initialValues = {},
@@ -64,10 +64,10 @@ export default function TripForm({
       <div>
         <label htmlFor="trip-status" className="mb-1 block text-sm font-medium text-tafera-text">Status</label>
         <select id="trip-status" className={fieldClass} value={values.status} onChange={update('status')}>
-          <option value="draft">Draft</option>
-          <option value="published">Published</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="draft" className="bg-tafera-card text-tafera-text">Draft</option>
+          <option value="published" className="bg-tafera-card text-tafera-text">Published</option>
+          <option value="completed" className="bg-tafera-card text-tafera-text">Completed</option>
+          <option value="cancelled" className="bg-tafera-card text-tafera-text">Cancelled</option>
         </select>
         {tripType === 'group' && <p className="mt-1 text-xs text-tafera-text-muted">Only published group trips can be joined.</p>}
       </div>

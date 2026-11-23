@@ -24,7 +24,7 @@ export default function PasswordInput({
     setVisible((prev) => !prev)
   }
 
-  const inputClassName = `w-full px-4 py-2 rounded-lg border border-tafera-border focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors pr-12 ${className}`
+  const inputClassName = `w-full px-4 py-2 rounded-lg border border-tafera-border bg-tafera-card text-tafera-text placeholder:text-tafera-text-muted focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors pr-12 ${className}`
 
   return (
     <div className="w-full">

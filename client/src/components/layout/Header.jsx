@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useTheme } from '../../contexts/ThemeContext'
 
 const PUBLIC_NAV = [
   {
@@ -51,6 +52,7 @@ const PROFILE_MENU_ITEMS = [
 
 export default function Header() {
   const { user, isAuthenticated, isEmailVerified, isLoading, logout, resendVerification } = useAuth()
+  const { isDark, toggleTheme } = useTheme()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -205,13 +207,13 @@ export default function Header() {
           </svg>
         </button>
         {openDropdown === section.label && (
-          <div id={`${section.label.toLowerCase().replaceAll(' ', '-')}-menu`} className="absolute top-full left-0 mt-2 w-56 rounded-md border border-tafera-border bg-white shadow-card py-3 z-50">
+          <div id={`${section.label.toLowerCase().replaceAll(' ', '-')}-menu`} className="absolute top-full left-0 mt-2 w-56 rounded-md border border-tafera-border bg-tafera-card shadow-card py-3 z-50">
             {section.items.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
                 onClick={() => setOpenDropdown(null)}
-                className="block px-4 py-2.5 text-sm text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-accent"
+                className="block px-4 py-2.5 text-sm text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary"
               >
                 {item.label}
               </Link>
@@ -248,7 +250,7 @@ export default function Header() {
           </button>
           {profileMenuOpen && (
             <div
-              className="fixed right-4 top-14 w-[240px] rounded-md border border-tafera-border bg-white shadow-card py-2 z-[60] max-h-[calc(100vh-6rem)] overflow-y-auto"
+              className="fixed right-4 top-14 w-[240px] rounded-md border border-tafera-border bg-tafera-card shadow-card py-2 z-[60] max-h-[calc(100vh-6rem)] overflow-y-auto"
             >
               {renderProfileLinks()}
             </div>
@@ -260,13 +262,13 @@ export default function Header() {
       <div className="flex items-center gap-3">
         <Link
           to="/login"
-          className="text-base font-nav font-medium text-tafera-text hover:text-tafera-accent transition-colors"
+          className="text-base font-nav font-medium text-tafera-text hover:text-tafera-primary transition-colors"
         >
           Sign in
         </Link>
         <Link
           to="/register"
-          className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-md bg-tafera-accent text-white font-semibold transition-colors hover:bg-tafera-accent/90"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-md bg-tafera-accent text-tafera-on-accent font-semibold transition-colors hover:bg-tafera-accent/90"
         >
           Join for Free
         </Link>
@@ -303,7 +305,7 @@ export default function Header() {
             {logoutLoading ? 'Signing out...' : 'Log out'}
           </button>
           {resendError && (
-            <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+            <div className="mb-3 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
               {resendError}
             </div>
           )}
@@ -428,7 +430,16 @@ export default function Header() {
             )}
           </div>
         ))}
-        <div className="pt-4 border-t border-tafera-border space-y-1">
+        <div className="pt-4 border-t border-tafera-border space-y-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-pressed={isDark}
+            className="flex w-full items-center justify-between rounded-md border border-tafera-border bg-tafera-card px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
+          >
+            <span>{isDark ? 'Light mode' : 'Dark mode'}</span>
+            <span className="text-xs text-tafera-text-muted">{isDark ? 'Dark active' : 'Light active'}</span>
+          </button>
           {isAuthenticated ? renderMobileAuthLinks() : renderMobileGuestLinks()}
         </div>
       </div>
@@ -447,7 +458,7 @@ export default function Header() {
         Sign in
       </div>
       <div
-        className="px-3 py-3 rounded-md bg-tafera-accent text-white font-medium text-center transition-colors hover:bg-tafera-accent/90 cursor-pointer"
+        className="px-3 py-3 rounded-md bg-tafera-accent text-tafera-on-accent font-semibold text-center transition-colors hover:bg-tafera-accent/90 cursor-pointer"
         onClick={() => {
           setMenuOpen(false)
           navigate('/register')
@@ -467,7 +478,7 @@ export default function Header() {
           className="block w-full rounded-md px-3 py-3 text-left text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface"
           aria-expanded={mobileAccountOpen}
         >Account</button>
-        {mobileAccountOpen && <div className="mx-3 mb-2 rounded-md border border-tafera-border bg-white py-1 shadow-card">{renderProfileLinks()}</div>}
+        {mobileAccountOpen && <div className="mx-3 mb-2 rounded-md border border-tafera-border bg-tafera-card py-1 shadow-card">{renderProfileLinks()}</div>}
       </div>
       {!mobileAccountOpen && !isEmailVerified && (
         <>
@@ -496,7 +507,7 @@ export default function Header() {
             {logoutLoading ? 'Signing out...' : 'Log out'}
           </button>
           {resendError && (
-            <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+            <div className="mb-3 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
               {resendError}
             </div>
           )}
@@ -530,14 +541,32 @@ export default function Header() {
     </>
   )
 
+  const themeToggleButton = () => (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-pressed={isDark}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tafera-border bg-tafera-card text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent"
+    >
+      {isDark ? (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+        </svg>
+      ) : (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+        </svg>
+      )}
+    </button>
+  )
+
   return (
       <header
-      className={`sticky top-0 z-50 border-b border-tafera-border ${
+      className={`sticky top-0 z-50 border-b border-tafera-border bg-tafera-bg/95 backdrop-blur-sm transition-colors ${
         scrolled ? 'shadow-sm' : ''
       }`}
-      style={{
-        backgroundColor: scrolled ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 1)',
-      }}
     >
       <div className="app-container py-4">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
@@ -560,11 +589,13 @@ export default function Header() {
           )}
           </nav>
 
-          <div className="justify-self-end hidden lg:flex">
+          <div className="justify-self-end hidden lg:flex items-center gap-3">
+            {themeToggleButton()}
             {desktopAuth()}
           </div>
 
-          <div className="justify-self-end lg:hidden">
+          <div className="justify-self-end flex items-center gap-2 lg:hidden">
+            {themeToggleButton()}
             {mobileMenuButton()}
           </div>
         </div>

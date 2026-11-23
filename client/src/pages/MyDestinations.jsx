@@ -57,7 +57,7 @@ export default function MyDestinations() {
             <button
               type="button"
               onClick={() => setRefreshKey((key) => key + 1)}
-              className="rounded-lg border border-tafera-border bg-white px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+              className="rounded-lg border border-tafera-border bg-tafera-card px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
             >
               Try again
             </button>
@@ -85,7 +85,7 @@ export default function MyDestinations() {
             </p>
             <Link
               to="/destinations"
-              className="mt-6 inline-flex rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-tafera-primary/90"
+              className="mt-6 inline-flex rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-tafera-on-primary hover:bg-tafera-primary/90"
             >
               Explore destinations
             </Link>
@@ -98,7 +98,7 @@ export default function MyDestinations() {
                 <li key={destination.id}>
                   <Link
                     to={`/my-destinations/${destination.slug}`}
-                    className="group flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-white shadow-soft transition-colors hover:border-tafera-primary/40"
+                    className="group flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-tafera-card shadow-soft transition-colors hover:border-tafera-primary/40"
                   >
                     <div className="aspect-[4/3] overflow-hidden bg-tafera-surface">
                       {photo ? (

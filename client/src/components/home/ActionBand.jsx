@@ -18,56 +18,60 @@ export default function ActionBand({ isAuthenticated = false }) {
 
   return (
     <>
-      <section className="px-0 md:px-15 py-16 border-t border-tafera-border bg-tafera-surface">
-        <div className="px-[15px]">
-          <div className="text-center">
-            <h2 className="text-3xl font-heading font-bold text-tafera-text sm:text-4xl mb-4">
+      <section className="border-t border-tafera-border bg-tafera-surface py-16 transition-colors">
+        <div className="app-container">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="mb-4 font-heading text-3xl font-bold text-tafera-text sm:text-4xl">
               Ready to share your journey?
             </h2>
-            <p className="text-tafera-text-muted mb-10 max-w-xl mx-auto leading-relaxed">
+            <p className="mx-auto mb-10 max-w-xl leading-relaxed text-tafera-text-muted">
               Whether you're writing about a place you've been or planning your
               next trip, Tafera is where your travel stories belong.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
               {!isAuthenticated ? (
                 <>
                   <button
+                    type="button"
                     onClick={() =>
                       openModal('create_story', 'share your story', 'story', null)
                     }
-                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md bg-tafera-accent text-white font-semibold text-sm transition-colors hover:bg-tafera-accent/90 sm:text-base"
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-tafera-accent px-5 py-3 text-sm font-semibold text-tafera-on-accent transition-colors hover:bg-tafera-accent/90 sm:text-base"
                   >
                     Share your story
                   </button>
                   <button
+                    type="button"
                     onClick={() =>
                       openModal('create_trip', 'create a trip', 'trip', null)
                     }
-                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-semibold text-sm transition-colors hover:bg-tafera-surface sm:text-base"
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-tafera-border bg-tafera-card px-5 py-3 text-sm font-semibold text-tafera-text transition-colors hover:bg-tafera-bg sm:text-base"
                   >
                     Create a trip
                   </button>
                 </>
               ) : (
                 <>
-                  <Link to="/stories/new">
-                    <span className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md bg-tafera-accent text-white font-semibold transition-colors hover:bg-tafera-accent/90 sm:text-base">
-                      Share a Story
-                    </span>
+                  <Link
+                    to="/stories/new"
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-tafera-accent px-5 py-3 text-sm font-semibold text-tafera-on-accent transition-colors hover:bg-tafera-accent/90 sm:text-base"
+                  >
+                    Share a Story
                   </Link>
-                  <Link to="/trips/new">
-                    <span className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-md border border-tafera-border bg-tafera-bg text-tafera-text font-semibold transition-colors hover:bg-tafera-surface sm:text-base">
-                      Create a Trip
-                    </span>
+                  <Link
+                    to="/trips/new"
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-tafera-border bg-tafera-card px-5 py-3 text-sm font-semibold text-tafera-text transition-colors hover:bg-tafera-bg sm:text-base"
+                  >
+                    Create a Trip
                   </Link>
                 </>
               )}
-              <p className="mt-6 text-xs text-tafera-text-muted">
-                {!isAuthenticated
-                  ? 'Creating stories and trips requires an account. Log in or sign up to get started.'
-                  : ''}
-              </p>
             </div>
+            {!isAuthenticated && (
+              <p className="mt-6 text-xs text-tafera-text-muted">
+                Creating stories and trips requires an account. Log in or sign up to get started.
+              </p>
+            )}
           </div>
         </div>
       </section>

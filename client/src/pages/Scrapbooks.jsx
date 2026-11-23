@@ -19,7 +19,7 @@ import {
   uploadScrapbookImage,
 } from '../services/scrapbooks'
 
-const inputClass = 'w-full rounded-lg border border-tafera-border bg-white px-3 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
+const inputClass = 'w-full rounded-lg border border-tafera-border bg-tafera-card px-3 py-2 text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
@@ -253,10 +253,10 @@ export default function Scrapbooks() {
       </header>
 
       {!isAuthenticated ? <section className="rounded-lg border border-tafera-border bg-tafera-surface p-5"><p>Sign in to create and manage your private travel scrapbooks.</p><Link to="/login" className="mt-3 inline-block"><Button>Sign in</Button></Link></section> : <>
-        {error && <div role="alert" className="mb-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}<button className="ml-2 font-semibold underline" onClick={loadJournals}>Retry</button></div>}
+        {error && <div role="alert" className="mb-5 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-tafera-text">{error}<button className="ml-2 font-semibold text-tafera-primary underline" onClick={loadJournals}>Retry</button></div>}
         {showCreate && <form onSubmit={submitCreate} className="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:grid-cols-2 sm:p-5">
           <label className="text-sm font-medium text-tafera-text">Album title<input className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} required maxLength="150" /></label>
-          <label className="text-sm font-medium text-tafera-text">Link a personal trip (optional)<select className={inputClass} value={tripId} onChange={(event) => setTripId(event.target.value)}><option value="">No trip linked</option>{trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
+          <label className="text-sm font-medium text-tafera-text">Link a personal trip (optional)<select className={inputClass} value={tripId} onChange={(event) => setTripId(event.target.value)}><option value="" className="bg-tafera-card text-tafera-text">No trip linked</option>{trips.map((trip) => <option key={trip.id} value={trip.id} className="bg-tafera-card text-tafera-text">{trip.title}</option>)}</select></label>
           <label className="text-sm font-medium text-tafera-text sm:col-span-2">Description<textarea className={inputClass} rows="2" maxLength="1000" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
           <p className="text-xs text-tafera-text-muted sm:col-span-2">New scrapbooks are private. You can change visibility later.</p>
           <div className="sm:col-span-2"><Button type="submit" disabled={saving || !title.trim()}>{saving ? 'Creating...' : 'Create scrapbook'}</Button></div>
@@ -265,7 +265,7 @@ export default function Scrapbooks() {
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.8fr)]">
           <section aria-label="Your scrapbooks" className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
             <h2 className="mb-3 font-heading text-lg font-bold text-tafera-text">Your albums</h2>
-            {journals.length === 0 ? <div className="rounded-md bg-white p-4 text-sm text-tafera-text-muted">No scrapbooks yet. Create an album for a trip or a collection of memories.</div> : <ul className="space-y-2">{journals.map((journal) => <li key={journal.id}><button onClick={() => chooseJournal(journal)} className={`w-full rounded-md border p-3 text-left transition-colors ${selected?.id === journal.id ? 'border-tafera-primary bg-white' : 'border-transparent bg-white hover:border-tafera-border'}`} aria-current={selected?.id === journal.id ? 'true' : undefined}><span className="flex items-center justify-between gap-2"><span className="font-semibold text-tafera-text">{journal.title}</span><span className="text-xs text-tafera-text-muted">{journal.isPublic ? 'Public' : 'Private'}</span></span><span className="mt-1 block text-xs text-tafera-text-muted">{journal.imageCount || 0} photos</span></button></li>)}</ul>}
+            {journals.length === 0 ? <div className="rounded-md border border-tafera-border bg-tafera-card p-4 text-sm text-tafera-text-muted">No scrapbooks yet. Create an album for a trip or a collection of memories.</div> : <ul className="space-y-2">{journals.map((journal) => <li key={journal.id}><button onClick={() => chooseJournal(journal)} className={`w-full rounded-md border p-3 text-left transition-colors ${selected?.id === journal.id ? 'border-tafera-primary bg-tafera-card' : 'border-tafera-border/70 bg-tafera-card hover:border-tafera-primary/50'}`} aria-current={selected?.id === journal.id ? 'true' : undefined}><span className="flex items-center justify-between gap-2"><span className="font-semibold text-tafera-text">{journal.title}</span><span className="text-xs text-tafera-text-muted">{journal.isPublic ? 'Public' : 'Private'}</span></span><span className="mt-1 block text-xs text-tafera-text-muted">{journal.imageCount || 0} photos</span></button></li>)}</ul>}
           </section>
 
           <section className="min-w-0 rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
@@ -276,11 +276,11 @@ export default function Scrapbooks() {
               </div>
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-xs font-medium text-tafera-text-muted">Album title<input aria-label="Edit album title" className={inputClass} defaultValue={selected.title} onBlur={(event) => event.target.value.trim() && event.target.value.trim() !== selected.title && saveJournal({ title: event.target.value.trim() })} /></label>
-                <label className="text-xs font-medium text-tafera-text-muted">Trip association<select aria-label="Link scrapbook to a trip" className={inputClass} value={selected.tripId || ''} onChange={(event) => updateTripLink(event.target.value)} disabled={saving}><option value="">No trip linked</option>{trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
+                <label className="text-xs font-medium text-tafera-text-muted">Trip association<select aria-label="Link scrapbook to a trip" className={inputClass} value={selected.tripId || ''} onChange={(event) => updateTripLink(event.target.value)} disabled={saving}><option value="" className="bg-tafera-card text-tafera-text">No trip linked</option>{trips.map((trip) => <option key={trip.id} value={trip.id} className="bg-tafera-card text-tafera-text">{trip.title}</option>)}</select></label>
               </div>
-              <form onSubmit={submitImage} className="mt-5 grid grid-cols-1 gap-3 rounded-md border border-tafera-border bg-white p-4 sm:grid-cols-2">
+              <form onSubmit={submitImage} className="mt-5 grid grid-cols-1 gap-3 rounded-md border border-tafera-border bg-tafera-bg p-4 sm:grid-cols-2">
                 <h3 className="font-semibold text-tafera-text sm:col-span-2">Add a travel photo</h3>
-                <label className="text-sm text-tafera-text-muted sm:col-span-2">Photo (JPEG, PNG or WebP, up to 5 MB)<input className={`${inputClass} mt-1`} type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
+                <label className="text-sm text-tafera-text-muted sm:col-span-2">Photo (JPEG, PNG or WebP, up to 5 MB)<input className={`${inputClass} mt-1 file:mr-3 file:rounded-md file:border file:border-tafera-border file:bg-tafera-surface file:px-3 file:py-1 file:text-xs file:font-semibold file:text-tafera-text hover:file:bg-tafera-bg`} type="file" accept="image/jpeg,image/png,image/webp" required onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
                 {previewUrl && <div className="sm:col-span-2"><img className="max-h-56 max-w-full rounded-md object-contain" src={previewUrl} alt="Selected photo preview" /></div>}
                 <label className="text-sm text-tafera-text-muted">Caption<input className={inputClass} value={caption} maxLength="1000" onChange={(event) => setCaption(event.target.value)} /></label>
                 <label className="text-sm text-tafera-text-muted">Date taken<input className={inputClass} type="date" value={takenAt} onChange={(event) => setTakenAt(event.target.value)} /></label>
@@ -289,7 +289,7 @@ export default function Scrapbooks() {
               </form>
               <div className="mt-5">
                 <h3 className="mb-3 font-semibold text-tafera-text">Memories ({selected.images?.length || 0}/50)</h3>
-                {!selected.images?.length ? <p className="rounded-md bg-white p-4 text-sm text-tafera-text-muted">No photos in this album yet. Your first upload becomes its cover photo.</p> : <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">{[...selected.images].sort((a, b) => a.displayOrder - b.displayOrder).map((image, index, ordered) => <li key={image.id} className="min-w-0 overflow-hidden rounded-md border border-tafera-border bg-white">
+                {!selected.images?.length ? <p className="rounded-md border border-tafera-border bg-tafera-card p-4 text-sm text-tafera-text-muted">No photos in this album yet. Your first upload becomes its cover photo.</p> : <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">{[...selected.images].sort((a, b) => a.displayOrder - b.displayOrder).map((image, index, ordered) => <li key={image.id} className="min-w-0 overflow-hidden rounded-md border border-tafera-border bg-tafera-card">
                   <img src={image.imageUrl} alt={image.altText || image.caption || 'Travel memory'} className="aspect-video w-full object-cover" loading="lazy" />
                   <div className="space-y-2 p-3"><p className="break-words text-sm text-tafera-text">{image.caption || 'No caption'}</p><p className="text-xs text-tafera-text-muted">{image.takenAt ? new Date(image.takenAt).toLocaleDateString() : 'Date not recorded'}{image.isCover ? ' · Cover' : ''}</p>
                     <div className="flex flex-wrap gap-1"><Button size="sm" variant="ghost" aria-label="Edit photo caption and date" onClick={() => {

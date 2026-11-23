@@ -132,7 +132,7 @@ export default function VerifyEmail() {
         </h2>
 
         {error && (
-          <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+          <div className="mb-6 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
             {error}
           </div>
         )}
@@ -140,7 +140,7 @@ export default function VerifyEmail() {
         {resendMessage && (
           <div
             role={resendMessage.type === 'success' ? 'status' : 'alert'}
-            className={`mb-6 p-3 rounded-md border text-sm ${resendMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}
+            className={`mb-6 p-3 rounded-md border text-sm text-tafera-text ${resendMessage.type === 'success' ? 'bg-tafera-primary/10 border-tafera-primary/30' : 'bg-red-500/10 border-red-500/30'}`}
           >
             {resendMessage.text}
           </div>

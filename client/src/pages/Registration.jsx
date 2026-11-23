@@ -133,19 +133,19 @@ export default function Registration() {
             )}
             </p>
           {!emailVerificationSent && (
-            <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+            <div className="mt-4 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
               You can request another verification email below.
             </div>
           )}
           {error && (
-            <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+            <div className="mt-4 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
               {error}
             </div>
           )}
           {resendMessage && (
             <div
               role={resendMessage.type === 'success' ? 'status' : 'alert'}
-              className={`mt-4 p-3 rounded-md border text-sm ${resendMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}
+              className={`mt-4 p-3 rounded-md border text-sm text-tafera-text ${resendMessage.type === 'success' ? 'bg-tafera-primary/10 border-tafera-primary/30' : 'bg-red-500/10 border-red-500/30'}`}
             >
               {resendMessage.text}
             </div>
@@ -207,7 +207,7 @@ export default function Registration() {
       </div>
 
       {error && (
-        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div className="mb-6 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
           {error}
         </div>
       )}
@@ -227,7 +227,7 @@ export default function Registration() {
             required
             value={form.fullName}
             onChange={handleChange('fullName')}
-            className={`h-14 w-full rounded-lg border border-tafera-border px-4 text-base focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+            className={`h-14 w-full rounded-lg border border-tafera-border bg-tafera-card px-4 text-base text-tafera-text placeholder:text-tafera-text-muted focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
               getFieldError('fullName') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
             }`}
             placeholder="Ada Lovelace"
@@ -235,7 +235,7 @@ export default function Registration() {
             aria-describedby={getFieldError('fullName') ? 'fullName-error' : undefined}
           />
           {getFieldError('fullName') && (
-            <p id="fullName-error" className="mt-1 text-sm text-red-700">
+            <p id="fullName-error" className="mt-1 text-sm text-red-500">
               {getFieldError('fullName')}
             </p>
           )}
@@ -251,7 +251,7 @@ export default function Registration() {
             required
             value={form.email}
             onChange={handleChange('email')}
-            className={`h-14 w-full rounded-lg border border-tafera-border px-4 text-base focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+            className={`h-14 w-full rounded-lg border border-tafera-border bg-tafera-card px-4 text-base text-tafera-text placeholder:text-tafera-text-muted focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
               getFieldError('email') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
             }`}
             placeholder="you@example.com"
@@ -259,7 +259,7 @@ export default function Registration() {
             aria-describedby={getFieldError('email') ? 'email-error' : undefined}
           />
           {getFieldError('email') && (
-            <p id="email-error" className="mt-1 text-sm text-red-700">
+            <p id="email-error" className="mt-1 text-sm text-red-500">
               {getFieldError('email')}
             </p>
           )}
@@ -281,7 +281,7 @@ export default function Registration() {
             aria-describedby={getFieldError('password') ? 'password-error' : undefined}
           />
           {getFieldError('password') && (
-            <p id="password-error" className="mt-1 text-sm text-red-700">
+            <p id="password-error" className="mt-1 text-sm text-red-500">
               {getFieldError('password')}
             </p>
           )}

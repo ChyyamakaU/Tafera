@@ -392,9 +392,9 @@ export default function Admin() {
                 value={form.destinationId}
                 onChange={(event) => setForm((current) => ({ ...current, destinationId: event.target.value }))}
               >
-                <option value="">No linked destination</option>
+                <option value="" className="bg-tafera-card text-tafera-text">No linked destination</option>
                 {destinations.map((destination) => (
-                  <option key={destination.id} value={destination.id}>
+                  <option key={destination.id} value={destination.id} className="bg-tafera-card text-tafera-text">
                     {destination.name} ({destination.country})
                   </option>
                 ))}

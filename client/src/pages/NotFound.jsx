@@ -19,7 +19,7 @@ export default function NotFound() {
       <div className="rounded-lg border border-tafera-border bg-tafera-surface p-10 shadow-soft text-center">
         <Link
           to="/"
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-tafera-primary text-white font-semibold transition-colors hover:bg-tafera-primary/90"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-tafera-primary text-tafera-on-primary font-semibold transition-colors hover:bg-tafera-primary/90"
         >
           Return to home
         </Link>

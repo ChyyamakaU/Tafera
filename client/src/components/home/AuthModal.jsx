@@ -60,7 +60,7 @@ export default function SignInModal({
             <div
               className="relative w-full max-w-md mx-4 sm:mx-6 lg:mx-8"
             >
-              <div className="bg-white rounded-lg border border-tafera-border p-6 shadow-lg">
+              <div className="bg-tafera-card rounded-lg border border-tafera-border p-6 shadow-lg">
                 <div className="flex items-start justify-between mb-4">
                   <h2 id="signin-modal-title" className="text-lg font-heading font-bold text-tafera-text">
                     Sign in to {actionLabel}
@@ -100,7 +100,7 @@ export default function SignInModal({
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={handleSignIn}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-tafera-primary text-white font-medium text-sm transition-colors hover:bg-tafera-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-tafera-accent text-tafera-on-accent font-semibold text-sm transition-colors hover:bg-tafera-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent"
                   >
                     Sign in
                   </button>

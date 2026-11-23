@@ -13,8 +13,8 @@ const travelLinks = [
 const itemClass = ({ isActive }) =>
   `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
     isActive
-      ? 'bg-white text-tafera-primary'
-      : 'text-tafera-text hover:bg-white hover:text-tafera-primary'
+      ? 'bg-tafera-card text-tafera-primary'
+      : 'text-tafera-text hover:bg-tafera-card hover:text-tafera-primary'
   }`
 
 export default function TravelNavigation() {
@@ -76,7 +76,7 @@ export default function TravelNavigation() {
         className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
           travelActive
             ? 'text-tafera-primary'
-            : 'text-tafera-text hover:bg-white hover:text-tafera-primary'
+            : 'text-tafera-text hover:bg-tafera-card hover:text-tafera-primary'
         }`}
       >
         <span>My Travels</span>
@@ -111,7 +111,7 @@ export default function TravelNavigation() {
           <span>Notifications</span>
           {unreadCount > 0 && (
             <span
-              className="inline-flex min-w-5 items-center justify-center rounded-full bg-tafera-accent px-1.5 py-0.5 text-[10px] font-bold text-white"
+              className="inline-flex min-w-5 items-center justify-center rounded-full bg-tafera-accent px-1.5 py-0.5 text-[10px] font-bold text-tafera-on-accent"
               aria-label={`${unreadCount} unread notifications`}
             >
               {unreadCount > 99 ? '99+' : unreadCount}

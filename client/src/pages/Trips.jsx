@@ -85,7 +85,7 @@ export default function Trips() {
           Verify your email to create or change trips. <Link className="font-medium text-tafera-primary hover:underline" to="/verify-email">Verify email</Link>
         </p>
       )}
-      {error && <div role="alert" className="mb-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error && <div role="alert" className="mb-5 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-tafera-text">{error}</div>}
       {showCreate && isAuthenticated && (
         <section className="mb-8 rounded-lg border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:p-6">
           <h2 className="mb-4 font-heading text-lg font-bold text-tafera-text">Create personal trip</h2>

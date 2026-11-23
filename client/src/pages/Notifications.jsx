@@ -132,15 +132,15 @@ export default function Notifications() {
             <h1 className="mt-1 text-3xl font-heading font-bold text-tafera-text">Notifications</h1>
             <p className="mt-2 text-sm text-tafera-text-muted">Updates from your Tafera community.</p>
           </div>
-          <button type="button" disabled={!unreadCount || busyId === 'all'} onClick={markAllRead} className="min-h-10 rounded-lg border border-tafera-border bg-white px-4 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" disabled={!unreadCount || busyId === 'all'} onClick={markAllRead} className="min-h-10 rounded-lg border border-tafera-border bg-tafera-card px-4 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface disabled:cursor-not-allowed disabled:opacity-50">
             {busyId === 'all' ? 'Updating…' : 'Mark all as read'}
           </button>
         </div>
-        {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+        {error && <p role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-tafera-text">{error}</p>}
         {loading ? <p className="py-12 text-center text-sm text-tafera-text-muted">Loading notifications…</p> : notifications.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-tafera-border bg-white px-5 py-12 text-center text-sm text-tafera-text-muted">You’re all caught up. New notifications will appear here.</p>
+          <p className="rounded-xl border border-dashed border-tafera-border bg-tafera-card px-5 py-12 text-center text-sm text-tafera-text-muted">You’re all caught up. New notifications will appear here.</p>
         ) : (
-          <ul className="divide-y divide-tafera-border overflow-hidden rounded-xl border border-tafera-border bg-white">
+          <ul className="divide-y divide-tafera-border overflow-hidden rounded-xl border border-tafera-border bg-tafera-card">
             {notifications.map((item) => (
               <li key={item.id} className={`flex items-start gap-3 p-4 sm:p-5 ${item.isRead ? '' : 'bg-tafera-primary/[0.035]'}`}>
                 <span aria-hidden="true" className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${item.isRead ? 'bg-transparent' : 'bg-tafera-accent'}`} />

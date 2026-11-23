@@ -26,7 +26,7 @@ import {
 } from '../services/trips'
 
 const fieldClass =
-  'w-full rounded-lg border border-tafera-border bg-tafera-bg px-3 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
+  'w-full rounded-lg border border-tafera-border bg-tafera-card px-3 py-2 text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
 
 const formatActivityDay = (dateStr, tripStartDate) => {
   if (!dateStr) return 'Unscheduled'
@@ -167,9 +167,9 @@ function ActivityForm({
           value={tripDestinationId}
           onChange={(event) => setTripDestinationId(event.target.value)}
         >
-          <option value="">None</option>
+          <option value="" className="bg-tafera-card text-tafera-text">None</option>
           {stops.map((stop) => (
-            <option key={stop.id} value={stop.id}>
+            <option key={stop.id} value={stop.id} className="bg-tafera-card text-tafera-text">
               {stop.stopOrder}. {stop.destination?.name || 'Stop'}
             </option>
           ))}
@@ -611,8 +611,8 @@ export default function TripDetail() {
           {canManage && <Button size="sm" onClick={() => showAddStop ? setShowAddStop(false) : loadDestinations('')} disabled={busy}>{showAddStop ? 'Close stop form' : 'Add a stop'}</Button>}
         </div>
         {showAddStop && <form onSubmit={saveStop} className="mb-5 grid grid-cols-1 gap-3 rounded-md border border-tafera-border bg-tafera-bg p-4 sm:grid-cols-2">
-          <label className="text-sm text-tafera-text-muted sm:col-span-2">Nigerian state or territory<select aria-label="Nigerian state or territory" className={fieldClass} value={selectedState} onChange={(event) => loadDestinations(event.target.value)} required><option value="">Select a state or territory</option>{NIGERIAN_STATES.map((state) => <option key={state} value={state}>{state}</option>)}</select></label>
-          {selectedState && <label className="text-sm text-tafera-text-muted sm:col-span-2">Published destination in {selectedState}<select aria-label={`Published destination in ${selectedState}`} className={fieldClass} value={selectedDestination} onChange={(event) => setSelectedDestination(event.target.value)} required disabled={busy || destinations.length === 0}><option value="">{busy ? 'Loading destinations...' : destinations.length === 0 ? 'No published destinations in this state yet' : 'Select a destination'}</option>{destinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}</select>{!busy && destinations.length === 0 && <span className="mt-1 block text-xs text-tafera-text-muted">Only destinations already published in Tafera can be added as itinerary stops.</span>}</label>}
+          <label className="text-sm text-tafera-text-muted sm:col-span-2">Nigerian state or territory<select aria-label="Nigerian state or territory" className={fieldClass} value={selectedState} onChange={(event) => loadDestinations(event.target.value)} required><option value="" className="bg-tafera-card text-tafera-text">Select a state or territory</option>{NIGERIAN_STATES.map((state) => <option key={state} value={state} className="bg-tafera-card text-tafera-text">{state}</option>)}</select></label>
+          {selectedState && <label className="text-sm text-tafera-text-muted sm:col-span-2">Published destination in {selectedState}<select aria-label={`Published destination in ${selectedState}`} className={fieldClass} value={selectedDestination} onChange={(event) => setSelectedDestination(event.target.value)} required disabled={busy || destinations.length === 0}><option value="" className="bg-tafera-card text-tafera-text">{busy ? 'Loading destinations...' : destinations.length === 0 ? 'No published destinations in this state yet' : 'Select a destination'}</option>{destinations.map((destination) => <option key={destination.id} value={destination.id} className="bg-tafera-card text-tafera-text">{destination.name}</option>)}</select>{!busy && destinations.length === 0 && <span className="mt-1 block text-xs text-tafera-text-muted">Only destinations already published in Tafera can be added as itinerary stops.</span>}</label>}
           <label className="text-sm text-tafera-text-muted">Arrival date<input className={fieldClass} type="date" min={trip.startDate} max={trip.endDate} value={arrivalDate} onChange={(event) => setArrivalDate(event.target.value)} /></label>
           <label className="text-sm text-tafera-text-muted">Departure date<input className={fieldClass} type="date" min={arrivalDate || trip.startDate} max={trip.endDate} value={departureDate} onChange={(event) => setDepartureDate(event.target.value)} /></label>
           <div className="sm:col-span-2"><Button type="submit" disabled={busy || !selectedDestination}>{busy ? 'Adding...' : 'Add to itinerary'}</Button></div>

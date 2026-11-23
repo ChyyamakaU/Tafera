@@ -103,7 +103,7 @@ export default function Login() {
       )}
 
       {error && (
-        <div className="mb-6 p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div className="mb-6 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
           {error}
         </div>
       )}
@@ -121,7 +121,7 @@ export default function Login() {
             type="email"
             autoComplete="email"
             required
-            className={`h-14 w-full rounded-lg border border-tafera-border px-4 text-base focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
+            className={`h-14 w-full rounded-lg border border-tafera-border bg-tafera-card px-4 text-base text-tafera-text placeholder:text-tafera-text-muted focus:ring-2 focus:ring-tafera-primary focus:border-tafera-primary outline-none transition-colors ${
               getFieldError('email') ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
             }`}
             placeholder="you@example.com"
@@ -129,7 +129,7 @@ export default function Login() {
             aria-describedby={getFieldError('email') ? 'email-error' : undefined}
           />
           {getFieldError('email') && (
-            <p id="email-error" className="mt-1 text-sm text-red-700">
+            <p id="email-error" className="mt-1 text-sm text-red-500">
               {getFieldError('email')}
             </p>
           )}
@@ -147,7 +147,7 @@ export default function Login() {
             aria-describedby={getFieldError('password') ? 'password-error' : undefined}
           />
           {getFieldError('password') && (
-            <p id="password-error" className="mt-1 text-sm text-red-700">
+            <p id="password-error" className="mt-1 text-sm text-red-500">
               {getFieldError('password')}
             </p>
           )}

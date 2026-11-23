@@ -106,7 +106,7 @@ export default function Destinations() {
               value={form.q}
               onChange={(event) => setForm((current) => ({ ...current, q: event.target.value }))}
               placeholder="Kyoto, coast, mountains…"
-              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm font-normal text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-tafera-card px-3 text-sm font-normal text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
             />
           </label>
           <label className="block text-sm font-semibold text-tafera-text">
@@ -116,7 +116,7 @@ export default function Destinations() {
               value={form.country}
               onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))}
               placeholder="Japan"
-              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm font-normal text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-tafera-card px-3 text-sm font-normal text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
             />
           </label>
           <label className="block text-sm font-semibold text-tafera-text">
@@ -126,13 +126,13 @@ export default function Destinations() {
               value={form.state}
               onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))}
               placeholder="Kyoto"
-              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-white px-3 text-sm font-normal text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
+              className="mt-1.5 h-11 w-full rounded-lg border border-tafera-border bg-tafera-card px-3 text-sm font-normal text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary"
             />
           </label>
           <div className="flex gap-2">
             <button
               type="submit"
-              className="min-h-11 flex-1 rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-tafera-primary/90"
+              className="min-h-11 flex-1 rounded-lg bg-tafera-primary px-4 py-2 text-sm font-semibold text-tafera-on-primary transition-colors hover:bg-tafera-primary/90"
             >
               Search photos
             </button>
@@ -140,7 +140,7 @@ export default function Destinations() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="min-h-11 rounded-lg border border-tafera-border bg-white px-3 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+                className="min-h-11 rounded-lg border border-tafera-border bg-tafera-card px-3 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
               >
                 Clear
               </button>
@@ -154,7 +154,7 @@ export default function Destinations() {
             <button
               type="button"
               onClick={retry}
-              className="rounded-lg border border-tafera-border bg-white px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+              className="rounded-lg border border-tafera-border bg-tafera-card px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
             >
               Try again
             </button>
@@ -186,14 +186,14 @@ export default function Destinations() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="rounded-lg border border-tafera-border bg-white px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
+                  className="rounded-lg border border-tafera-border bg-tafera-card px-5 py-2.5 text-sm font-semibold text-tafera-text hover:bg-tafera-surface"
                 >
                   Clear filters
                 </button>
               ) : (
                 <Link
                   to="/"
-                  className="rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-tafera-primary/90"
+                  className="rounded-lg bg-tafera-primary px-5 py-2.5 text-sm font-semibold text-tafera-on-primary hover:bg-tafera-primary/90"
                 >
                   Discover destinations
                 </Link>
@@ -220,7 +220,7 @@ export default function Destinations() {
                 const contributor = photo.contributor
                 return (
                   <li key={photo.id}>
-                    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-white shadow-soft">
+                    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-tafera-border bg-tafera-card shadow-soft">
                       <Link
                         to={destination ? `/destinations/${destination.slug}` : '/destinations'}
                         className="block aspect-[4/3] overflow-hidden bg-tafera-surface"
@@ -297,7 +297,7 @@ export default function Destinations() {
                   type="button"
                   onClick={() => setPage((current) => Math.max(current - 1, 1))}
                   disabled={!pagination.hasPreviousPage}
-                  className="rounded-md border border-tafera-border bg-white px-4 py-2 text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface disabled:pointer-events-none disabled:opacity-50"
+                  className="rounded-md border border-tafera-border bg-tafera-card px-4 py-2 text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface disabled:pointer-events-none disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -308,7 +308,7 @@ export default function Destinations() {
                   type="button"
                   onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
                   disabled={!pagination.hasNextPage}
-                  className="rounded-md border border-tafera-border bg-white px-4 py-2 text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface disabled:pointer-events-none disabled:opacity-50"
+                  className="rounded-md border border-tafera-border bg-tafera-card px-4 py-2 text-sm font-medium text-tafera-text transition-colors hover:bg-tafera-surface disabled:pointer-events-none disabled:opacity-50"
                 >
                   Next
                 </button>
