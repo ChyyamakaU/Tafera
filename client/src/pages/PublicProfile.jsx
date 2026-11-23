@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/common/Button'
+import ProfileActivitySections from '../components/profile/ProfileActivitySections'
 import {
   getPublicProfile,
   followUser,
@@ -22,10 +23,15 @@ export default function PublicProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [followLoading, setFollowLoading] = useState(false)
+  const loadVersionRef = useRef(0)
 
   const isOwner = isAuthenticated && user && user.id === userId
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async ({ showLoading = true } = {}) => {
+    if (!userId) return
+    loadVersionRef.current += 1
+    const version = loadVersionRef.current
+    if (showLoading) setLoading(true)
     try {
       setError(null)
       const [profileData, followersData, followingData] = await Promise.all([
@@ -33,22 +39,24 @@ export default function PublicProfile() {
         getFollowers(userId, { page: 1, limit: 10 }),
         getFollowing(userId, { page: 1, limit: 10 }),
       ])
+      if (loadVersionRef.current !== version) return
       setProfile(profileData)
       setFollowers(followersData.followers || [])
       setFollowing(followingData.following || [])
     } catch (err) {
+      if (loadVersionRef.current !== version) return
       setError(err.message || 'Failed to load profile.')
     } finally {
-      setLoading(false)
+      if (loadVersionRef.current === version) setLoading(false)
     }
-  }
+  }, [userId])
 
   // A public profile can be viewed by anyone, but the follow state and action
   // are only relevant to an authenticated viewer looking at someone else.
   useEffect(() => {
     if (!userId) return
-    loadProfile()
-  }, [userId])
+    loadProfile({ showLoading: true })
+  }, [userId, loadProfile])
 
   useEffect(() => {
     if (!isAuthenticated || isOwner || !profile) {
@@ -73,8 +81,8 @@ export default function PublicProfile() {
         await unfollowUser(userId)
         setIsFollowing(false)
       }
-      // Refresh counts so the displayed totals stay accurate.
-      loadProfile()
+      // Refresh counts so the displayed totals stay accurate without unmounting profile activity.
+      loadProfile({ showLoading: false })
     } catch (err) {
       setError(err.message || 'Failed to update follow status.')
     } finally {
@@ -105,7 +113,7 @@ export default function PublicProfile() {
     return (
       <div className="app-container py-24 text-center">
         {error && (
-          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-sm text-red-500">{error}</p>
         )}
         {!error && (
           <p className="text-tafera-text-muted">This profile could not be found.</p>
@@ -200,76 +208,84 @@ export default function PublicProfile() {
         </div>
       )}
 
-      <div className="rounded-lg border border-tafera-border bg-tafera-surface p-6 shadow-soft">
-        <h2 className="font-heading font-bold text-lg text-tafera-text mb-4">
-          Followers ({followers.length})
-        </h2>
-        {followers.length > 0 ? (
-          <ul className="space-y-3">
-            {followers.map((follow) => (
-              <li key={follow.user.id} className="flex items-center gap-4">
-                {follow.user.profileImage && (
-                  <img
-                    src={follow.user.profileImage}
-                    alt={`${follow.user.fullName}'s profile picture`}
-                    className="w-10 h-10 rounded-full border border-tafera-border object-cover"
-                  />
-                )}
-                <div>
-                  <Link
-                    to={`/users/${follow.user.id}`}
-                    className="font-medium text-tafera-text hover:text-tafera-accent"
-                  >
-                    {follow.user.fullName}
-                  </Link>
-                  <p className="text-xs text-tafera-text-muted">
-                    followed {new Date(follow.followedAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-tafera-text-muted">
-            No followers yet.
-          </p>
-        )}
-      </div>
+      <ProfileActivitySections
+        userId={profile.id || userId}
+        isOwnProfile={Boolean(isOwner)}
+        profileName={profile.fullName || 'This traveller'}
+      />
 
-      <div className="mt-6 rounded-lg border border-tafera-border bg-tafera-surface p-6 shadow-soft">
-        <h2 className="font-heading font-bold text-lg text-tafera-text mb-4">
-          Following ({following.length})
-        </h2>
-        {following.length > 0 ? (
-          <ul className="space-y-3">
-            {following.map((follow) => (
-              <li key={follow.user.id} className="flex items-center gap-4">
-                {follow.user.profileImage && (
-                  <img
-                    src={follow.user.profileImage}
-                    alt={`${follow.user.fullName}'s profile picture`}
-                    className="w-10 h-10 rounded-full border border-tafera-border object-cover"
-                  />
-                )}
-                <div>
-                  <Link
-                    to={`/users/${follow.user.id}`}
-                    className="font-medium text-tafera-text hover:text-tafera-accent"
-                  >
-                    {follow.user.fullName}
-                  </Link>
-                  <p className="text-xs text-tafera-text-muted">
-                    followed {new Date(follow.followedAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-tafera-text-muted">
-            Not following anyone yet.
-          </p>
-        )}
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-tafera-border bg-tafera-surface p-6 shadow-soft">
+          <h2 className="font-heading font-bold text-lg text-tafera-text mb-4">
+            Followers ({followers.length})
+          </h2>
+          {followers.length > 0 ? (
+            <ul className="space-y-3">
+              {followers.map((follow) => (
+                <li key={follow.user.id} className="flex items-center gap-4">
+                  {follow.user.profileImage && (
+                    <img
+                      src={follow.user.profileImage}
+                      alt={`${follow.user.fullName}'s profile picture`}
+                      className="w-10 h-10 rounded-full border border-tafera-border object-cover"
+                    />
+                  )}
+                  <div>
+                    <Link
+                      to={`/users/${follow.user.id}`}
+                      className="font-medium text-tafera-text hover:text-tafera-accent"
+                    >
+                      {follow.user.fullName}
+                    </Link>
+                    <p className="text-xs text-tafera-text-muted">
+                      followed {new Date(follow.followedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-tafera-text-muted">
+              No followers yet.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-tafera-border bg-tafera-surface p-6 shadow-soft">
+          <h2 className="font-heading font-bold text-lg text-tafera-text mb-4">
+            Following ({following.length})
+          </h2>
+          {following.length > 0 ? (
+            <ul className="space-y-3">
+              {following.map((follow) => (
+                <li key={follow.user.id} className="flex items-center gap-4">
+                  {follow.user.profileImage && (
+                    <img
+                      src={follow.user.profileImage}
+                      alt={`${follow.user.fullName}'s profile picture`}
+                      className="w-10 h-10 rounded-full border border-tafera-border object-cover"
+                    />
+                  )}
+                  <div>
+                    <Link
+                      to={`/users/${follow.user.id}`}
+                      className="font-medium text-tafera-text hover:text-tafera-accent"
+                    >
+                      {follow.user.fullName}
+                    </Link>
+                    <p className="text-xs text-tafera-text-muted">
+                      followed {new Date(follow.followedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-tafera-text-muted">
+              Not following anyone yet.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="mt-10 flex justify-end">

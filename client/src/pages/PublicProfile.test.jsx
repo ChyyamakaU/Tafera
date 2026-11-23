@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from '../contexts/AuthContext'
 import PublicProfile from './PublicProfile'
@@ -9,7 +9,10 @@ import {
   unfollowUser,
   getFollowers,
   getFollowing,
+  fetchUserComments,
+  fetchUserMedia,
 } from '../services/users'
+import { fetchUserPosts } from '../services/posts'
 import { checkAuth } from '../services/auth'
 
 vi.mock('../services/users', () => ({
@@ -18,6 +21,19 @@ vi.mock('../services/users', () => ({
   unfollowUser: vi.fn(),
   getFollowers: vi.fn(),
   getFollowing: vi.fn(),
+  fetchUserComments: vi.fn(),
+  fetchUserMedia: vi.fn(),
+}))
+vi.mock('../services/posts', () => ({
+  fetchUserPosts: vi.fn(),
+  likePost: vi.fn(),
+  unlikePost: vi.fn(),
+  savePost: vi.fn(),
+  unsavePost: vi.fn(),
+  updatePost: vi.fn(),
+  deletePost: vi.fn(),
+  updatePostComment: vi.fn(),
+  deletePostComment: vi.fn(),
 }))
 vi.mock('../services/auth', () => ({
   checkAuth: vi.fn(),
@@ -28,6 +44,9 @@ const mockFollowUser = vi.mocked(followUser)
 const mockUnfollowUser = vi.mocked(unfollowUser)
 const mockGetFollowers = vi.mocked(getFollowers)
 const mockGetFollowing = vi.mocked(getFollowing)
+const mockFetchUserPosts = vi.mocked(fetchUserPosts)
+const mockFetchUserMedia = vi.mocked(fetchUserMedia)
+const mockFetchUserComments = vi.mocked(fetchUserComments)
 const mockCheckAuth = vi.mocked(checkAuth)
 
 const renderPublicProfile = (userId = 'user-1') => {
@@ -49,9 +68,13 @@ beforeEach(() => {
     isAuthenticated: false,
     user: null,
   })
+  mockFetchUserPosts.mockResolvedValue({ posts: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
+  mockFetchUserMedia.mockResolvedValue({ media: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
+  mockFetchUserComments.mockResolvedValue({ comments: [], pagination: { page: 1, limit: 20, total: 0, hasNextPage: false } })
 })
 
 afterEach(() => {
+  cleanup()
   sessionStorage.clear()
 })
 
@@ -199,5 +222,65 @@ describe('PublicProfile follow actions (authenticated viewer)', () => {
     await waitFor(() => {
       expect(screen.getByText(/Follow failed/)).toBeInTheDocument()
     })
+  })
+})
+
+describe('PublicProfile automatic Posts, Media, and Comments loading', () => {
+  it('immediately displays Posts, Media, and Comments on open and refreshes all three when switching profiles', async () => {
+    mockGetPublicProfile.mockImplementation(async (id) =>
+      id === 'user-1'
+        ? { id: 'user-1', fullName: 'Ada Lovelace', bio: 'Explorer' }
+        : { id: 'user-2', fullName: 'Tunde Bakare', bio: 'Hiker' },
+    )
+    mockGetFollowers.mockImplementation(async (id) => ({
+      followers:
+        id === 'user-1'
+          ? [{ user: { id: 'user-2', fullName: 'Tunde Bakare' }, followedAt: '2026-01-01T00:00:00.000Z' }]
+          : [],
+      pagination: { page: 1, limit: 10, total: id === 'user-1' ? 1 : 0, pages: 1 },
+    }))
+    mockGetFollowing.mockResolvedValue({
+      following: [],
+      pagination: { page: 1, limit: 10, total: 0, pages: 0 },
+    })
+    mockFetchUserPosts.mockImplementation(async (id) => ({
+      posts:
+        id === 'user-1'
+          ? [{ id: 'p-1', content: 'Ada explores Obudu', createdAt: '2026-01-10', likeCount: 3 }]
+          : [{ id: 'p-2', content: 'Tunde hikes Idanre Hills', createdAt: '2026-01-12', likeCount: 5 }],
+      pagination: { page: 1, limit: 20, total: 1, hasNextPage: false },
+    }))
+    mockFetchUserMedia.mockImplementation(async (id) => ({
+      media:
+        id === 'user-1'
+          ? [{ id: 'm-1', imageUrl: 'https://images.example/obudu.jpg', altText: 'Obudu mist' }]
+          : [{ id: 'm-2', imageUrl: 'https://images.example/idanre.jpg', altText: 'Idanre ridge' }],
+      pagination: { page: 1, limit: 20, total: 1, hasNextPage: false },
+    }))
+    mockFetchUserComments.mockImplementation(async (id) => ({
+      comments:
+        id === 'user-1'
+          ? [{ id: 'c-1', content: 'Ada loved the cable car!', createdAt: '2026-01-11', post: { id: 'p-9', content: 'Mountain guide' } }]
+          : [{ id: 'c-2', content: 'Tunde recommends sunrise trails.', createdAt: '2026-01-13', post: { id: 'p-10', content: 'Ondo trip' } }],
+      pagination: { page: 1, limit: 20, total: 1, hasNextPage: false },
+    }))
+
+    renderPublicProfile('user-1')
+
+    // User 1 content renders immediately without any tab click
+    expect(await screen.findByText('Ada explores Obudu')).toBeInTheDocument()
+    expect(await screen.findByAltText('Obudu mist')).toBeInTheDocument()
+    expect(await screen.findByText('Ada loved the cable car!')).toBeInTheDocument()
+
+    // Navigate to User 2 via the follower profile link
+    fireEvent.click(screen.getByRole('link', { name: 'Tunde Bakare' }))
+
+    // All three sections refresh accurately for User 2
+    expect(await screen.findByText('Tunde hikes Idanre Hills')).toBeInTheDocument()
+    expect(await screen.findByAltText('Idanre ridge')).toBeInTheDocument()
+    expect(await screen.findByText('Tunde recommends sunrise trails.')).toBeInTheDocument()
+    expect(screen.queryByText('Ada explores Obudu')).not.toBeInTheDocument()
+    expect(screen.queryByAltText('Obudu mist')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ada loved the cable car!')).not.toBeInTheDocument()
   })
 })

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
+import ProfileActivitySections from '../components/profile/ProfileActivitySections'
 import { useAuth } from '../contexts/AuthContext'
 import { getProfile, updateProfile, uploadProfileImage } from '../services/auth'
-import { fetchUserComments, fetchUserMedia } from '../services/users'
-import { fetchUserPosts } from '../services/posts'
 import { getErrorMessage, getFieldErrors } from '../services/errors'
 import { NIGERIAN_STATES } from '../constants/nigeriaStates'
 
@@ -16,16 +15,12 @@ const initialForm = {
 const inputClass = 'w-full rounded-lg border border-tafera-border bg-tafera-card px-3 py-2 text-tafera-text placeholder:text-tafera-text-muted focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const TABS = ['Posts', 'Media', 'Comments']
 
 export default function Profile() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState(initialForm)
-  const [activeTab, setActiveTab] = useState('Posts')
-  const [tabData, setTabData] = useState({ Posts: [], Media: [], Comments: [] })
   const [loading, setLoading] = useState(true)
-  const [tabLoading, setTabLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
@@ -63,26 +58,6 @@ export default function Profile() {
     }
     loadProfile()
   }, [authLoading, isAuthenticated, navigate])
-
-  const loadTab = async (tab) => {
-    setActiveTab(tab)
-    if (!profile || tabData[tab]?.length) return
-    setTabLoading(true)
-    setError(null)
-    try {
-      const load = tab === 'Posts'
-        ? fetchUserPosts(profile.id, { page: 1, limit: 20 })
-        : tab === 'Media'
-          ? fetchUserMedia(profile.id, { page: 1, limit: 20 })
-          : fetchUserComments(profile.id, { page: 1, limit: 20 })
-      const data = await load
-      setTabData((current) => ({ ...current, [tab]: data.posts || data.media || data.comments || [] }))
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setTabLoading(false)
-    }
-  }
 
   const handleSave = async (event) => {
     event.preventDefault()
@@ -170,14 +145,13 @@ export default function Profile() {
         </div>
       </section>
 
-      <section className="mt-7 sm:mt-10" aria-label="Profile content">
-        <div role="tablist" aria-label="Traveller content" className="flex overflow-x-auto border-b border-tafera-border">
-          {TABS.map((tab) => <button key={tab} role="tab" id={`profile-tab-${tab.toLowerCase()}`} aria-selected={activeTab === tab} aria-controls="profile-tab-panel" onClick={() => loadTab(tab)} className={`min-w-[6rem] border-b-2 px-5 py-3 text-sm font-semibold ${activeTab === tab ? 'border-tafera-primary text-tafera-primary' : 'border-transparent text-tafera-text-muted hover:text-tafera-text'}`}>{tab}</button>)}
-        </div>
-        <div role="tabpanel" id="profile-tab-panel" aria-labelledby={`profile-tab-${activeTab.toLowerCase()}`} className="min-h-48 py-5">
-          {tabLoading ? <p className="py-10 text-center text-sm text-tafera-text-muted">Loading {activeTab.toLowerCase()}…</p> : activeTab === 'Posts' ? tabData.Posts.length ? <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">{tabData.Posts.map((post) => <li key={post.id} className="rounded-lg border border-tafera-border bg-tafera-surface p-4"><p className="whitespace-pre-wrap break-words text-sm text-tafera-text">{post.content}</p>{post.images?.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{post.images.map((image) => <img key={image.id} src={image.imageUrl} alt={image.altText || ''} className="aspect-square w-full rounded-md object-cover" loading="lazy" />)}</div>}<p className="mt-3 text-xs text-tafera-text-muted">{new Date(post.createdAt).toLocaleDateString()}</p></li>)}</ul> : <p className="py-10 text-center text-sm text-tafera-text-muted">You haven’t shared any posts yet.</p> : activeTab === 'Media' ? tabData.Media.length ? <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{tabData.Media.map((media) => <li key={media.id} className="overflow-hidden rounded-lg border border-tafera-border bg-tafera-surface"><img src={media.imageUrl} alt={media.altText || 'Shared travel photo'} className="aspect-square w-full object-cover" loading="lazy" /><p className="line-clamp-2 p-2 text-xs text-tafera-text-muted">{media.post?.content}</p></li>)}</ul> : <p className="py-10 text-center text-sm text-tafera-text-muted">Photos shared with posts will appear here. Add a photo when publishing a post in the Social Feed.</p> : tabData.Comments.length ? <ul className="space-y-3">{tabData.Comments.map((comment) => <li key={comment.id} className="rounded-lg border border-tafera-border bg-tafera-surface p-4"><p className="whitespace-pre-wrap break-words text-sm text-tafera-text">{comment.content}</p><p className="mt-2 text-xs text-tafera-text-muted">On: “{comment.post?.content}” · {new Date(comment.createdAt).toLocaleDateString()}</p></li>)}</ul> : <p className="py-10 text-center text-sm text-tafera-text-muted">You haven’t commented on any posts yet.</p>}
-        </div>
-      </section>
+      {profile?.id && (
+        <ProfileActivitySections
+          userId={profile.id}
+          isOwnProfile
+          profileName={profile.fullName || 'Your'}
+        />
+      )}
       <div className="mt-6"><Link to="/" className="text-sm font-medium text-tafera-primary hover:underline">Back to home</Link></div>
     </main>
   )
