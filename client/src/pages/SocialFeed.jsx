@@ -1003,7 +1003,7 @@ export default function SocialFeed() {
 
   return (
     <div className={`app-container grid grid-cols-1 gap-5 py-2 sm:py-4 lg:gap-6 ${isAuthenticated ? 'lg:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)_minmax(220px,0.95fr)]' : ''}`}>
-      {isAuthenticated && <aside className="order-2 space-y-4 lg:order-none lg:col-start-1 lg:row-start-1" aria-label="Your travel shortcuts">
+      {isAuthenticated && <aside className="order-2 space-y-4 lg:order-none lg:col-start-1 lg:row-start-1" aria-label="Feed navigation">
         <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
           <div className="flex items-center gap-3">
             {user?.profileImage ? <img className="h-12 w-12 rounded-full object-cover" src={user.profileImage} alt="" /> : <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-tafera-bg text-lg font-semibold text-tafera-primary">{user?.fullName?.slice(0, 1) || 'T'}</span>}
@@ -1012,8 +1012,7 @@ export default function SocialFeed() {
           {user?.bio && <p className="mt-3 line-clamp-3 text-sm text-tafera-text-muted">{user.bio}</p>}
           {!isEmailVerified && <p className="mt-3 text-xs text-tafera-text-muted"><Link to="/verify-email" className="text-tafera-primary hover:underline">Verify your email</Link> to post and join conversations.</p>}
         </section>
-        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-4 sm:p-5">
-          <h2 className="mb-3 font-heading font-bold text-tafera-text">Your travel</h2>
+        <section className="rounded-lg border border-tafera-border bg-tafera-surface p-3 sm:p-4">
           <TravelNavigation />
         </section>
       </aside>}

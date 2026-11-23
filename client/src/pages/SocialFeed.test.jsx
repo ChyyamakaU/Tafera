@@ -132,6 +132,7 @@ describe('SocialFeed', () => {
     expect(document.querySelector('a[href="/destinations/lagos"]')).toHaveTextContent('Lagos')
     expect(screen.getByRole('link', { name: /Explore Lagos/ })).toHaveAttribute('href', '/trips/group-1')
 
+    expect(screen.queryByText(/your travel/i)).not.toBeInTheDocument()
     const travels = screen.getByRole('button', { name: 'My Travels' })
     expect(travels).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(travels)
