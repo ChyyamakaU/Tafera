@@ -85,6 +85,22 @@ const createTripsRouter = ({
     controller.removeStop,
   )
 
+  router.post(
+    '/:tripId/activities',
+    ...protectWrite,
+    controller.addActivity,
+  )
+  router.patch(
+    '/:tripId/activities/:activityId',
+    ...protectWrite,
+    controller.updateActivity,
+  )
+  router.delete(
+    '/:tripId/activities/:activityId',
+    ...protectWrite,
+    controller.removeActivity,
+  )
+
   // Participation routes are all multi-segment, so they cannot shadow the
   // single-segment `GET /:tripId` trip detail route.
   router.post(

@@ -5,6 +5,7 @@ const { parseWith } = require('./auth')
 
 const TITLE_MAX_LENGTH = 150
 const DESCRIPTION_MAX_LENGTH = 2000
+const ACTIVITY_LOCATION_MAX_LENGTH = 200
 const MAX_PARTICIPANTS_LIMIT = 1000
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -22,6 +23,7 @@ const TRIP_STATUSES = Object.freeze([
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const TIME_ONLY_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/
 
 const emptyToUndefined = (value) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value
@@ -58,6 +60,33 @@ const optionalDateOnlySchema = z
   .preprocess(
     emptyToNull,
     dateOnlySchema.nullable(),
+  )
+  .optional()
+
+const timeOnlySchema = z
+  .string({ message: 'Time must be a string.' })
+  .trim()
+  .regex(TIME_ONLY_PATTERN, 'Enter a valid time in HH:MM format.')
+  .transform((value) => {
+    const [, hours, minutes] = TIME_ONLY_PATTERN.exec(value)
+    return `${hours}:${minutes}`
+  })
+
+const optionalTimeOnlySchema = z
+  .preprocess(emptyToNull, timeOnlySchema.nullable())
+  .optional()
+
+const optionalActivityLocationSchema = z
+  .preprocess(
+    emptyToNull,
+    z
+      .string({ message: 'Location must be a string.' })
+      .trim()
+      .max(
+        ACTIVITY_LOCATION_MAX_LENGTH,
+        `Location must be at most ${ACTIVITY_LOCATION_MAX_LENGTH} characters long.`,
+      )
+      .nullable(),
   )
   .optional()
 
@@ -202,6 +231,59 @@ const reorderStopsSchema = z
       ),
   })
 
+const optionalStopIdSchema = z
+  .preprocess(emptyToNull, uuidSchema('Stop ID').nullable())
+  .optional()
+
+const createActivitySchema = z
+  .object({
+    title: titleSchema,
+    description: descriptionSchema,
+    activityDate: dateOnlySchema,
+    startTime: optionalTimeOnlySchema,
+    endTime: optionalTimeOnlySchema,
+    location: optionalActivityLocationSchema,
+    tripDestinationId: optionalStopIdSchema,
+  })
+  .refine(
+    (input) =>
+      !input.startTime ||
+      !input.endTime ||
+      input.endTime > input.startTime,
+    {
+      message: 'End time must be later than the start time.',
+      path: ['endTime'],
+    },
+  )
+
+const updateActivitySchema = z
+  .object({
+    title: titleSchema.optional(),
+    description: descriptionSchema,
+    activityDate: dateOnlySchema.optional(),
+    startTime: optionalTimeOnlySchema,
+    endTime: optionalTimeOnlySchema,
+    location: optionalActivityLocationSchema,
+    tripDestinationId: optionalStopIdSchema,
+  })
+  .refine(
+    (input) => Object.keys(input).length > 0,
+    {
+      message: 'Provide at least one activity field to update.',
+      path: ['request'],
+    },
+  )
+  .refine(
+    (input) =>
+      !input.startTime ||
+      !input.endTime ||
+      input.endTime > input.startTime,
+    {
+      message: 'End time must be later than the start time.',
+      path: ['endTime'],
+    },
+  )
+
 const UUID_QUERY_PATTERN = /^\d+$/
 
 const integerFromQuery = (value) => {
@@ -248,16 +330,25 @@ const stopIdParamsSchema = z.object({
   stopId: uuidSchema('Stop ID'),
 })
 
+const activityIdParamsSchema = z.object({
+  tripId: uuidSchema('Trip ID'),
+  activityId: uuidSchema('Activity ID'),
+})
+
 const parseCreateTrip = (input) => parseWith(createTripSchema, input)
 const parseUpdateTrip = (input) => parseWith(updateTripSchema, input)
 const parseCreateStop = (input) => parseWith(createStopSchema, input)
 const parseUpdateStop = (input) => parseWith(updateStopSchema, input)
 const parseReorderStops = (input) => parseWith(reorderStopsSchema, input)
+const parseCreateActivity = (input) => parseWith(createActivitySchema, input)
+const parseUpdateActivity = (input) => parseWith(updateActivitySchema, input)
 const parseTripListQuery = (input) => parseWith(listQuerySchema, input)
 const parseTripId = (input) => parseWith(tripIdParamsSchema, input)
 const parseStopId = (input) => parseWith(stopIdParamsSchema, input)
+const parseActivityId = (input) => parseWith(activityIdParamsSchema, input)
 
 module.exports = {
+  ACTIVITY_LOCATION_MAX_LENGTH,
   DEFAULT_LIMIT,
   DEFAULT_PAGE,
   DESCRIPTION_MAX_LENGTH,
@@ -267,22 +358,29 @@ module.exports = {
   TITLE_MAX_LENGTH,
   TRIP_STATUSES,
   TRIP_TYPES,
+  activityIdParamsSchema,
+  createActivitySchema,
   createStopSchema,
   createTripSchema,
   dateOnlySchema,
   isValidDateOnly,
   listQuerySchema,
+  parseActivityId,
+  parseCreateActivity,
   parseCreateStop,
   parseCreateTrip,
   parseReorderStops,
   parseStopId,
   parseTripId,
   parseTripListQuery,
+  parseUpdateActivity,
   parseUpdateStop,
   parseUpdateTrip,
   reorderStopsSchema,
   stopIdParamsSchema,
+  timeOnlySchema,
   tripIdParamsSchema,
+  updateActivitySchema,
   updateStopSchema,
   updateTripSchema,
   uuidSchema,

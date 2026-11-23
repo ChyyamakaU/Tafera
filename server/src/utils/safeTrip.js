@@ -28,6 +28,19 @@ const PUBLIC_TRIP_STOP_FIELDS = Object.freeze([
   'updatedAt',
 ])
 
+const PUBLIC_TRIP_ACTIVITY_FIELDS = Object.freeze([
+  'id',
+  'tripDestinationId',
+  'title',
+  'description',
+  'activityDate',
+  'startTime',
+  'endTime',
+  'location',
+  'createdAt',
+  'updatedAt',
+])
+
 const toPlain = (value) => {
   if (!value || typeof value !== 'object') return null
 
@@ -42,6 +55,13 @@ const toDateOnly = (value) => {
   if (value instanceof Date) return value.toISOString().slice(0, 10)
 
   return String(value).slice(0, 10)
+}
+
+const toTimeOnly = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const text = String(value).trim()
+  const match = /^([01]\d|2[0-3]):([0-5]\d)/.exec(text)
+  return match ? `${match[1]}:${match[2]}` : null
 }
 
 const toTripSummary = (trip) => {
@@ -91,12 +111,50 @@ const byStopOrder = (left, right) => {
   return String(left.id).localeCompare(String(right.id))
 }
 
+const toTripActivity = (activity) => {
+  const source = toPlain(activity)
+
+  if (!source) return null
+
+  return {
+    id: source.id,
+    tripDestinationId: source.tripDestinationId ?? null,
+    title: source.title,
+    description: source.description ?? null,
+    activityDate: toDateOnly(source.activityDate),
+    startTime: toTimeOnly(source.startTime),
+    endTime: toTimeOnly(source.endTime),
+    location: source.location ?? null,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  }
+}
+
+const byActivitySchedule = (left, right) => {
+  const dateDiff = String(left.activityDate || '').localeCompare(
+    String(right.activityDate || ''),
+  )
+  if (dateDiff !== 0) return dateDiff
+
+  if (left.startTime && right.startTime) {
+    const timeDiff = left.startTime.localeCompare(right.startTime)
+    if (timeDiff !== 0) return timeDiff
+  } else if (left.startTime && !right.startTime) {
+    return -1
+  } else if (!left.startTime && right.startTime) {
+    return 1
+  }
+
+  return String(left.id).localeCompare(String(right.id))
+}
+
 const toTripDetail = (trip, viewerUserId = null) => {
   const source = toPlain(trip)
 
   if (!source) return null
 
   const stops = source.stops || source.destinations || []
+  const activities = source.activities || source.itineraries || []
 
   return {
     ...toTripSummary(source),
@@ -105,13 +163,20 @@ const toTripDetail = (trip, viewerUserId = null) => {
       .map(toTripStop)
       .filter(Boolean)
       .sort(byStopOrder),
+    activities: (Array.isArray(activities) ? activities : [])
+      .map(toTripActivity)
+      .filter(Boolean)
+      .sort(byActivitySchedule),
   }
 }
 
 module.exports = {
+  PUBLIC_TRIP_ACTIVITY_FIELDS,
   PUBLIC_TRIP_FIELDS,
   PUBLIC_TRIP_STOP_FIELDS,
   toDateOnly,
+  toTimeOnly,
+  toTripActivity,
   toTripDetail,
   toTripStop,
   toTripSummary,

@@ -15,6 +15,7 @@ const { ValidationError } = require('../utils/authErrors')
 const { uploadBuffer } = require('../utils/cloudinaryUpload')
 const {
   PostAccessDeniedError,
+  PostImageNotFoundError,
   PostNotFoundError,
   ProfileNotFoundError,
 } = require('../utils/socialErrors')
@@ -482,6 +483,52 @@ const createPostService = ({
     }
   }
 
+  const updatePostImage = async (userId, postId, imageId, input) => {
+    await findMutablePost(userId, postId)
+    const image = await postImageModel.findOne({
+      where: { id: imageId, postId },
+    })
+
+    if (!image) {
+      throw new PostImageNotFoundError()
+    }
+
+    const updates = {}
+    if (input.altText !== undefined) updates.altText = input.altText
+    if (input.displayOrder !== undefined) updates.displayOrder = input.displayOrder
+
+    await image.update(updates)
+
+    return {
+      id: image.id,
+      imageUrl: image.imageUrl,
+      altText: image.altText ?? null,
+      displayOrder: Number(image.displayOrder) || 0,
+      createdAt: image.createdAt,
+    }
+  }
+
+  const deletePostImage = async (userId, postId, imageId) => {
+    await findMutablePost(userId, postId)
+    const image = await postImageModel.findOne({
+      where: { id: imageId, postId },
+    })
+
+    if (!image) {
+      throw new PostImageNotFoundError()
+    }
+
+    if (image.publicId) {
+      try {
+        await cloudinary.uploader.destroy(image.publicId, { resource_type: 'image' })
+      } catch (error) {
+        logSecurityEvent('post_image_cleanup_failed', { error: error.message, postId, imageId })
+      }
+    }
+
+    await image.destroy()
+  }
+
   const listUserMedia = async (userId, filters) => {
     const { count, rows } = await postImageModel.findAndCountAll({
       attributes: ['id', 'imageUrl', 'altText', 'displayOrder', 'createdAt'],
@@ -517,11 +564,13 @@ const createPostService = ({
     listSavedPosts,
     listUserPosts,
     addPostImage,
+    deletePostImage,
     listUserMedia,
     savePost,
     unlikePost,
     unsavePost,
     updatePost,
+    updatePostImage,
   }
 }
 

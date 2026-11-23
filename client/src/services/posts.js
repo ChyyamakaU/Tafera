@@ -96,10 +96,34 @@ export async function uploadPostImage(postId, file, altText = '') {
   const body = new FormData()
   body.append('image', file)
   if (altText) body.append('altText', altText)
-  const { data } = await request(`/api/posts/${postId}/images`, {
+  const { data } = await request(`/api/posts/${encodeURIComponent(postId)}/images`, {
     method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body,
   })
   return data.image
+}
+
+export async function updatePostImage(postId, imageId, input) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(
+    `/api/posts/${encodeURIComponent(postId)}/images/${encodeURIComponent(imageId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(input),
+    },
+  )
+  return data.image
+}
+
+export async function deletePostImage(postId, imageId) {
+  const csrfToken = await fetchCsrfToken()
+  await request(
+    `/api/posts/${encodeURIComponent(postId)}/images/${encodeURIComponent(imageId)}`,
+    {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': csrfToken },
+    },
+  )
 }
 
 export async function createPost({ content, destinationId = null }) {

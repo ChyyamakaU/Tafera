@@ -1,12 +1,15 @@
 'use strict'
 
 const {
+  parseActivityId,
+  parseCreateActivity,
   parseCreateStop,
   parseCreateTrip,
   parseReorderStops,
   parseStopId,
   parseTripId,
   parseTripListQuery,
+  parseUpdateActivity,
   parseUpdateStop,
   parseUpdateTrip,
 } = require('../validators/trip')
@@ -132,6 +135,48 @@ const createTripController = ({ tripService }) => ({
       req.auth.userId,
       tripId,
       input,
+    )
+
+    noStore(res).status(200).json({
+      data: { trip },
+    })
+  }),
+
+  addActivity: asyncHandler(async (req, res) => {
+    const { tripId } = parseTripId(req.params)
+    const input = parseCreateActivity(req.body)
+    const trip = await tripService.addActivity(
+      req.auth.userId,
+      tripId,
+      input,
+    )
+
+    noStore(res).status(201).json({
+      data: { trip },
+    })
+  }),
+
+  updateActivity: asyncHandler(async (req, res) => {
+    const { tripId, activityId } = parseActivityId(req.params)
+    const input = parseUpdateActivity(req.body)
+    const trip = await tripService.updateActivity(
+      req.auth.userId,
+      tripId,
+      activityId,
+      input,
+    )
+
+    noStore(res).status(200).json({
+      data: { trip },
+    })
+  }),
+
+  removeActivity: asyncHandler(async (req, res) => {
+    const { tripId, activityId } = parseActivityId(req.params)
+    const trip = await tripService.deleteActivity(
+      req.auth.userId,
+      tripId,
+      activityId,
     )
 
     noStore(res).status(200).json({

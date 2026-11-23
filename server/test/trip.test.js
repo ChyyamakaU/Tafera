@@ -12,12 +12,15 @@ const {
   DEFAULT_LIMIT,
   DEFAULT_PAGE,
   MAX_LIMIT,
+  parseActivityId,
+  parseCreateActivity,
   parseCreateStop,
   parseCreateTrip,
   parseReorderStops,
   parseStopId,
   parseTripId,
   parseTripListQuery,
+  parseUpdateActivity,
   parseUpdateStop,
   parseUpdateTrip,
 } = require('../src/validators/trip')
@@ -26,6 +29,7 @@ const {
   DestinationNotFoundError,
 } = require('../src/utils/destinationErrors')
 const {
+  TripActivityNotFoundError,
   TripDatesConflictError,
   TripNotFoundError,
   TripParticipantLimitConflictError,
@@ -38,8 +42,10 @@ const {
   createTripService,
 } = require('../src/services/tripService')
 const {
+  PUBLIC_TRIP_ACTIVITY_FIELDS,
   PUBLIC_TRIP_FIELDS,
   PUBLIC_TRIP_STOP_FIELDS,
+  toTripActivity,
   toTripDetail,
   toTripStop,
   toTripSummary,
@@ -1314,4 +1320,200 @@ test('deleteTrip reports missing and non-owned trips consistently', async () => 
     id: 'trip-1',
     userId: 'owner-1',
   })
+})
+
+test('activity validation enforces time ordering and trims fields', () => {
+  const parsed = parseCreateActivity({
+    title: '  Morning hike  ',
+    description: '',
+    activityDate: '2027-03-29',
+    startTime: '08:00:00',
+    endTime: '10:30',
+    location: '  Arashiyama  ',
+    tripDestinationId: '',
+  })
+  assert.deepEqual(parsed, {
+    title: 'Morning hike',
+    description: null,
+    activityDate: '2027-03-29',
+    startTime: '08:00',
+    endTime: '10:30',
+    location: 'Arashiyama',
+    tripDestinationId: null,
+  })
+
+  const invalidTime = detailsFor(() =>
+    parseCreateActivity({
+      title: 'Bad schedule',
+      activityDate: '2027-03-29',
+      startTime: '12:00',
+      endTime: '11:00',
+    }),
+  )
+  assert.equal(invalidTime.some((detail) => detail.field === 'endTime'), true)
+
+  const params = parseActivityId({
+    tripId: '10000000-0000-4000-8000-000000000001',
+    activityId: '50000000-0000-4000-8000-000000000001',
+  })
+  assert.equal(params.activityId, '50000000-0000-4000-8000-000000000001')
+
+  const updated = parseUpdateActivity({ startTime: '09:00', endTime: '10:00' })
+  assert.deepEqual(updated, { startTime: '09:00', endTime: '10:00' })
+})
+
+test('toTripDetail serializes and sorts activities by activityDate and startTime', () => {
+  const trip = buildTrip({
+    itineraries: [
+      {
+        id: '50000000-0000-4000-8000-000000000003',
+        tripId: '10000000-0000-4000-8000-000000000001',
+        tripDestinationId: null,
+        title: 'Untimed evening',
+        description: null,
+        activityDate: '2027-03-29',
+        startTime: null,
+        endTime: null,
+        location: null,
+        createdAt: new Date('2026-11-10T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-10T10:00:00.000Z'),
+      },
+      {
+        id: '50000000-0000-4000-8000-000000000002',
+        tripId: '10000000-0000-4000-8000-000000000001',
+        tripDestinationId: '20000000-0000-4000-8000-000000000001',
+        title: 'Early breakfast',
+        description: 'Ramen',
+        activityDate: '2027-03-29',
+        startTime: '08:00:00',
+        endTime: '09:00:00',
+        location: 'Station',
+        createdAt: new Date('2026-11-10T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-10T10:00:00.000Z'),
+      },
+    ],
+  })
+
+  const detail = toTripDetail(trip, trip.userId)
+  assert.deepEqual(
+    detail.activities.map((item) => item.title),
+    ['Early breakfast', 'Untimed evening'],
+  )
+  assert.equal(detail.activities[0].startTime, '08:00')
+  assert.equal(detail.activities[0].endTime, '09:00')
+  assert.deepEqual(
+    Object.keys(toTripActivity(trip.itineraries[1])).sort(),
+    [...PUBLIC_TRIP_ACTIVITY_FIELDS].sort(),
+  )
+})
+
+test('addActivity, updateActivity, and deleteActivity validate bounds, stop ownership, and mutate cleanly', async () => {
+  const trip = buildTrip()
+  const stopId = '20000000-0000-4000-8000-000000000001'
+  const activityId = '50000000-0000-4000-8000-000000000001'
+  const storedActivities = []
+
+  const TripItinerary = {
+    async create(values) {
+      const record = {
+        id: activityId,
+        ...values,
+        createdAt: new Date('2026-11-10T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-10T10:00:00.000Z'),
+      }
+      storedActivities.push(record)
+      return record
+    },
+    async findOne({ where }) {
+      return storedActivities.find(
+        (item) => item.id === where.id && item.tripId === where.tripId,
+      ) || null
+    },
+    async update(values, { where }) {
+      const target = storedActivities.find(
+        (item) => item.id === where.id && item.tripId === where.tripId,
+      )
+      if (!target) return [0]
+      Object.assign(target, values)
+      return [1]
+    },
+    async destroy({ where }) {
+      const index = storedActivities.findIndex(
+        (item) => item.id === where.id && item.tripId === where.tripId,
+      )
+      if (index === -1) return 0
+      storedActivities.splice(index, 1)
+      return 1
+    },
+  }
+
+  const service = createTripService({
+    Trip: {
+      async findOne({ where }) {
+        if (where.id !== trip.id || where.userId !== trip.userId) return null
+        return { ...trip, destinations: [], itineraries: [...storedActivities] }
+      },
+    },
+    TripDestination: {
+      async findOne({ where }) {
+        return where.id === stopId && where.tripId === trip.id ? { id: stopId } : null
+      },
+    },
+    TripItinerary,
+    TripParticipant: {},
+    Destination: {},
+    DestinationImage: {},
+    sequelize: createFakeSequelize(),
+  })
+
+  await assert.rejects(
+    service.addActivity(trip.userId, trip.id, {
+      title: 'Too early',
+      activityDate: '2027-03-01',
+    }),
+    ValidationError,
+  )
+
+  await assert.rejects(
+    service.addActivity(trip.userId, trip.id, {
+      title: 'Wrong stop',
+      activityDate: '2027-03-29',
+      tripDestinationId: '99999999-9999-4999-8999-999999999999',
+    }),
+    TripStopNotFoundError,
+  )
+
+  const afterAdd = await service.addActivity(trip.userId, trip.id, {
+    title: 'Temple visit',
+    activityDate: '2027-03-29',
+    startTime: '09:00',
+    endTime: '11:00',
+    location: 'Higashiyama',
+    tripDestinationId: stopId,
+  })
+  assert.equal(afterAdd.activities.length, 1)
+  assert.equal(afterAdd.activities[0].title, 'Temple visit')
+
+  await assert.rejects(
+    service.updateActivity(trip.userId, trip.id, activityId, {
+      endTime: '08:00',
+    }),
+    ValidationError,
+  )
+
+  const afterUpdate = await service.updateActivity(trip.userId, trip.id, activityId, {
+    title: 'Sunrise temple visit',
+    startTime: '07:00',
+    endTime: '09:30',
+  })
+  assert.equal(afterUpdate.activities[0].title, 'Sunrise temple visit')
+  assert.equal(afterUpdate.activities[0].startTime, '07:00')
+
+  await assert.rejects(
+    service.deleteActivity(trip.userId, trip.id, '60000000-0000-4000-8000-000000000001'),
+    TripActivityNotFoundError,
+  )
+
+  const afterDelete = await service.deleteActivity(trip.userId, trip.id, activityId)
+  assert.equal(afterDelete.activities.length, 0)
 })

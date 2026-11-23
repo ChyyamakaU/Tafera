@@ -8,6 +8,7 @@ import {
   createPostComment,
   deletePost,
   deletePostComment,
+  deletePostImage,
   fetchPersonalizedPosts,
   fetchPublicPosts,
   fetchPost,
@@ -19,6 +20,8 @@ import {
   unsavePost,
   updatePost,
   updatePostComment,
+  updatePostImage,
+  uploadPostImage,
 } from '../services/posts'
 
 vi.mock('../services/posts', () => ({
@@ -26,6 +29,7 @@ vi.mock('../services/posts', () => ({
   createPostComment: vi.fn(),
   deletePost: vi.fn(),
   deletePostComment: vi.fn(),
+  deletePostImage: vi.fn(),
   fetchPersonalizedPosts: vi.fn(),
   fetchPublicPosts: vi.fn(),
   fetchPost: vi.fn(),
@@ -37,6 +41,8 @@ vi.mock('../services/posts', () => ({
   unsavePost: vi.fn(),
   updatePost: vi.fn(),
   updatePostComment: vi.fn(),
+  updatePostImage: vi.fn(),
+  uploadPostImage: vi.fn(),
 }))
 
 vi.mock('../services/destinations', () => ({ fetchFeaturedDestinations: vi.fn() }))
@@ -309,5 +315,78 @@ describe('SocialFeed', () => {
     fireEvent.click(saveButton)
     expect(likePost).not.toHaveBeenCalled()
     expect(savePost).not.toHaveBeenCalled()
+  })
+
+  it('supports multi-photo uploads with alt text on create and enforces the 10-photo limit', async () => {
+    const fileOne = new File(['img-1'], 'one.jpg', { type: 'image/jpeg' })
+    const fileTwo = new File(['img-2'], 'two.png', { type: 'image/png' })
+    const created = { ...post, id: 'post-multi', content: 'Multi-photo journey', images: [] }
+    const createdWithImages = {
+      ...created,
+      images: [
+        { id: 'img-1', imageUrl: 'https://example.com/1.jpg', altText: 'Morning skyline', displayOrder: 0 },
+        { id: 'img-2', imageUrl: 'https://example.com/2.png', altText: 'Coastal path', displayOrder: 1 },
+      ],
+    }
+    createPost.mockResolvedValue(created)
+    uploadPostImage.mockResolvedValue({ id: 'img-1' })
+    fetchPost.mockResolvedValue(createdWithImages)
+
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    await screen.findByText('A trip to Kyoto')
+
+    const fileInput = screen.getByLabelText(/Attach travel photos/)
+
+    // Exceeding 10 photos shows validation message
+    const elevenFiles = Array.from({ length: 11 }, (_, idx) => new File(['x'], `p${idx}.jpg`, { type: 'image/jpeg' }))
+    fireEvent.change(fileInput, { target: { files: elevenFiles } })
+    expect(await screen.findByRole('alert')).toHaveTextContent('You can attach at most 10 photos to a post.')
+
+    // Valid multi-photo selection with alt text
+    fireEvent.change(fileInput, { target: { files: [fileOne, fileTwo] } })
+    expect(screen.getByText('2/10 photos selected')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Alt text for selected photo 1'), { target: { value: 'Morning skyline' } })
+    fireEvent.change(screen.getByLabelText('Alt text for selected photo 2'), { target: { value: 'Coastal path' } })
+    fireEvent.change(screen.getByLabelText('Share a travel update'), { target: { value: 'Multi-photo journey' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Publish post' }))
+
+    await waitFor(() => expect(uploadPostImage).toHaveBeenCalledTimes(2))
+    expect(uploadPostImage).toHaveBeenNthCalledWith(1, 'post-multi', fileOne, 'Morning skyline')
+    expect(uploadPostImage).toHaveBeenNthCalledWith(2, 'post-multi', fileTwo, 'Coastal path')
+    expect(await screen.findByAltText('Morning skyline')).toBeInTheDocument()
+  })
+
+  it('allows editing alt text, removing existing photos, and adding new photos when editing a post', async () => {
+    const existingImages = [
+      { id: 'img-a', imageUrl: 'https://example.com/a.jpg', altText: 'Old caption', displayOrder: 0 },
+      { id: 'img-b', imageUrl: 'https://example.com/b.jpg', altText: 'Delete me', displayOrder: 1 },
+    ]
+    const ownPost = { ...post, author: user, images: existingImages }
+    fetchPersonalizedPosts.mockResolvedValue({ posts: [ownPost], pagination })
+    deletePostImage.mockResolvedValue(undefined)
+    updatePost.mockResolvedValue({ ...ownPost, content: 'Updated journey', images: [existingImages[0]] })
+    updatePostImage.mockResolvedValue({ ...existingImages[0], altText: 'New caption' })
+    const addedFile = new File(['img-c'], 'c.webp', { type: 'image/webp' })
+    uploadPostImage.mockResolvedValue({ id: 'img-c', imageUrl: 'https://example.com/c.webp', altText: 'Fresh shot', displayOrder: 1 })
+
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+
+    // Remove second existing image
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove photo' })
+    fireEvent.click(removeButtons[1])
+    await waitFor(() => expect(deletePostImage).toHaveBeenCalledWith(ownPost.id, 'img-b'))
+
+    // Update alt text of remaining image and queue a new photo
+    fireEvent.change(screen.getByLabelText('Alt text for photo 1'), { target: { value: 'New caption' } })
+    fireEvent.change(screen.getByLabelText('Add photos to post'), { target: { files: [addedFile] } })
+    fireEvent.change(screen.getByLabelText('Alt text for new photo 1'), { target: { value: 'Fresh shot' } })
+    fireEvent.change(screen.getByLabelText('Edit post'), { target: { value: 'Updated journey' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(updatePostImage).toHaveBeenCalledWith(ownPost.id, 'img-a', { altText: 'New caption' }))
+    expect(uploadPostImage).toHaveBeenCalledWith(ownPost.id, addedFile, 'Fresh shot')
+    expect(await screen.findByAltText('New caption')).toBeInTheDocument()
+    expect(screen.getByAltText('Fresh shot')).toBeInTheDocument()
   })
 })

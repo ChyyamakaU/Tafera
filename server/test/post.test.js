@@ -8,9 +8,15 @@ const { DestinationNotFoundError } = require('../src/utils/destinationErrors')
 const { createPostService } = require('../src/services/postService')
 const {
   PostAccessDeniedError,
+  PostImageNotFoundError,
   PostNotFoundError,
   ProfileNotFoundError,
 } = require('../src/utils/socialErrors')
+const {
+  parsePostImageParams,
+  parseUpdatePostImage,
+} = require('../src/validators/social')
+const cloudinary = require('../src/config/cloudinary')
 
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_ID = '22222222-2222-4222-8222-222222222222'
@@ -557,4 +563,87 @@ test('savePost, unsavePost, and listSavedPosts manage bookmarks cleanly', async 
     service.savePost(OTHER_ID, '99999999-9999-4999-8999-999999999999'),
     PostNotFoundError,
   )
+})
+
+test('updatePostImage and deletePostImage enforce ownership, validate payloads, and clean up Cloudinary', async () => {
+  const postRecord = createPostRecord()
+  const imageId = '77777777-7777-4777-8777-777777777777'
+  const imageRecord = {
+    id: imageId,
+    postId: postRecord.id,
+    imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/tafera/posts/pic.jpg',
+    publicId: 'tafera/posts/pic',
+    altText: 'Original alt',
+    displayOrder: 0,
+    createdAt: '2026-01-03T00:00:00.000Z',
+    updates: [],
+    async update(values) {
+      this.updates.push(values)
+      Object.assign(this, values)
+    },
+    async destroy() {
+      this.destroyed = true
+    },
+  }
+
+  const parsedParams = parsePostImageParams({
+    postId: postRecord.id.toUpperCase(),
+    imageId: imageId.toUpperCase(),
+  })
+  assert.deepEqual(parsedParams, { postId: postRecord.id, imageId })
+  assert.deepEqual(
+    parseUpdatePostImage({ altText: '  Sunset over Lagos  ', displayOrder: 2 }),
+    { altText: 'Sunset over Lagos', displayOrder: 2 },
+  )
+
+  const destroyedPublicIds = []
+  const originalDestroy = cloudinary.uploader.destroy
+  cloudinary.uploader.destroy = async (publicId) => {
+    destroyedPublicIds.push(publicId)
+    return { result: 'ok' }
+  }
+
+  try {
+    const service = createPostService({
+      Post: {
+        async findOne({ where }) {
+          return where.id === postRecord.id ? postRecord : null
+        },
+      },
+      PostImage: {
+        async findOne({ where }) {
+          return where.id === imageId && where.postId === postRecord.id ? imageRecord : null
+        },
+      },
+      PostLike: {},
+      SavedPost: {},
+      Follow: {},
+      User: {},
+      Destination: {},
+      DestinationImage: {},
+    })
+
+    await assert.rejects(
+      service.updatePostImage(OTHER_ID, postRecord.id, imageId, { altText: 'Nope' }),
+      PostAccessDeniedError,
+    )
+
+    const updated = await service.updatePostImage(OWNER_ID, postRecord.id, imageId, {
+      altText: 'Sunset over Lagos',
+      displayOrder: 2,
+    })
+    assert.equal(updated.altText, 'Sunset over Lagos')
+    assert.equal(updated.displayOrder, 2)
+
+    await assert.rejects(
+      service.deletePostImage(OWNER_ID, postRecord.id, '88888888-8888-4888-8888-888888888888'),
+      PostImageNotFoundError,
+    )
+
+    await service.deletePostImage(OWNER_ID, postRecord.id, imageId)
+    assert.deepEqual(destroyedPublicIds, ['tafera/posts/pic'])
+    assert.equal(imageRecord.destroyed, true)
+  } finally {
+    cloudinary.uploader.destroy = originalDestroy
+  }
 })

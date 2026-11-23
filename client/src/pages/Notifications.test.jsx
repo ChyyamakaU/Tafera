@@ -94,7 +94,7 @@ describe('Notifications page', () => {
     expect(markNotificationRead).toHaveBeenCalledTimes(1)
     expect(await screen.findByRole('button', { name: 'Mark all as read' })).toBeDisabled()
     expect(screen.getByRole('link', { name: 'Maya started following you.' })).toHaveAttribute('href', '/users/user-2')
-    expect(screen.getByTestId('location')).toHaveTextContent('/users/user-2')
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/users/user-2'))
   })
 
   it('updates the sidebar unread count immediately after an unread notification is marked as read', async () => {

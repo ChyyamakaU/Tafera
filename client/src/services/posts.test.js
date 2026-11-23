@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  deletePostImage,
   fetchPersonalizedPosts,
   fetchSavedPosts,
   likePost,
   savePost,
   unlikePost,
   unsavePost,
+  updatePostImage,
 } from './posts'
 import { request } from './api'
 import { fetchCsrfToken } from './auth'
@@ -83,6 +85,26 @@ describe('post likes and saved posts services', () => {
       headers: { 'X-CSRF-Token': 'csrf-token-123' },
     })
     expect(request).toHaveBeenNthCalledWith(4, '/api/posts/post-1/save', {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': 'csrf-token-123' },
+    })
+  })
+
+  it('sends CSRF tokens on post image update and delete mutations', async () => {
+    request
+      .mockResolvedValueOnce({ data: { image: { id: 'img-1', altText: 'Harbour view', displayOrder: 1 } } })
+      .mockResolvedValueOnce(null)
+
+    const updated = await updatePostImage('post-1', 'img-1', { altText: 'Harbour view', displayOrder: 1 })
+    expect(updated).toEqual({ id: 'img-1', altText: 'Harbour view', displayOrder: 1 })
+    await deletePostImage('post-1', 'img-1')
+
+    expect(request).toHaveBeenNthCalledWith(1, '/api/posts/post-1/images/img-1', {
+      method: 'PATCH',
+      headers: { 'X-CSRF-Token': 'csrf-token-123' },
+      body: JSON.stringify({ altText: 'Harbour view', displayOrder: 1 }),
+    })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/posts/post-1/images/img-1', {
       method: 'DELETE',
       headers: { 'X-CSRF-Token': 'csrf-token-123' },
     })

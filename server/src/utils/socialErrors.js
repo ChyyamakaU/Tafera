@@ -71,6 +71,17 @@ class CommentAccessDeniedError extends AuthError {
   }
 }
 
+class PostImageNotFoundError extends AuthError {
+  constructor() {
+    super({
+      message: 'Post image not found.',
+      code: 'POST_IMAGE_NOT_FOUND',
+      status: 404,
+    })
+    this.name = 'PostImageNotFoundError'
+  }
+}
+
 module.exports = {
   // Reuse the profile-domain error so PROFILE_NOT_FOUND has one canonical
   // implementation across public profiles and social lookups.
@@ -80,5 +91,6 @@ module.exports = {
   FollowExistsError,
   FollowNotFoundError,
   PostAccessDeniedError,
+  PostImageNotFoundError,
   PostNotFoundError,
 }

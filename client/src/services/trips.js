@@ -91,6 +91,41 @@ export async function reorderTripStops(tripId, stopIds) {
   return data.trip
 }
 
+export async function addTripActivity(tripId, input) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(`/api/trips/${encodeURIComponent(tripId)}/activities`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(input),
+  })
+  return data.trip
+}
+
+export async function updateTripActivity(tripId, activityId, input) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(
+    `/api/trips/${encodeURIComponent(tripId)}/activities/${encodeURIComponent(activityId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(input),
+    },
+  )
+  return data.trip
+}
+
+export async function deleteTripActivity(tripId, activityId) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(
+    `/api/trips/${encodeURIComponent(tripId)}/activities/${encodeURIComponent(activityId)}`,
+    {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': csrfToken },
+    },
+  )
+  return data.trip
+}
+
 export async function requestToJoinTrip(tripId) {
   const csrfToken = await fetchCsrfToken()
   const { data } = await request(`/api/trips/${tripId}/join`, {

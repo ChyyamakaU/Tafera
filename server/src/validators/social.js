@@ -5,6 +5,8 @@ const { parseWith } = require('./auth')
 
 const POST_CONTENT_MAX_LENGTH = 5000
 const COMMENT_CONTENT_MAX_LENGTH = 1000
+const POST_IMAGE_ALT_MAX_LENGTH = 255
+const MAX_POST_IMAGES = 10
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
@@ -125,6 +127,38 @@ const postCommentParamsSchema = z.object({
   commentId: uuidSchema('Comment ID'),
 })
 
+const postImageParamsSchema = z.object({
+  postId: uuidSchema('Post ID'),
+  imageId: uuidSchema('Image ID'),
+})
+
+const updatePostImageSchema = z
+  .object({
+    altText: z
+      .preprocess(
+        emptyToNull,
+        z
+          .string({ message: 'Alt text must be a string.' })
+          .trim()
+          .max(
+            POST_IMAGE_ALT_MAX_LENGTH,
+            `Alt text must be at most ${POST_IMAGE_ALT_MAX_LENGTH} characters long.`,
+          )
+          .nullable(),
+      )
+      .optional(),
+    displayOrder: z
+      .number({ message: 'Display order must be an integer.' })
+      .int('Display order must be an integer.')
+      .min(0, 'Display order must be at least 0.')
+      .max(MAX_POST_IMAGES - 1, `Display order must be at most ${MAX_POST_IMAGES - 1}.`)
+      .optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, {
+    message: 'Provide at least one image field to update.',
+    path: ['request'],
+  })
+
 const parseCreatePost = (input) => parseWith(createPostSchema, input)
 const parseUpdatePost = (input) => parseWith(updatePostSchema, input)
 const parseCreateComment = (input) =>
@@ -138,6 +172,10 @@ const parsePostId = (input) => parseWith(postIdParamsSchema, input)
 const parseCommentId = (input) => parseWith(commentIdParamsSchema, input)
 const parsePostCommentParams = (input) =>
   parseWith(postCommentParamsSchema, input)
+const parsePostImageParams = (input) =>
+  parseWith(postImageParamsSchema, input)
+const parseUpdatePostImage = (input) =>
+  parseWith(updatePostImageSchema, input)
 
 module.exports = {
   COMMENT_CONTENT_MAX_LENGTH,
@@ -145,7 +183,9 @@ module.exports = {
   DEFAULT_PAGE,
   MAX_LIMIT,
   MAX_PAGE,
+  MAX_POST_IMAGES,
   POST_CONTENT_MAX_LENGTH,
+  POST_IMAGE_ALT_MAX_LENGTH,
   UUID_PATTERN,
   commentContentSchema,
   commentIdParamsSchema,
@@ -160,13 +200,17 @@ module.exports = {
   parsePaginationQuery,
   parsePostCommentParams,
   parsePostId,
+  parsePostImageParams,
   parseUpdateComment,
   parseUpdatePost,
+  parseUpdatePostImage,
   parseUserId,
   postCommentParamsSchema,
   postContentSchema,
   postIdParamsSchema,
+  postImageParamsSchema,
   updateCommentSchema,
+  updatePostImageSchema,
   updatePostSchema,
   userIdParamsSchema,
 }

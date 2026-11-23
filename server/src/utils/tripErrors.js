@@ -138,7 +138,19 @@ class TripParticipantLimitConflictError extends AuthError {
   }
 }
 
+class TripActivityNotFoundError extends AuthError {
+  constructor() {
+    super({
+      message: 'Trip activity not found.',
+      code: 'TRIP_ACTIVITY_NOT_FOUND',
+      status: 404,
+    })
+    this.name = 'TripActivityNotFoundError'
+  }
+}
+
 module.exports = {
+  TripActivityNotFoundError,
   TripDatesConflictError,
   TripFullError,
   TripNotFoundError,

@@ -57,6 +57,8 @@ const createPostsRouter = ({
 
   router.post('/', ...protectWrite, controller.create)
   router.post('/:postId/images', ...protectWrite, destinationImageUpload, controller.uploadImage)
+  router.patch('/:postId/images/:imageId', ...protectWrite, controller.updateImage)
+  router.delete('/:postId/images/:imageId', ...protectWrite, controller.removeImage)
   // Public post discovery remains public; optionalAuthenticate resolves
   // viewer-specific like/save state when a managed session is present.
   router.get('/', optionalAuthenticate, controller.list)

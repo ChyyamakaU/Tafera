@@ -4,7 +4,9 @@ const {
   parseCreatePost,
   parsePaginationQuery,
   parsePostId,
+  parsePostImageParams,
   parseUpdatePost,
+  parseUpdatePostImage,
   parseUserId,
 } = require('../validators/social')
 const { z } = require('zod')
@@ -135,6 +137,24 @@ const createPostController = ({ postService }) => ({
     const input = parseWith(z.object({ altText: z.string().trim().max(255).optional() }), req.body || {})
     const image = await postService.addPostImage(req.auth.userId, postId, req.file, input.altText)
     noStore(res).status(201).json({ data: { image } })
+  }),
+
+  updateImage: asyncHandler(async (req, res) => {
+    const { postId, imageId } = parsePostImageParams(req.params)
+    const input = parseUpdatePostImage(req.body)
+    const image = await postService.updatePostImage(
+      req.auth.userId,
+      postId,
+      imageId,
+      input,
+    )
+    noStore(res).status(200).json({ data: { image } })
+  }),
+
+  removeImage: asyncHandler(async (req, res) => {
+    const { postId, imageId } = parsePostImageParams(req.params)
+    await postService.deletePostImage(req.auth.userId, postId, imageId)
+    noStore(res).status(204).end()
   }),
 
   listByUser: asyncHandler(async (req, res) => {

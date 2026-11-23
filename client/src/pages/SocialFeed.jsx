@@ -7,6 +7,7 @@ import {
   createPostComment,
   deletePost,
   deletePostComment,
+  deletePostImage,
   fetchPersonalizedPosts,
   fetchPublicPosts,
   fetchPost,
@@ -18,12 +19,59 @@ import {
   unsavePost,
   updatePost,
   updatePostComment,
+  updatePostImage,
   uploadPostImage,
 } from '../services/posts'
 import { getErrorMessage } from '../services/errors'
 import { fetchFeaturedDestinations } from '../services/destinations'
 import { fetchPublicTrips } from '../services/trips'
 import TravelNavigation from '../components/social/TravelNavigation'
+
+const MAX_POST_IMAGES = 10
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+const createPreviewUrl = (file) =>
+  typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+    ? URL.createObjectURL(file)
+    : ''
+
+const revokePreviewUrl = (url) => {
+  if (url && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url)
+  }
+}
+
+const validateSelectedPhotos = (files, existingCount) => {
+  const list = Array.from(files || [])
+  if (list.length === 0) return { accepted: [], error: null }
+
+  if (existingCount + list.length > MAX_POST_IMAGES) {
+    return {
+      accepted: [],
+      error: `You can attach at most ${MAX_POST_IMAGES} photos to a post.`,
+    }
+  }
+
+  for (const file of list) {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type) || file.size > MAX_IMAGE_BYTES) {
+      return {
+        accepted: [],
+        error: 'Choose JPEG, PNG or WebP images no larger than 5 MB each.',
+      }
+    }
+  }
+
+  return {
+    accepted: list.map((file, index) => ({
+      localId: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      previewUrl: createPreviewUrl(file),
+      altText: '',
+    })),
+    error: null,
+  }
+}
 
 const inputClass =
   'w-full rounded-lg border border-tafera-border bg-tafera-bg px-4 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
@@ -138,10 +186,16 @@ function PostCard({
   const [actionError, setActionError] = useState(null)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(post.content)
+  const [editAltTexts, setEditAltTexts] = useState({})
+  const [editNewPhotos, setEditNewPhotos] = useState([])
+  const [editImageError, setEditImageError] = useState(null)
+  const [removingImageId, setRemovingImageId] = useState(null)
   const [commentText, setCommentText] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingCommentId, setEditingCommentId] = useState(null)
   const [editingCommentText, setEditingCommentText] = useState('')
+  const editNewPhotosRef = useRef([])
+  editNewPhotosRef.current = editNewPhotos
   const [likeState, setLikeState] = useState(() => ({
     isLiked: Boolean(post.isLiked),
     likeCount: Number(post.likeCount) || 0,
@@ -269,15 +323,99 @@ function PostCard({
     }
   }
 
+  useEffect(() => () => {
+    for (const item of editNewPhotosRef.current) revokePreviewUrl(item.previewUrl)
+  }, [])
+
+  const clearEditNewPhotos = () => {
+    for (const item of editNewPhotosRef.current) revokePreviewUrl(item.previewUrl)
+    setEditNewPhotos([])
+  }
+
+  const openEditor = () => {
+    const nextEditing = !editing
+    if (nextEditing) {
+      setEditText(detail.content)
+      setEditAltTexts(
+        Object.fromEntries(
+          (detail.images || []).map((image) => [image.id, image.altText || '']),
+        ),
+      )
+      setEditImageError(null)
+    } else {
+      clearEditNewPhotos()
+      setEditImageError(null)
+    }
+    setEditing(nextEditing)
+  }
+
+  const handleRemoveExistingImage = async (imageId) => {
+    setRemovingImageId(imageId)
+    setEditImageError(null)
+    try {
+      await deletePostImage(post.id, imageId)
+      const nextImages = (detail.images || []).filter((image) => image.id !== imageId)
+      const updated = { ...detail, images: nextImages }
+      setDetail(updated)
+      onPostUpdated(updated)
+      setEditAltTexts((current) => {
+        const next = { ...current }
+        delete next[imageId]
+        return next
+      })
+    } catch (err) {
+      setEditImageError(getErrorMessage(err))
+    } finally {
+      setRemovingImageId(null)
+    }
+  }
+
   const savePost = async (event) => {
     event.preventDefault()
     setSaving(true)
     setError(null)
+    setEditImageError(null)
     try {
-      const updated = await updatePost(post.id, { content: editText.trim() })
+      let updated = await updatePost(post.id, { content: editText.trim() })
+      const currentImages = Array.isArray(updated.images) ? [...updated.images] : [...(detail.images || [])]
+      const updatedImages = []
+
+      for (const image of currentImages) {
+        const nextAlt = (editAltTexts[image.id] ?? image.altText ?? '').trim()
+        const prevAlt = (image.altText ?? '').trim()
+        if (nextAlt !== prevAlt) {
+          const savedImage = await updatePostImage(post.id, image.id, {
+            altText: nextAlt || null,
+          })
+          updatedImages.push({ ...image, ...savedImage })
+        } else {
+          updatedImages.push(image)
+        }
+      }
+
+      const uploadedImages = []
+      const failedUploads = []
+      for (const item of editNewPhotos) {
+        try {
+          const createdImage = await uploadPostImage(post.id, item.file, item.altText.trim())
+          uploadedImages.push(createdImage)
+        } catch (uploadErr) {
+          failedUploads.push(getErrorMessage(uploadErr))
+        }
+      }
+
+      updated = {
+        ...updated,
+        images: [...updatedImages, ...uploadedImages],
+      }
       setDetail(updated)
       onPostUpdated(updated)
-      setEditing(false)
+      clearEditNewPhotos()
+      if (failedUploads.length > 0) {
+        setEditImageError(`Post changes were saved, but ${failedUploads.length} photo(s) failed to upload: ${failedUploads[0]}`)
+      } else {
+        setEditing(false)
+      }
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -382,10 +520,7 @@ function PostCard({
         </div>
         {isOwner && canWrite && (
           <div className="flex shrink-0 gap-2">
-            <Button variant="ghost" size="sm" disabled={saving} onClick={() => {
-              setEditText(detail.content)
-              setEditing((current) => !current)
-            }}>
+            <Button variant="ghost" size="sm" disabled={saving} onClick={openEditor}>
               {editing ? 'Cancel' : 'Edit'}
             </Button>
             <Button variant="ghost" size="sm" disabled={saving} onClick={removePost}>
@@ -399,9 +534,114 @@ function PostCard({
         <form className="mt-4 space-y-3" onSubmit={savePost}>
           <label className="sr-only" htmlFor={`edit-post-${post.id}`}>Edit post</label>
           <textarea id={`edit-post-${post.id}`} className={inputClass} rows="4" maxLength="5000" required value={editText} onChange={(event) => setEditText(event.target.value)} />
+
+          {editImageError && (
+            <div role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-tafera-text">
+              {editImageError}
+            </div>
+          )}
+
+          {(detail.images?.length > 0 || editNewPhotos.length > 0) && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-tafera-text-muted">
+                Photos ({(detail.images?.length || 0) + editNewPhotos.length}/{MAX_POST_IMAGES})
+              </p>
+              <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {(detail.images || []).map((image, index) => (
+                  <li key={image.id} className="rounded-md border border-tafera-border bg-tafera-bg p-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <img src={image.imageUrl} alt={editAltTexts[image.id] || image.altText || `Post photo ${index + 1}`} className="h-16 w-16 shrink-0 rounded object-cover" />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <label className="sr-only" htmlFor={`edit-alt-${image.id}`}>Alt text for photo {index + 1}</label>
+                        <input
+                          id={`edit-alt-${image.id}`}
+                          type="text"
+                          maxLength="255"
+                          placeholder="Alt text (optional)"
+                          value={editAltTexts[image.id] ?? ''}
+                          onChange={(event) => setEditAltTexts((current) => ({ ...current, [image.id]: event.target.value }))}
+                          className="w-full rounded border border-tafera-border bg-tafera-surface px-2.5 py-1 text-xs text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-1 focus:ring-tafera-primary"
+                        />
+                        <button
+                          type="button"
+                          disabled={removingImageId === image.id || saving}
+                          onClick={() => handleRemoveExistingImage(image.id)}
+                          className="text-xs font-medium text-tafera-primary hover:underline disabled:opacity-50"
+                        >
+                          {removingImageId === image.id ? 'Removing...' : 'Remove photo'}
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+                {editNewPhotos.map((item, index) => (
+                  <li key={item.localId} className="rounded-md border border-dashed border-tafera-border bg-tafera-bg p-2.5">
+                    <div className="flex items-start gap-2.5">
+                      {item.previewUrl ? (
+                        <img src={item.previewUrl} alt={item.altText || `New photo ${index + 1}`} className="h-16 w-16 shrink-0 rounded object-cover" />
+                      ) : (
+                        <span aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-tafera-surface text-xs text-tafera-text-muted">Photo</span>
+                      )}
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <label className="sr-only" htmlFor={`edit-new-alt-${item.localId}`}>Alt text for new photo {index + 1}</label>
+                        <input
+                          id={`edit-new-alt-${item.localId}`}
+                          type="text"
+                          maxLength="255"
+                          placeholder="Alt text (optional)"
+                          value={item.altText}
+                          onChange={(event) => setEditNewPhotos((current) => current.map((entry) => entry.localId === item.localId ? { ...entry, altText: event.target.value } : entry))}
+                          className="w-full rounded border border-tafera-border bg-tafera-surface px-2.5 py-1 text-xs text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-1 focus:ring-tafera-primary"
+                        />
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => {
+                            revokePreviewUrl(item.previewUrl)
+                            setEditNewPhotos((current) => current.filter((entry) => entry.localId !== item.localId))
+                          }}
+                          className="text-xs font-medium text-tafera-primary hover:underline"
+                        >
+                          Remove queued photo
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(detail.images?.length || 0) + editNewPhotos.length < MAX_POST_IMAGES && (
+            <label className="block text-xs text-tafera-text-muted">
+              Add photos (up to {MAX_POST_IMAGES} total, JPEG/PNG/WebP, max 5 MB each)
+              <input
+                aria-label="Add photos to post"
+                className={`${inputClass} mt-1 text-xs`}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={saving}
+                onChange={(event) => {
+                  const { accepted, error: validationError } = validateSelectedPhotos(
+                    event.target.files,
+                    (detail.images?.length || 0) + editNewPhotos.length,
+                  )
+                  event.target.value = ''
+                  if (validationError) {
+                    setEditImageError(validationError)
+                    return
+                  }
+                  setEditImageError(null)
+                  setEditNewPhotos((current) => [...current, ...accepted])
+                }}
+              />
+            </label>
+          )}
+
           <div className="flex gap-2">
             <Button type="submit" disabled={saving || !editText.trim()}>{saving ? 'Saving...' : 'Save changes'}</Button>
-            <Button type="button" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={openEditor}>Cancel</Button>
           </div>
         </form>
       ) : (
@@ -567,14 +807,16 @@ export default function SocialFeed() {
   const savedRequestId = useRef(0)
 
   const [content, setContent] = useState('')
-  const [postPhoto, setPostPhoto] = useState(null)
-  const postPhotoPreview = useMemo(() => postPhoto ? URL.createObjectURL(postPhoto) : null, [postPhoto])
+  const [postPhotos, setPostPhotos] = useState([])
+  const [uploadStatus, setUploadStatus] = useState('')
   const [posting, setPosting] = useState(false)
   const [discovery, setDiscovery] = useState({ destinations: [], groups: [], stories: [] })
+  const postPhotosRef = useRef([])
+  postPhotosRef.current = postPhotos
 
   useEffect(() => () => {
-    if (postPhotoPreview) URL.revokeObjectURL(postPhotoPreview)
-  }, [postPhotoPreview])
+    for (const item of postPhotosRef.current) revokePreviewUrl(item.previewUrl)
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -684,25 +926,44 @@ export default function SocialFeed() {
     if (!content.trim()) return
     setPosting(true)
     setError(null)
+    setUploadStatus('')
     try {
       let post = await createPost({ content: content.trim() })
       setPosts((current) => [post, ...current.filter((item) => item.id !== post.id)])
-      if (postPhoto) {
-        try {
-          await uploadPostImage(post.id, postPhoto)
-          post = await fetchPost(post.id)
-        } catch (photoError) {
-          setError(`Your post was published, but its photo could not be uploaded: ${getErrorMessage(photoError)}`)
+      if (postPhotos.length > 0) {
+        const failed = []
+        let uploadedCount = 0
+        for (let index = 0; index < postPhotos.length; index += 1) {
+          const item = postPhotos[index]
+          setUploadStatus(`Uploading photo ${index + 1} of ${postPhotos.length}...`)
+          try {
+            await uploadPostImage(post.id, item.file, item.altText.trim())
+            uploadedCount += 1
+          } catch (photoError) {
+            failed.push(getErrorMessage(photoError))
+          }
+        }
+        if (uploadedCount > 0) {
+          try {
+            post = await fetchPost(post.id)
+          } catch {
+            // Keep the created post visible even if refetch fails.
+          }
+        }
+        if (failed.length > 0) {
+          setError(`Your post was published, but ${failed.length} photo(s) could not be uploaded: ${failed[0]}`)
         }
       }
       // The following feed excludes authors the user does not follow (including
       // potentially the current user); show the successful post immediately.
       setPosts((current) => [post, ...current.filter((item) => item.id !== post.id)])
       setContent('')
-      setPostPhoto(null)
+      for (const item of postPhotos) revokePreviewUrl(item.previewUrl)
+      setPostPhotos([])
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
+      setUploadStatus('')
       setPosting(false)
     }
   }
@@ -863,21 +1124,75 @@ export default function SocialFeed() {
             <form onSubmit={submitPost} className="mb-5 rounded-lg border border-tafera-border bg-tafera-surface p-4 shadow-soft sm:mb-6 sm:p-6">
               <label htmlFor="new-post" className="mb-2 block font-semibold text-tafera-text">Share a travel update</label>
               <textarea id="new-post" className={inputClass} rows="3" maxLength="5000" placeholder="What are you exploring?" value={content} onChange={(event) => setContent(event.target.value)} required />
-              <label className="mt-3 block text-sm text-tafera-text-muted">Attach one travel photo (JPEG, PNG or WebP, up to 5 MB)<input className={`${inputClass} mt-1`} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (!file) return
-                if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-                  setError('Choose a JPEG, PNG or WebP image no larger than 5 MB.')
-                  event.target.value = ''
-                  return
-                }
-                setPostPhoto(file)
-                setError(null)
-              }} /></label>
-              {postPhotoPreview && <div className="mt-3 flex items-center gap-3"><img src={postPhotoPreview} alt="Selected post photo preview" className="h-20 w-20 rounded-md object-cover" /><button type="button" className="text-sm text-tafera-primary underline" onClick={() => setPostPhoto(null)}>Remove photo</button></div>}
+              <label className="mt-3 block text-sm text-tafera-text-muted">
+                Attach travel photos (up to {MAX_POST_IMAGES}, JPEG, PNG or WebP, max 5 MB each)
+                <input
+                  className={`${inputClass} mt-1`}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  disabled={posting || postPhotos.length >= MAX_POST_IMAGES}
+                  onChange={(event) => {
+                    const { accepted, error: validationError } = validateSelectedPhotos(
+                      event.target.files,
+                      postPhotos.length,
+                    )
+                    event.target.value = ''
+                    if (validationError) {
+                      setError(validationError)
+                      return
+                    }
+                    setPostPhotos((current) => [...current, ...accepted])
+                    setError(null)
+                  }}
+                />
+              </label>
+              {postPhotos.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-medium text-tafera-text-muted">
+                    {postPhotos.length}/{MAX_POST_IMAGES} photos selected
+                  </p>
+                  <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {postPhotos.map((item, index) => (
+                      <li key={item.localId} className="rounded-md border border-tafera-border bg-tafera-bg p-2.5">
+                        <div className="flex items-start gap-2.5">
+                          {item.previewUrl ? (
+                            <img src={item.previewUrl} alt={item.altText || `Selected photo ${index + 1} preview`} className="h-16 w-16 shrink-0 rounded object-cover" />
+                          ) : (
+                            <span aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-tafera-surface text-xs text-tafera-text-muted">Photo</span>
+                          )}
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <label className="sr-only" htmlFor={`new-photo-alt-${item.localId}`}>Alt text for selected photo {index + 1}</label>
+                            <input
+                              id={`new-photo-alt-${item.localId}`}
+                              type="text"
+                              maxLength="255"
+                              placeholder="Describe this photo (optional)"
+                              value={item.altText}
+                              onChange={(event) => setPostPhotos((current) => current.map((entry) => entry.localId === item.localId ? { ...entry, altText: event.target.value } : entry))}
+                              className="w-full rounded border border-tafera-border bg-tafera-surface px-2.5 py-1 text-xs text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-1 focus:ring-tafera-primary"
+                            />
+                            <button
+                              type="button"
+                              aria-label={`Remove photo ${index + 1}`}
+                              className="text-xs font-medium text-tafera-primary hover:underline"
+                              onClick={() => {
+                                revokePreviewUrl(item.previewUrl)
+                                setPostPhotos((current) => current.filter((entry) => entry.localId !== item.localId))
+                              }}
+                            >
+                              Remove photo
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="mt-3 flex items-center justify-between gap-3">
-                <span className="text-xs text-tafera-text-muted">Up to 5,000 characters</span>
-                <Button type="submit" disabled={posting || !content.trim()}>{posting ? 'Publishing...' : 'Publish post'}</Button>
+                <span className="text-xs text-tafera-text-muted">{uploadStatus || 'Up to 5,000 characters'}</span>
+                <Button type="submit" disabled={posting || !content.trim()}>{posting ? (uploadStatus || 'Publishing...') : 'Publish post'}</Button>
               </div>
             </form>
           ) : isAuthenticated ? (

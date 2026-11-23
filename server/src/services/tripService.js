@@ -12,10 +12,12 @@ const { createPagination } = require('../utils/pagination')
 const {
   PUBLIC_TRIP_FIELDS,
   toDateOnly,
+  toTimeOnly,
   toTripDetail,
   toTripSummary,
 } = require('../utils/safeTrip')
 const {
+  TripActivityNotFoundError,
   TripDatesConflictError,
   TripNotFoundError,
   TripParticipantLimitConflictError,
@@ -66,9 +68,36 @@ const validateStopDates = (trip, { arrivalDate, departureDate }) => {
   }
 }
 
+const validateActivitySchedule = (trip, { activityDate, startTime, endTime }) => {
+  const startDate = toDateOnly(trip.startDate)
+  const endDate = toDateOnly(trip.endDate)
+  const issues = []
+
+  if (activityDate && (activityDate < startDate || activityDate > endDate)) {
+    issues.push({
+      field: 'activityDate',
+      message: `Activity date must be between ${startDate} and ${endDate}.`,
+    })
+  }
+
+  const normalizedStart = toTimeOnly(startTime)
+  const normalizedEnd = toTimeOnly(endTime)
+  if (normalizedStart && normalizedEnd && normalizedEnd <= normalizedStart) {
+    issues.push({
+      field: 'endTime',
+      message: 'End time must be later than the start time.',
+    })
+  }
+
+  if (issues.length > 0) {
+    throw new ValidationError(issues)
+  }
+}
+
 const createTripService = ({
   Trip,
   TripDestination,
+  TripItinerary,
   TripParticipant,
   Destination,
   DestinationImage,
@@ -77,6 +106,8 @@ const createTripService = ({
   const tripModel = Trip || require('../models').Trip
   const stopModel =
     TripDestination || require('../models').TripDestination
+  const activityModel =
+    TripItinerary || (Trip ? null : require('../models').TripItinerary)
   const participantModel =
     TripParticipant || require('../models').TripParticipant
   const destinationModel =
@@ -117,6 +148,27 @@ const createTripService = ({
     include: [stopDestinationInclude],
   }
 
+  const tripActivitiesInclude =
+    activityModel && (!Trip || tripModel.associations?.itineraries)
+      ? {
+          model: activityModel,
+          as: 'itineraries',
+          required: false,
+          separate: true,
+          order: [
+            ['activityDate', 'ASC'],
+            ['startTime', 'ASC'],
+            ['createdAt', 'ASC'],
+            ['id', 'ASC'],
+          ],
+        }
+      : null
+
+  const tripDetailIncludes = [
+    tripStopsInclude,
+    ...(tripActivitiesInclude ? [tripActivitiesInclude] : []),
+  ]
+
   const findOwnedTrip = async (userId, tripId, options = {}) => {
     const trip = await tripModel.findOne({
       where: { id: tripId, userId },
@@ -133,14 +185,14 @@ const createTripService = ({
   const getOwnedTripDetail = async (userId, tripId) => {
     const trip = await tripModel.findOne({
       where: { id: tripId, userId },
-      include: [tripStopsInclude],
+      include: tripDetailIncludes,
     })
 
     if (!trip) {
       throw new TripNotFoundError()
     }
 
-    return toTripDetail(trip)
+    return toTripDetail(trip, userId)
   }
 
   const assertDestinationAvailable = async (
@@ -266,7 +318,7 @@ const createTripService = ({
 
     const trip = await tripModel.findOne({
       where,
-      include: [tripStopsInclude],
+      include: tripDetailIncludes,
     })
 
     if (!trip) {
@@ -331,6 +383,23 @@ const createTripService = ({
 
         if (conflictingStop) {
           throw new TripDatesConflictError()
+        }
+
+        if (activityModel && typeof activityModel.findOne === 'function') {
+          const conflictingActivity = await activityModel.findOne({
+            where: {
+              tripId,
+              [Op.or]: [
+                { activityDate: { [Op.lt]: nextStartDate } },
+                { activityDate: { [Op.gt]: nextEndDate } },
+              ],
+            },
+            transaction,
+          })
+
+          if (conflictingActivity) {
+            throw new TripDatesConflictError()
+          }
         }
       }
 
@@ -604,15 +673,146 @@ const createTripService = ({
     return getOwnedTripDetail(userId, tripId)
   }
 
+  const assertTripStopBelongsToTrip = async (
+    tripId,
+    tripDestinationId,
+    transaction,
+  ) => {
+    if (tripDestinationId === undefined || tripDestinationId === null) return
+
+    const stop = await stopModel.findOne({
+      where: { id: tripDestinationId, tripId },
+      attributes: ['id'],
+      transaction,
+    })
+
+    if (!stop) {
+      throw new TripStopNotFoundError()
+    }
+  }
+
+  const addActivity = async (userId, tripId, input) => {
+    await database.transaction(async (transaction) => {
+      const trip = await findOwnedTrip(userId, tripId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      })
+
+      validateActivitySchedule(trip, {
+        activityDate: input.activityDate,
+        startTime: input.startTime ?? null,
+        endTime: input.endTime ?? null,
+      })
+
+      await assertTripStopBelongsToTrip(
+        tripId,
+        input.tripDestinationId,
+        transaction,
+      )
+
+      await activityModel.create(
+        {
+          tripId,
+          tripDestinationId: input.tripDestinationId ?? null,
+          title: input.title,
+          description: input.description ?? null,
+          activityDate: input.activityDate,
+          startTime: input.startTime ?? null,
+          endTime: input.endTime ?? null,
+          location: input.location ?? null,
+        },
+        { transaction },
+      )
+    })
+
+    return getOwnedTripDetail(userId, tripId)
+  }
+
+  const updateActivity = async (userId, tripId, activityId, input) => {
+    await database.transaction(async (transaction) => {
+      const trip = await findOwnedTrip(userId, tripId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      })
+
+      const activity = await activityModel.findOne({
+        where: { id: activityId, tripId },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      })
+
+      if (!activity) {
+        throw new TripActivityNotFoundError()
+      }
+
+      const nextActivityDate =
+        input.activityDate !== undefined
+          ? input.activityDate
+          : toDateOnly(activity.activityDate)
+      const nextStartTime =
+        input.startTime !== undefined
+          ? input.startTime
+          : toTimeOnly(activity.startTime)
+      const nextEndTime =
+        input.endTime !== undefined
+          ? input.endTime
+          : toTimeOnly(activity.endTime)
+
+      validateActivitySchedule(trip, {
+        activityDate: nextActivityDate,
+        startTime: nextStartTime,
+        endTime: nextEndTime,
+      })
+
+      if (input.tripDestinationId !== undefined) {
+        await assertTripStopBelongsToTrip(
+          tripId,
+          input.tripDestinationId,
+          transaction,
+        )
+      }
+
+      await activityModel.update(input, {
+        where: { id: activityId, tripId },
+        transaction,
+      })
+    })
+
+    return getOwnedTripDetail(userId, tripId)
+  }
+
+  const deleteActivity = async (userId, tripId, activityId) => {
+    await database.transaction(async (transaction) => {
+      await findOwnedTrip(userId, tripId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      })
+
+      const deleted = await activityModel.destroy({
+        where: { id: activityId, tripId },
+        transaction,
+      })
+
+      if (!deleted) {
+        throw new TripActivityNotFoundError()
+      }
+    })
+
+    return getOwnedTripDetail(userId, tripId)
+  }
+
   return {
+    addActivity,
     addStop,
     createTrip,
+    deleteActivity,
     deleteStop,
     deleteTrip,
     getTrip,
     listTrips,
     listPublicTrips,
     reorderStops,
+    updateActivity,
     updateStop,
     updateTrip,
   }
@@ -624,5 +824,6 @@ module.exports = {
   createTripService,
   createPagination,
   tripService,
+  validateActivitySchedule,
   validateStopDates,
 }
