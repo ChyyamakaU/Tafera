@@ -28,7 +28,11 @@ const createPostController = ({ postService }) => ({
 
   list: asyncHandler(async (req, res) => {
     const filters = parsePaginationQuery(req.query)
-    const { posts, pagination } = await postService.listPosts(filters)
+    const viewerUserId = req.auth ? req.auth.userId : null
+    const { posts, pagination } = await postService.listPosts(
+      filters,
+      viewerUserId,
+    )
 
     noStore(res).status(200).json({
       data: { posts, pagination },
@@ -47,9 +51,58 @@ const createPostController = ({ postService }) => ({
     })
   }),
 
+  saved: asyncHandler(async (req, res) => {
+    const filters = parsePaginationQuery(req.query)
+    const { posts, pagination } = await postService.listSavedPosts(
+      req.auth.userId,
+      filters,
+    )
+
+    noStore(res).status(200).json({
+      data: { posts, pagination },
+    })
+  }),
+
+  like: asyncHandler(async (req, res) => {
+    const { postId } = parsePostId(req.params)
+    const result = await postService.likePost(req.auth.userId, postId)
+
+    noStore(res).status(200).json({
+      data: result,
+    })
+  }),
+
+  unlike: asyncHandler(async (req, res) => {
+    const { postId } = parsePostId(req.params)
+    const result = await postService.unlikePost(req.auth.userId, postId)
+
+    noStore(res).status(200).json({
+      data: result,
+    })
+  }),
+
+  save: asyncHandler(async (req, res) => {
+    const { postId } = parsePostId(req.params)
+    const result = await postService.savePost(req.auth.userId, postId)
+
+    noStore(res).status(200).json({
+      data: result,
+    })
+  }),
+
+  unsave: asyncHandler(async (req, res) => {
+    const { postId } = parsePostId(req.params)
+    const result = await postService.unsavePost(req.auth.userId, postId)
+
+    noStore(res).status(200).json({
+      data: result,
+    })
+  }),
+
   detail: asyncHandler(async (req, res) => {
     const { postId } = parsePostId(req.params)
-    const post = await postService.getPost(postId)
+    const viewerUserId = req.auth ? req.auth.userId : null
+    const post = await postService.getPost(postId, viewerUserId)
 
     noStore(res).status(200).json({
       data: { post },
@@ -87,9 +140,11 @@ const createPostController = ({ postService }) => ({
   listByUser: asyncHandler(async (req, res) => {
     const { userId } = parseUserId(req.params)
     const filters = parsePaginationQuery(req.query)
+    const viewerUserId = req.auth ? req.auth.userId : null
     const { posts, pagination } = await postService.listUserPosts(
       userId,
       filters,
+      viewerUserId,
     )
 
     noStore(res).status(200).json({

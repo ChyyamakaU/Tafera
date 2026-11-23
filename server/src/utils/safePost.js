@@ -32,7 +32,7 @@ const toPostDestination = (destination) => {
   return toDestinationSummary(source)
 }
 
-const toPost = (post) => {
+const toPost = (post, engagement = {}) => {
   const source = toPlain(post)
 
   if (!source) return null
@@ -57,6 +57,9 @@ const toPost = (post) => {
       altText: image.altText ?? null,
       displayOrder: Number(image.displayOrder) || 0,
     })),
+    likeCount: Number(engagement.likeCount ?? source.likeCount) || 0,
+    isLiked: Boolean(engagement.isLiked ?? source.isLiked),
+    isSaved: Boolean(engagement.isSaved ?? source.isSaved),
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   }

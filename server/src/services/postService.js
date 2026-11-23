@@ -25,6 +25,8 @@ const createPostService = ({
   Destination,
   DestinationImage,
   PostImage,
+  PostLike,
+  SavedPost,
   Follow,
 } = {}) => {
   const postModel = Post || require('../models').Post
@@ -34,6 +36,8 @@ const createPostService = ({
   const imageModel =
     DestinationImage || require('../models').DestinationImage
   const postImageModel = PostImage || (Post ? null : require('../models').PostImage)
+  const postLikeModel = PostLike || (Post ? null : require('../models').PostLike)
+  const savedPostModel = SavedPost || (Post ? null : require('../models').SavedPost)
   const followModel = Follow || require('../models').Follow
 
   const destinationImagesInclude = {
@@ -90,6 +94,110 @@ const createPostService = ({
     }
   }
 
+  const enrichPosts = async (rows, viewerUserId = null) => {
+    const serializedPosts = rows.map((row) => toPost(row)).filter(Boolean)
+
+    if (serializedPosts.length === 0) {
+      return []
+    }
+
+    const postIds = serializedPosts.map((post) => post.id)
+
+    const likeCountsPromise = postLikeModel
+      ? postLikeModel.sequelize
+        ? postLikeModel.findAll({
+            where: { postId: { [Op.in]: postIds } },
+            attributes: [
+              'postId',
+              [
+                postLikeModel.sequelize.fn(
+                  'COUNT',
+                  postLikeModel.sequelize.col('id'),
+                ),
+                'count',
+              ],
+            ],
+            group: ['postId'],
+            raw: true,
+          })
+        : postLikeModel.findAll({
+            where: { postId: { [Op.in]: postIds } },
+            attributes: ['postId'],
+            raw: true,
+          })
+      : Promise.resolve([])
+
+    const viewerLikesPromise =
+      viewerUserId && postLikeModel
+        ? postLikeModel.findAll({
+            where: {
+              userId: viewerUserId,
+              postId: { [Op.in]: postIds },
+            },
+            attributes: ['postId'],
+            raw: true,
+          })
+        : Promise.resolve([])
+
+    const viewerSavesPromise =
+      viewerUserId && savedPostModel
+        ? savedPostModel.findAll({
+            where: {
+              userId: viewerUserId,
+              postId: { [Op.in]: postIds },
+            },
+            attributes: ['postId'],
+            raw: true,
+          })
+        : Promise.resolve([])
+
+    const [likeCountRows, viewerLikeRows, viewerSaveRows] =
+      await Promise.all([
+        likeCountsPromise,
+        viewerLikesPromise,
+        viewerSavesPromise,
+      ])
+
+    const likeCountByPostId = new Map()
+    for (const row of likeCountRows || []) {
+      const id = row.postId
+      if (!id) continue
+      if (row.count !== undefined) {
+        likeCountByPostId.set(id, Number(row.count) || 0)
+      } else {
+        likeCountByPostId.set(id, (likeCountByPostId.get(id) || 0) + 1)
+      }
+    }
+
+    const likedPostIds = new Set(
+      (viewerLikeRows || []).map((row) => row.postId).filter(Boolean),
+    )
+    const savedPostIds = new Set(
+      (viewerSaveRows || []).map((row) => row.postId).filter(Boolean),
+    )
+
+    return serializedPosts.map((post) => ({
+      ...post,
+      likeCount: likeCountByPostId.get(post.id) ?? post.likeCount,
+      isLiked: likedPostIds.has(post.id),
+      isSaved: savedPostIds.has(post.id),
+    }))
+  }
+
+  const assertVisiblePostExists = async (postId) => {
+    const post = await postModel.findOne({
+      where: { id: postId },
+      attributes: ['id'],
+      include: [authorInclude],
+    })
+
+    if (!post) {
+      throw new PostNotFoundError()
+    }
+
+    return post
+  }
+
   const findVisiblePost = async (postId) =>
     postModel.findOne({
       where: { id: postId },
@@ -97,9 +205,9 @@ const createPostService = ({
       include: [authorInclude, destinationInclude, ...(postImagesInclude ? [postImagesInclude] : [])],
     })
 
-  const getPost = async (postId) => {
+  const getPost = async (postId, viewerUserId = null) => {
     const post = await findVisiblePost(postId)
-    const serialized = toPost(post)
+    const [serialized] = await enrichPosts(post ? [post] : [], viewerUserId)
 
     if (!serialized) {
       throw new PostNotFoundError()
@@ -108,7 +216,7 @@ const createPostService = ({
     return serialized
   }
 
-  const listVisiblePosts = async ({ where, filters }) => {
+  const listVisiblePosts = async ({ where, filters, viewerUserId = null }) => {
     const { count, rows } = await postModel.findAndCountAll({
       where,
       attributes: [...PUBLIC_POST_FIELDS],
@@ -123,7 +231,7 @@ const createPostService = ({
     })
 
     return {
-      posts: rows.map(toPost).filter(Boolean),
+      posts: await enrichPosts(rows, viewerUserId),
       pagination: createPagination({
         page: filters.page,
         limit: filters.limit,
@@ -132,10 +240,10 @@ const createPostService = ({
     }
   }
 
-  const listPosts = async (filters) =>
-    listVisiblePosts({ where: {}, filters })
+  const listPosts = async (filters, viewerUserId = null) =>
+    listVisiblePosts({ where: {}, filters, viewerUserId })
 
-  const listUserPosts = async (userId, filters) => {
+  const listUserPosts = async (userId, filters, viewerUserId = null) => {
     const user = await userModel.findOne({
       where: { id: userId, status: 'active' },
       attributes: ['id'],
@@ -145,7 +253,7 @@ const createPostService = ({
       throw new ProfileNotFoundError()
     }
 
-    return listVisiblePosts({ where: { userId }, filters })
+    return listVisiblePosts({ where: { userId }, filters, viewerUserId })
   }
 
   const listFollowingPosts = async (followerId, filters) => {
@@ -181,7 +289,113 @@ const createPostService = ({
     return listVisiblePosts({
       where: { userId: { [Op.in]: followedIds } },
       filters,
+      viewerUserId: followerId,
     })
+  }
+
+  const listSavedPosts = async (userId, filters) => {
+    const { count, rows } = await savedPostModel.findAndCountAll({
+      where: { userId },
+      attributes: ['id', 'postId', 'createdAt'],
+      include: [
+        {
+          model: postModel,
+          as: 'post',
+          attributes: [...PUBLIC_POST_FIELDS],
+          required: true,
+          include: [
+            authorInclude,
+            destinationInclude,
+            ...(postImagesInclude ? [postImagesInclude] : []),
+          ],
+        },
+      ],
+      order: [
+        ['createdAt', 'DESC'],
+        ['id', 'DESC'],
+      ],
+      limit: filters.limit,
+      offset: (filters.page - 1) * filters.limit,
+      distinct: true,
+    })
+
+    const postRows = rows.map((row) => row.post).filter(Boolean)
+
+    return {
+      posts: await enrichPosts(postRows, userId),
+      pagination: createPagination({
+        page: filters.page,
+        limit: filters.limit,
+        total: count,
+      }),
+    }
+  }
+
+  const likePost = async (userId, postId) => {
+    await assertVisiblePostExists(postId)
+
+    try {
+      await postLikeModel.findOrCreate({
+        where: { userId, postId },
+        defaults: { userId, postId },
+      })
+    } catch (error) {
+      if (error?.name !== 'SequelizeUniqueConstraintError') {
+        throw error
+      }
+    }
+
+    const likeCount = await postLikeModel.count({ where: { postId } })
+
+    return {
+      postId,
+      liked: true,
+      likeCount: Number(likeCount) || 0,
+    }
+  }
+
+  const unlikePost = async (userId, postId) => {
+    await assertVisiblePostExists(postId)
+
+    await postLikeModel.destroy({ where: { userId, postId } })
+    const likeCount = await postLikeModel.count({ where: { postId } })
+
+    return {
+      postId,
+      liked: false,
+      likeCount: Number(likeCount) || 0,
+    }
+  }
+
+  const savePost = async (userId, postId) => {
+    await assertVisiblePostExists(postId)
+
+    try {
+      await savedPostModel.findOrCreate({
+        where: { userId, postId },
+        defaults: { userId, postId },
+      })
+    } catch (error) {
+      if (error?.name !== 'SequelizeUniqueConstraintError') {
+        throw error
+      }
+    }
+
+    return {
+      postId,
+      saved: true,
+    }
+  }
+
+  const unsavePost = async (userId, postId) => {
+    await assertVisiblePostExists(postId)
+
+    await savedPostModel.destroy({ where: { userId, postId } })
+
+    return {
+      postId,
+      saved: false,
+    }
   }
 
   const createPost = async (userId, input) => {
@@ -194,7 +408,7 @@ const createPostService = ({
       userId,
     })
 
-    return getPost(post.id)
+    return getPost(post.id, userId)
   }
 
   const findMutablePost = async (userId, postId) => {
@@ -223,7 +437,7 @@ const createPostService = ({
     await assertDestinationAvailable(input.destinationId)
     await post.update(input)
 
-    return getPost(postId)
+    return getPost(postId, userId)
   }
 
   const deletePost = async (userId, postId) => {
@@ -297,11 +511,16 @@ const createPostService = ({
     createPost,
     deletePost,
     getPost,
+    likePost,
     listFollowingPosts,
     listPosts,
+    listSavedPosts,
     listUserPosts,
     addPostImage,
     listUserMedia,
+    savePost,
+    unlikePost,
+    unsavePost,
     updatePost,
   }
 }

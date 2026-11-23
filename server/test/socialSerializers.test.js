@@ -82,7 +82,13 @@ test('post serialization uses an explicit allowlist and public author', () => {
     'author',
     'destination',
     'images',
+    'isLiked',
+    'isSaved',
+    'likeCount',
   ].sort())
+  assert.equal(post.likeCount, 0)
+  assert.equal(post.isLiked, false)
+  assert.equal(post.isSaved, false)
   assert.equal(post.id, '22222222-2222-4222-8222-222222222222')
   assert.equal(post.content, 'Hello world')
   assert.equal(post.userId, undefined)

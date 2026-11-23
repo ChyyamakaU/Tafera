@@ -15,6 +15,9 @@ const {
   createAuthenticate,
 } = require('../middlewares/authenticate')
 const {
+  createOptionalAuthenticate,
+} = require('../middlewares/optionalAuthenticate')
+const {
   createCsrfProtection,
 } = require('../middlewares/csrfProtection')
 const {
@@ -36,6 +39,11 @@ const createPostsRouter = ({
     commentService: comments,
   })
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
+  const optionalAuthenticate = createOptionalAuthenticate({
+    User,
+    sessions,
+    nodeEnv,
+  })
   const csrfProtection = createCsrfProtection()
   const requireVerifiedEmail = createRequireVerifiedEmail({ User })
 
@@ -49,12 +57,17 @@ const createPostsRouter = ({
 
   router.post('/', ...protectWrite, controller.create)
   router.post('/:postId/images', ...protectWrite, destinationImageUpload, controller.uploadImage)
-  // Public post discovery remains public; the personalized /following feed
-  // below is the private, verified-account endpoint.
-  router.get('/', controller.list)
-  // /following is a read-only feed scoped to the authenticated user. It must
-  // be registered before /:postId so it is never treated as a post ID.
+  // Public post discovery remains public; optionalAuthenticate resolves
+  // viewer-specific like/save state when a managed session is present.
+  router.get('/', optionalAuthenticate, controller.list)
+  // Static collection routes (/following, /saved) are registered before
+  // /:postId so they are never treated as a post ID.
   router.get('/following', authenticate, requireVerifiedEmail, controller.following)
+  router.get('/saved', authenticate, requireVerifiedEmail, controller.saved)
+  router.post('/:postId/like', ...protectWrite, controller.like)
+  router.delete('/:postId/like', ...protectWrite, controller.unlike)
+  router.post('/:postId/save', ...protectWrite, controller.save)
+  router.delete('/:postId/save', ...protectWrite, controller.unsave)
   // Comment routes are nested under their post. They are registered before
   // the parameterized post routes so the intent of the path hierarchy is
   // explicit.
@@ -74,7 +87,7 @@ const createPostsRouter = ({
     ...protectWrite,
     commentController.remove,
   )
-  router.get('/:postId', controller.detail)
+  router.get('/:postId', optionalAuthenticate, controller.detail)
   router.patch('/:postId', ...protectWrite, controller.update)
   router.delete('/:postId', ...protectWrite, controller.remove)
 

@@ -382,3 +382,179 @@ test('deletePost returns not found for a missing or hidden post', async () => {
     PostNotFoundError,
   )
 })
+
+test('listPosts batch-enriches likeCount, isLiked, and isSaved without N+1 queries', async () => {
+  const postOne = createPostRecord({ id: '44444444-4444-4444-8444-444444444441' })
+  const postTwo = createPostRecord({ id: '44444444-4444-4444-8444-444444444442' })
+  const likeFindAllCalls = []
+  const saveFindAllCalls = []
+
+  const service = createPostService({
+    Post: {
+      async findAndCountAll() {
+        return { count: 2, rows: [postOne, postTwo] }
+      },
+    },
+    PostLike: {
+      async findAll(options) {
+        likeFindAllCalls.push(options)
+        if (options.where.userId === OTHER_ID) {
+          return [{ postId: postOne.id }]
+        }
+        return [
+          { postId: postOne.id, count: '3' },
+          { postId: postTwo.id, count: '1' },
+        ]
+      },
+    },
+    SavedPost: {
+      async findAll(options) {
+        saveFindAllCalls.push(options)
+        return [{ postId: postTwo.id }]
+      },
+    },
+    Follow: {},
+    User: {},
+    Destination: {},
+    DestinationImage: {},
+  })
+
+  const authenticated = await service.listPosts({ page: 1, limit: 20 }, OTHER_ID)
+  assert.equal(likeFindAllCalls.length, 2)
+  assert.equal(saveFindAllCalls.length, 1)
+  assert.deepEqual(likeFindAllCalls[0].where.postId[Op.in], [postOne.id, postTwo.id])
+  assert.equal(authenticated.posts[0].likeCount, 3)
+  assert.equal(authenticated.posts[0].isLiked, true)
+  assert.equal(authenticated.posts[0].isSaved, false)
+  assert.equal(authenticated.posts[1].likeCount, 1)
+  assert.equal(authenticated.posts[1].isLiked, false)
+  assert.equal(authenticated.posts[1].isSaved, true)
+
+  likeFindAllCalls.length = 0
+  saveFindAllCalls.length = 0
+  const guest = await service.listPosts({ page: 1, limit: 20 }, null)
+  assert.equal(likeFindAllCalls.length, 1)
+  assert.equal(saveFindAllCalls.length, 0)
+  assert.equal(guest.posts[0].likeCount, 3)
+  assert.equal(guest.posts[0].isLiked, false)
+  assert.equal(guest.posts[0].isSaved, false)
+})
+
+test('likePost and unlikePost are idempotent and return authoritative counts', async () => {
+  const postRecord = createPostRecord()
+  const likedUsers = new Set()
+
+  const service = createPostService({
+    Post: {
+      async findOne({ where }) {
+        return where.id === postRecord.id ? postRecord : null
+      },
+    },
+    PostLike: {
+      async findOrCreate({ where }) {
+        const existed = likedUsers.has(where.userId)
+        likedUsers.add(where.userId)
+        return [{ ...where }, !existed]
+      },
+      async destroy({ where }) {
+        return likedUsers.delete(where.userId) ? 1 : 0
+      },
+      async count() {
+        return likedUsers.size
+      },
+    },
+    SavedPost: {},
+    Follow: {},
+    User: {},
+    Destination: {},
+    DestinationImage: {},
+  })
+
+  assert.deepEqual(await service.likePost(OTHER_ID, postRecord.id), {
+    postId: postRecord.id,
+    liked: true,
+    likeCount: 1,
+  })
+  assert.deepEqual(await service.likePost(OTHER_ID, postRecord.id), {
+    postId: postRecord.id,
+    liked: true,
+    likeCount: 1,
+  })
+  assert.deepEqual(await service.unlikePost(OTHER_ID, postRecord.id), {
+    postId: postRecord.id,
+    liked: false,
+    likeCount: 0,
+  })
+  await assert.rejects(
+    service.likePost(OTHER_ID, '99999999-9999-4999-8999-999999999999'),
+    PostNotFoundError,
+  )
+})
+
+test('savePost, unsavePost, and listSavedPosts manage bookmarks cleanly', async () => {
+  const postRecord = createPostRecord()
+  const savedUsers = new Set()
+  const savedQueries = []
+
+  const service = createPostService({
+    Post: {
+      async findOne({ where }) {
+        return where.id === postRecord.id ? postRecord : null
+      },
+    },
+    PostLike: {
+      async findAll() {
+        return []
+      },
+    },
+    SavedPost: {
+      async findOrCreate({ where }) {
+        const existed = savedUsers.has(where.userId)
+        savedUsers.add(where.userId)
+        return [{ ...where }, !existed]
+      },
+      async destroy({ where }) {
+        return savedUsers.delete(where.userId) ? 1 : 0
+      },
+      async findAll({ where }) {
+        return savedUsers.has(where.userId) ? [{ postId: postRecord.id }] : []
+      },
+      async findAndCountAll(options) {
+        savedQueries.push(options)
+        return {
+          count: 1,
+          rows: [{ id: 'save-1', postId: postRecord.id, post: postRecord }],
+        }
+      },
+    },
+    Follow: {},
+    User: {},
+    Destination: {},
+    DestinationImage: {},
+  })
+
+  assert.deepEqual(await service.savePost(OTHER_ID, postRecord.id), {
+    postId: postRecord.id,
+    saved: true,
+  })
+
+  const listed = await service.listSavedPosts(OTHER_ID, { page: 1, limit: 20 })
+  assert.deepEqual(savedQueries[0].where, { userId: OTHER_ID })
+  assert.deepEqual(savedQueries[0].order, [
+    ['createdAt', 'DESC'],
+    ['id', 'DESC'],
+  ])
+  assert.equal(listed.posts.length, 1)
+  assert.equal(listed.posts[0].id, postRecord.id)
+  assert.equal(listed.posts[0].isSaved, true)
+  assert.equal(listed.pagination.total, 1)
+
+  assert.deepEqual(await service.unsavePost(OTHER_ID, postRecord.id), {
+    postId: postRecord.id,
+    saved: false,
+  })
+  await assert.rejects(
+    service.savePost(OTHER_ID, '99999999-9999-4999-8999-999999999999'),
+    PostNotFoundError,
+  )
+})

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -11,6 +11,11 @@ import {
   fetchPublicPosts,
   fetchPost,
   fetchPostComments,
+  fetchSavedPosts,
+  likePost,
+  savePost,
+  unlikePost,
+  unsavePost,
   updatePost,
   updatePostComment,
   uploadPostImage,
@@ -21,7 +26,7 @@ import { fetchPublicTrips } from '../services/trips'
 import TravelNavigation from '../components/social/TravelNavigation'
 
 const inputClass =
-  'w-full rounded-lg border border-tafera-border bg-white px-4 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
+  'w-full rounded-lg border border-tafera-border bg-tafera-bg px-4 py-2 text-tafera-text focus:border-tafera-primary focus:outline-none focus:ring-2 focus:ring-tafera-primary'
 
 const formatDate = (value) => {
   const date = new Date(value)
@@ -44,7 +49,85 @@ function Author({ author }) {
   )
 }
 
-function PostCard({ post, user, canWrite, onPostUpdated, onPostDeleted }) {
+function HeartIcon({ filled }) {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+      />
+    </svg>
+  )
+}
+
+function BookmarkIcon({ filled }) {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"
+      />
+    </svg>
+  )
+}
+
+function FeedSkeleton({ label = 'Loading feed' }) {
+  return (
+    <div className="space-y-3 sm:space-y-4" aria-label={label} aria-busy="true">
+      {[1, 2, 3].map((item) => (
+        <div
+          key={item}
+          className="rounded-lg border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:p-6"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 animate-pulse rounded-full bg-tafera-border/70" />
+            <div className="space-y-2">
+              <div className="h-4 w-32 animate-pulse rounded bg-tafera-border/70" />
+              <div className="h-3 w-24 animate-pulse rounded bg-tafera-border/50" />
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            <div className="h-3.5 w-full animate-pulse rounded bg-tafera-border/60" />
+            <div className="h-3.5 w-5/6 animate-pulse rounded bg-tafera-border/60" />
+          </div>
+          <div className="mt-5 flex items-center justify-between border-t border-tafera-border pt-3">
+            <div className="flex gap-3">
+              <div className="h-7 w-16 animate-pulse rounded-md bg-tafera-border/60" />
+              <div className="h-7 w-16 animate-pulse rounded-md bg-tafera-border/60" />
+            </div>
+            <div className="h-7 w-32 animate-pulse rounded-md bg-tafera-border/60" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PostCard({
+  post,
+  user,
+  isAuthenticated,
+  canWrite,
+  onPostUpdated,
+  onPostDeleted,
+  onUnsaveFromSavedView,
+}) {
   const [expanded, setExpanded] = useState(false)
   const [detail, setDetail] = useState(post)
   const [comments, setComments] = useState([])
@@ -52,13 +135,101 @@ function PostCard({ post, user, canWrite, onPostUpdated, onPostDeleted }) {
   const [detailLoading, setDetailLoading] = useState(false)
   const [commentLoading, setCommentLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(post.content)
   const [commentText, setCommentText] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingCommentId, setEditingCommentId] = useState(null)
   const [editingCommentText, setEditingCommentText] = useState('')
+  const [likeState, setLikeState] = useState(() => ({
+    isLiked: Boolean(post.isLiked),
+    likeCount: Number(post.likeCount) || 0,
+  }))
+  const [isSaved, setIsSaved] = useState(() => Boolean(post.isSaved))
+  const [likePending, setLikePending] = useState(false)
+  const [savePending, setSavePending] = useState(false)
   const isOwner = user?.id === post.author?.id
+
+  useEffect(() => {
+    setDetail(post)
+  }, [post])
+
+  useEffect(() => {
+    if (!likePending) {
+      setLikeState({
+        isLiked: Boolean(post.isLiked),
+        likeCount: Number(post.likeCount) || 0,
+      })
+    }
+  }, [post.isLiked, post.likeCount, likePending])
+
+  useEffect(() => {
+    if (!savePending) {
+      setIsSaved(Boolean(post.isSaved))
+    }
+  }, [post.isSaved, savePending])
+
+  const toggleLike = async () => {
+    if (!canWrite || likePending) return
+    const previous = likeState
+    const nextLiked = !previous.isLiked
+    const optimistic = {
+      isLiked: nextLiked,
+      likeCount: Math.max(0, previous.likeCount + (nextLiked ? 1 : -1)),
+    }
+    setLikePending(true)
+    setActionError(null)
+    setLikeState(optimistic)
+    onPostUpdated({ ...detail, ...optimistic })
+    try {
+      const result = nextLiked
+        ? await likePost(post.id)
+        : await unlikePost(post.id)
+      const reconciled = {
+        isLiked: Boolean(result?.liked ?? nextLiked),
+        likeCount: Number(result?.likeCount ?? optimistic.likeCount) || 0,
+      }
+      setLikeState(reconciled)
+      onPostUpdated({ ...detail, ...reconciled })
+    } catch (err) {
+      setLikeState(previous)
+      onPostUpdated({ ...detail, ...previous })
+      setActionError(getErrorMessage(err))
+    } finally {
+      setLikePending(false)
+    }
+  }
+
+  const toggleSave = async () => {
+    if (!canWrite || savePending) return
+    const previousSaved = isSaved
+    const nextSaved = !previousSaved
+    setActionError(null)
+
+    if (!nextSaved && onUnsaveFromSavedView) {
+      onUnsaveFromSavedView(post)
+      return
+    }
+
+    setSavePending(true)
+    setIsSaved(nextSaved)
+    onPostUpdated({ ...detail, isSaved: nextSaved })
+    try {
+      const result = nextSaved
+        ? await savePost(post.id)
+        : await unsavePost(post.id)
+      const reconciledSaved = Boolean(result?.saved ?? nextSaved)
+      setIsSaved(reconciledSaved)
+      onPostUpdated({ ...detail, isSaved: reconciledSaved })
+    } catch (err) {
+      setIsSaved(previousSaved)
+      onPostUpdated({ ...detail, isSaved: previousSaved })
+      setActionError(getErrorMessage(err))
+    } finally {
+      setSavePending(false)
+    }
+  }
 
   const loadComments = useCallback(async (page = 1) => {
     setCommentLoading(true)
@@ -245,14 +416,71 @@ function PostCard({ post, user, canWrite, onPostUpdated, onPostDeleted }) {
         </Link>
       )}
 
-      <div className="mt-4 flex items-center justify-between border-t border-tafera-border pt-3 text-sm">
-        <span className="text-tafera-text-muted">
-          {expanded ? `${commentPagination?.total ?? comments.length} comments` : 'Comments'}
-        </span>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-tafera-border pt-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleLike}
+            disabled={!canWrite || likePending}
+            aria-pressed={canWrite ? likeState.isLiked : undefined}
+            aria-label={
+              canWrite
+                ? likeState.isLiked
+                  ? 'Unlike post'
+                  : 'Like post'
+                : isAuthenticated
+                  ? 'Verify your email to like posts'
+                  : 'Sign in to like posts'
+            }
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary disabled:cursor-not-allowed disabled:opacity-60 ${
+              likeState.isLiked
+                ? 'border-tafera-primary bg-tafera-bg text-tafera-primary'
+                : 'border-tafera-border bg-tafera-bg text-tafera-text-muted hover:text-tafera-primary'
+            }`}
+          >
+            <HeartIcon filled={likeState.isLiked} />
+            <span>{likeState.likeCount}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleSave}
+            disabled={!canWrite || savePending}
+            aria-pressed={canWrite ? isSaved : undefined}
+            aria-label={
+              canWrite
+                ? isSaved
+                  ? 'Remove saved post'
+                  : 'Save post'
+                : isAuthenticated
+                  ? 'Verify your email to save posts'
+                  : 'Sign in to save posts'
+            }
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary disabled:cursor-not-allowed disabled:opacity-60 ${
+              isSaved
+                ? 'border-tafera-primary bg-tafera-bg text-tafera-primary'
+                : 'border-tafera-border bg-tafera-bg text-tafera-text-muted hover:text-tafera-primary'
+            }`}
+          >
+            <BookmarkIcon filled={isSaved} />
+            <span>{isSaved ? 'Saved' : 'Save'}</span>
+          </button>
+
+          <span className="ml-1 text-tafera-text-muted">
+            {expanded ? `${commentPagination?.total ?? comments.length} comments` : 'Comments'}
+          </span>
+        </div>
+
         <Button variant="ghost" size="sm" onClick={toggleDetails}>
           {expanded ? 'Hide details' : 'View post and comments'}
         </Button>
       </div>
+
+      {actionError && (
+        <div role="alert" className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-tafera-text">
+          {actionError}
+        </div>
+      )}
 
       {expanded && (
         <section className="mt-4 border-t border-tafera-border pt-4" aria-label={`Details and comments for ${post.author?.fullName}'s post`}>
@@ -319,18 +547,30 @@ function PostCard({ post, user, canWrite, onPostUpdated, onPostDeleted }) {
 
 export default function SocialFeed() {
   const { user, isAuthenticated, isEmailVerified, isLoading: authLoading } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const canWrite = isAuthenticated && isEmailVerified
+  const activeTab = canWrite && searchParams.get('tab') === 'saved' ? 'saved' : 'feed'
+
   const [posts, setPosts] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
+
+  const [savedPosts, setSavedPosts] = useState([])
+  const [savedPagination, setSavedPagination] = useState(null)
+  const [savedPage, setSavedPage] = useState(1)
+  const [savedLoading, setSavedLoading] = useState(false)
+  const [savedLoadingMore, setSavedLoadingMore] = useState(false)
+  const [savedError, setSavedError] = useState(null)
+  const savedRequestId = useRef(0)
+
   const [content, setContent] = useState('')
   const [postPhoto, setPostPhoto] = useState(null)
   const postPhotoPreview = useMemo(() => postPhoto ? URL.createObjectURL(postPhoto) : null, [postPhoto])
   const [posting, setPosting] = useState(false)
   const [discovery, setDiscovery] = useState({ destinations: [], groups: [], stories: [] })
-  const canWrite = isAuthenticated && isEmailVerified
 
   useEffect(() => () => {
     if (postPhotoPreview) URL.revokeObjectURL(postPhotoPreview)
@@ -389,9 +629,55 @@ export default function SocialFeed() {
     }
   }, [isAuthenticated, user?.id])
 
+  const loadSavedPosts = useCallback(async (requestedPage = 1, append = false) => {
+    if (!canWrite) {
+      setSavedPosts([])
+      setSavedPagination(null)
+      setSavedLoading(false)
+      return
+    }
+    const requestId = ++savedRequestId.current
+    if (append) setSavedLoadingMore(true)
+    else setSavedLoading(true)
+    setSavedError(null)
+    try {
+      const result = await fetchSavedPosts({ page: requestedPage, limit: 20 })
+      if (requestId !== savedRequestId.current) return
+      setSavedPosts((current) => {
+        if (!append) return result.posts
+        const byId = new Map(current.map((item) => [item.id, item]))
+        for (const item of result.posts) byId.set(item.id, item)
+        return [...byId.values()]
+      })
+      setSavedPagination(result.pagination)
+      setSavedPage(requestedPage)
+    } catch (err) {
+      if (requestId !== savedRequestId.current) return
+      setSavedError(getErrorMessage(err))
+    } finally {
+      if (requestId === savedRequestId.current) {
+        setSavedLoading(false)
+        setSavedLoadingMore(false)
+      }
+    }
+  }, [canWrite])
+
   useEffect(() => {
     if (!authLoading) loadFeed()
   }, [authLoading, loadFeed])
+
+  useEffect(() => {
+    if (!authLoading && activeTab === 'saved') {
+      loadSavedPosts(1, false)
+    }
+  }, [authLoading, activeTab, loadSavedPosts])
+
+  const selectTab = (nextTab) => {
+    const nextParams = new URLSearchParams(searchParams)
+    if (nextTab === 'saved') nextParams.set('tab', 'saved')
+    else nextParams.delete('tab')
+    setSearchParams(nextParams, { replace: true })
+  }
 
   const submitPost = async (event) => {
     event.preventDefault()
@@ -423,6 +709,31 @@ export default function SocialFeed() {
 
   const updateInFeed = (updated) => {
     setPosts((current) => current.map((post) => post.id === updated.id ? updated : post))
+    setSavedPosts((current) => current.map((post) => post.id === updated.id ? updated : post))
+  }
+
+  const handleUnsaveFromSavedView = async (targetPost) => {
+    const previousIndex = savedPosts.findIndex((item) => item.id === targetPost.id)
+    setSavedError(null)
+    setSavedPosts((current) => current.filter((item) => item.id !== targetPost.id))
+    setPosts((current) =>
+      current.map((item) => item.id === targetPost.id ? { ...item, isSaved: false } : item),
+    )
+    try {
+      await unsavePost(targetPost.id)
+    } catch (err) {
+      setSavedPosts((current) => {
+        if (current.some((item) => item.id === targetPost.id)) return current
+        const next = [...current]
+        const insertAt = previousIndex >= 0 ? Math.min(previousIndex, next.length) : 0
+        next.splice(insertAt, 0, { ...targetPost, isSaved: true })
+        return next
+      })
+      setPosts((current) =>
+        current.map((item) => item.id === targetPost.id ? { ...item, isSaved: true } : item),
+      )
+      setSavedError(getErrorMessage(err))
+    }
   }
 
   if (authLoading) {
@@ -447,8 +758,46 @@ export default function SocialFeed() {
       </aside>}
       <div className="order-1 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1">
       <header className="mb-5 sm:mb-7">
-        <h1 className="font-heading text-xl font-bold text-tafera-text sm:text-2xl">Social Feed</h1>
-        <p className="mt-1 text-sm text-tafera-text-muted sm:mt-2 sm:text-base">Share your journeys, meet travellers, and follow their stories.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-heading text-xl font-bold text-tafera-text sm:text-2xl">Social Feed</h1>
+            <p className="mt-1 text-sm text-tafera-text-muted sm:mt-2 sm:text-base">Share your journeys, meet travellers, and follow their stories.</p>
+          </div>
+          {canWrite && (
+            <div
+              role="tablist"
+              aria-label="Feed views"
+              className="inline-flex rounded-lg border border-tafera-border bg-tafera-surface p-1"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'feed'}
+                onClick={() => selectTab('feed')}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary ${
+                  activeTab === 'feed'
+                    ? 'bg-tafera-bg text-tafera-primary shadow-card'
+                    : 'text-tafera-text-muted hover:text-tafera-text'
+                }`}
+              >
+                Following
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'saved'}
+                onClick={() => selectTab('saved')}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-primary ${
+                  activeTab === 'saved'
+                    ? 'bg-tafera-bg text-tafera-primary shadow-card'
+                    : 'text-tafera-text-muted hover:text-tafera-text'
+                }`}
+              >
+                Saved
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {!isAuthenticated && (
@@ -458,74 +807,130 @@ export default function SocialFeed() {
         </div>
       )}
 
-      {canWrite ? (
-        <form onSubmit={submitPost} className="mb-5 rounded-lg border border-tafera-border bg-tafera-surface p-4 shadow-soft sm:mb-6 sm:p-6">
-          <label htmlFor="new-post" className="mb-2 block font-semibold text-tafera-text">Share a travel update</label>
-          <textarea id="new-post" className={inputClass} rows="3" maxLength="5000" placeholder="What are you exploring?" value={content} onChange={(event) => setContent(event.target.value)} required />
-          <label className="mt-3 block text-sm text-tafera-text-muted">Attach one travel photo (JPEG, PNG or WebP, up to 5 MB)<input className={`${inputClass} mt-1`} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (!file) return
-            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-              setError('Choose a JPEG, PNG or WebP image no larger than 5 MB.')
-              event.target.value = ''
-              return
-            }
-            setPostPhoto(file)
-            setError(null)
-          }} /></label>
-          {postPhotoPreview && <div className="mt-3 flex items-center gap-3"><img src={postPhotoPreview} alt="Selected post photo preview" className="h-20 w-20 rounded-md object-cover" /><button type="button" className="text-sm text-tafera-primary underline" onClick={() => setPostPhoto(null)}>Remove photo</button></div>}
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-xs text-tafera-text-muted">Up to 5,000 characters</span>
-            <Button type="submit" disabled={posting || !content.trim()}>{posting ? 'Publishing...' : 'Publish post'}</Button>
-          </div>
-        </form>
-      ) : isAuthenticated ? (
-        <div className="mb-6 rounded-lg border border-tafera-border bg-tafera-surface p-5 text-sm text-tafera-text-muted">
-          Verify your email to create posts and comments.{' '}
-          <Link to="/verify-email" className="font-medium text-tafera-primary hover:underline">Verify email</Link>
-        </div>
-      ) : null}
-
-      {error && (
-        <div role="alert" className="mb-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <p>{error}</p>
-          {isAuthenticated && !loading && posts.length === 0 && (
-            <Button className="mt-3" size="sm" variant="outline" onClick={() => loadFeed()}>
-              Try again
-            </Button>
-          )}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="space-y-3 sm:space-y-4" aria-label="Loading feed">
-          {[1, 2, 3].map((item) => <div key={item} className="h-36 animate-pulse rounded-lg border border-tafera-border bg-tafera-surface" />)}
-        </div>
-      ) : posts.length === 0 && !error ? (
-        isAuthenticated && <div className="rounded-lg border border-tafera-border bg-tafera-surface px-4 py-8 text-center sm:px-6 sm:py-12">
-          <h2 className="font-heading text-lg font-bold text-tafera-text">Your feed is quiet</h2>
-          <p className="mt-2 text-sm text-tafera-text-muted">Follow travellers to see their travel updates here.</p>
-        </div>
-      ) : (
-        <div className="space-y-3 sm:space-y-4">
-          {posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              user={user}
-              canWrite={canWrite}
-              onPostUpdated={updateInFeed}
-              onPostDeleted={(id) => setPosts((current) => current.filter((item) => item.id !== id))}
-            />
-          ))}
-          {pagination?.hasNextPage && (
-            <div className="flex justify-center">
-              <Button variant="outline" disabled={loadingMore} onClick={() => loadFeed(page + 1, true)}>
-                {loadingMore ? 'Loading...' : 'Load more posts'}
-              </Button>
+      {activeTab === 'saved' ? (
+        <section aria-label="Saved posts">
+          {savedError && (
+            <div role="alert" className="mb-5 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-tafera-text">
+              <p>{savedError}</p>
+              {!savedLoading && savedPosts.length === 0 && (
+                <Button className="mt-3" size="sm" variant="outline" onClick={() => loadSavedPosts(1, false)}>
+                  Try again
+                </Button>
+              )}
             </div>
           )}
-        </div>
+
+          {savedLoading ? (
+            <FeedSkeleton label="Loading saved posts" />
+          ) : savedPosts.length === 0 && !savedError ? (
+            <div className="rounded-lg border border-dashed border-tafera-border bg-tafera-surface px-4 py-10 text-center sm:px-6 sm:py-12">
+              <h2 className="font-heading text-lg font-bold text-tafera-text">No saved posts yet</h2>
+              <p className="mt-2 text-sm text-tafera-text-muted">Bookmark travel updates from your feed to revisit them here.</p>
+              <Button className="mt-4" size="sm" variant="outline" onClick={() => selectTab('feed')}>
+                Browse feed
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3 sm:space-y-4">
+              {savedPosts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  user={user}
+                  isAuthenticated={isAuthenticated}
+                  canWrite={canWrite}
+                  onPostUpdated={updateInFeed}
+                  onPostDeleted={(id) => {
+                    setPosts((current) => current.filter((item) => item.id !== id))
+                    setSavedPosts((current) => current.filter((item) => item.id !== id))
+                  }}
+                  onUnsaveFromSavedView={handleUnsaveFromSavedView}
+                />
+              ))}
+              {savedPagination?.hasNextPage && (
+                <div className="flex justify-center">
+                  <Button variant="outline" disabled={savedLoadingMore} onClick={() => loadSavedPosts(savedPage + 1, true)}>
+                    {savedLoadingMore ? 'Loading...' : 'Load more saved posts'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
+          {canWrite ? (
+            <form onSubmit={submitPost} className="mb-5 rounded-lg border border-tafera-border bg-tafera-surface p-4 shadow-soft sm:mb-6 sm:p-6">
+              <label htmlFor="new-post" className="mb-2 block font-semibold text-tafera-text">Share a travel update</label>
+              <textarea id="new-post" className={inputClass} rows="3" maxLength="5000" placeholder="What are you exploring?" value={content} onChange={(event) => setContent(event.target.value)} required />
+              <label className="mt-3 block text-sm text-tafera-text-muted">Attach one travel photo (JPEG, PNG or WebP, up to 5 MB)<input className={`${inputClass} mt-1`} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (!file) return
+                if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                  setError('Choose a JPEG, PNG or WebP image no larger than 5 MB.')
+                  event.target.value = ''
+                  return
+                }
+                setPostPhoto(file)
+                setError(null)
+              }} /></label>
+              {postPhotoPreview && <div className="mt-3 flex items-center gap-3"><img src={postPhotoPreview} alt="Selected post photo preview" className="h-20 w-20 rounded-md object-cover" /><button type="button" className="text-sm text-tafera-primary underline" onClick={() => setPostPhoto(null)}>Remove photo</button></div>}
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-tafera-text-muted">Up to 5,000 characters</span>
+                <Button type="submit" disabled={posting || !content.trim()}>{posting ? 'Publishing...' : 'Publish post'}</Button>
+              </div>
+            </form>
+          ) : isAuthenticated ? (
+            <div className="mb-6 rounded-lg border border-tafera-border bg-tafera-surface p-5 text-sm text-tafera-text-muted">
+              Verify your email to create posts and comments.{' '}
+              <Link to="/verify-email" className="font-medium text-tafera-primary hover:underline">Verify email</Link>
+            </div>
+          ) : null}
+
+          {error && (
+            <div role="alert" className="mb-5 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-tafera-text">
+              <p>{error}</p>
+              {isAuthenticated && !loading && posts.length === 0 && (
+                <Button className="mt-3" size="sm" variant="outline" onClick={() => loadFeed()}>
+                  Try again
+                </Button>
+              )}
+            </div>
+          )}
+
+          {loading ? (
+            <FeedSkeleton label="Loading feed" />
+          ) : posts.length === 0 && !error ? (
+            isAuthenticated && <div className="rounded-lg border border-tafera-border bg-tafera-surface px-4 py-8 text-center sm:px-6 sm:py-12">
+              <h2 className="font-heading text-lg font-bold text-tafera-text">Your feed is quiet</h2>
+              <p className="mt-2 text-sm text-tafera-text-muted">Follow travellers to see their travel updates here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3 sm:space-y-4">
+              {posts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  user={user}
+                  isAuthenticated={isAuthenticated}
+                  canWrite={canWrite}
+                  onPostUpdated={updateInFeed}
+                  onPostDeleted={(id) => {
+                    setPosts((current) => current.filter((item) => item.id !== id))
+                    setSavedPosts((current) => current.filter((item) => item.id !== id))
+                  }}
+                />
+              ))}
+              {pagination?.hasNextPage && (
+                <div className="flex justify-center">
+                  <Button variant="outline" disabled={loadingMore} onClick={() => loadFeed(page + 1, true)}>
+                    {loadingMore ? 'Loading...' : 'Load more posts'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
       </div>
       {isAuthenticated && <aside className="order-3 space-y-4 lg:order-none lg:col-start-3 lg:row-start-1" aria-label="Discover travel community">

@@ -15,6 +15,9 @@ const {
   createFollowController,
 } = require('../controllers/followController')
 const { createAuthenticate } = require('../middlewares/authenticate')
+const {
+  createOptionalAuthenticate,
+} = require('../middlewares/optionalAuthenticate')
 const { createCsrfProtection } = require('../middlewares/csrfProtection')
 const {
   createRequireVerifiedEmail,
@@ -40,6 +43,11 @@ const createUsersRouter = ({
     followService: follows,
   })
   const authenticate = createAuthenticate({ User, sessions, nodeEnv })
+  const optionalAuthenticate = createOptionalAuthenticate({
+    User,
+    sessions,
+    nodeEnv,
+  })
   const csrfProtection = createCsrfProtection()
   const requireVerifiedEmail = createRequireVerifiedEmail({ User })
 
@@ -60,7 +68,7 @@ const createUsersRouter = ({
   router.patch('/me', authenticate, csrfProtection, requireVerifiedEmail, controller.updateMe)
   // Public user-post listings are scoped by the user ID in the path. They do
   // not require a session or a verified email.
-  router.get('/:userId/posts', postController.listByUser)
+  router.get('/:userId/posts', optionalAuthenticate, postController.listByUser)
   router.get('/:userId/media', postController.listMediaByUser)
   router.get('/:userId/comments', controller.userComments)
   // Follows are immediate and one-way. Reads are public; writes use the

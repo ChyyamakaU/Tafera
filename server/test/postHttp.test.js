@@ -621,6 +621,9 @@ const assertPublicPost = (post, expectedAuthorId) => {
     'destination',
     'id',
     'images',
+    'isLiked',
+    'isSaved',
+    'likeCount',
     'updatedAt',
   ])
   assert.equal(post.userId, undefined)
@@ -644,6 +647,9 @@ const publicPostKeys = [
   'destination',
   'id',
   'images',
+  'isLiked',
+  'isSaved',
+  'likeCount',
   'updatedAt',
 ]
 

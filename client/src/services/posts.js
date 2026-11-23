@@ -13,6 +13,49 @@ export async function fetchFollowingPosts({ page = 1, limit = 20 } = {}) {
   return { posts: data.posts || [], pagination: data.pagination }
 }
 
+export async function fetchSavedPosts({ page = 1, limit = 20 } = {}) {
+  const { data } = await request(
+    `/api/posts/saved?page=${page}&limit=${limit}`,
+  )
+  return { posts: data.posts || [], pagination: data.pagination }
+}
+
+export async function likePost(postId) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(`/api/posts/${encodeURIComponent(postId)}/like`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  return data
+}
+
+export async function unlikePost(postId) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(`/api/posts/${encodeURIComponent(postId)}/like`, {
+    method: 'DELETE',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  return data
+}
+
+export async function savePost(postId) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(`/api/posts/${encodeURIComponent(postId)}/save`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  return data
+}
+
+export async function unsavePost(postId) {
+  const csrfToken = await fetchCsrfToken()
+  const { data } = await request(`/api/posts/${encodeURIComponent(postId)}/save`, {
+    method: 'DELETE',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  return data
+}
+
 export async function fetchUserPosts(userId, { page = 1, limit = 20 } = {}) {
   const { data } = await request(
     `/api/users/${userId}/posts?page=${page}&limit=${limit}`,

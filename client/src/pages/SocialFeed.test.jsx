@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthContext } from '../contexts/AuthContext'
 import SocialFeed from './SocialFeed'
@@ -12,6 +12,11 @@ import {
   fetchPublicPosts,
   fetchPost,
   fetchPostComments,
+  fetchSavedPosts,
+  likePost,
+  savePost,
+  unlikePost,
+  unsavePost,
   updatePost,
   updatePostComment,
 } from '../services/posts'
@@ -25,6 +30,11 @@ vi.mock('../services/posts', () => ({
   fetchPublicPosts: vi.fn(),
   fetchPost: vi.fn(),
   fetchPostComments: vi.fn(),
+  fetchSavedPosts: vi.fn(),
+  likePost: vi.fn(),
+  savePost: vi.fn(),
+  unlikePost: vi.fn(),
+  unsavePost: vi.fn(),
   updatePost: vi.fn(),
   updatePostComment: vi.fn(),
 }))
@@ -41,6 +51,9 @@ const post = {
   id: 'post-1',
   content: 'A trip to Kyoto',
   author: { id: 'author-1', fullName: 'Travel Friend', profileImage: null },
+  likeCount: 2,
+  isLiked: false,
+  isSaved: false,
   createdAt: '2026-11-20T12:00:00.000Z',
   updatedAt: '2026-11-20T12:00:00.000Z',
   destination: null,
@@ -68,15 +81,24 @@ const renderFeed = (auth = {}) => render(
   </MemoryRouter>,
 )
 
+afterEach(() => {
+  cleanup()
+})
+
 beforeEach(() => {
   vi.resetAllMocks()
   fetchPersonalizedPosts.mockResolvedValue({ posts: [post], pagination })
+  fetchSavedPosts.mockResolvedValue({ posts: [], pagination: { ...pagination, total: 0 } })
   fetchPost.mockResolvedValue(post)
   fetchPostComments.mockResolvedValue({ comments: [comment], pagination })
   fetchPublicPosts.mockResolvedValue([post])
   fetchFeaturedDestinations.mockResolvedValue([])
   fetchPublicTrips.mockResolvedValue({ trips: [] })
   fetchUnreadCount.mockResolvedValue(0)
+  likePost.mockResolvedValue({ postId: post.id, liked: true, likeCount: 3 })
+  unlikePost.mockResolvedValue({ postId: post.id, liked: false, likeCount: 2 })
+  savePost.mockResolvedValue({ postId: post.id, saved: true })
+  unsavePost.mockResolvedValue({ postId: post.id, saved: false })
   window.confirm = vi.fn(() => true)
 })
 
@@ -190,5 +212,102 @@ describe('SocialFeed', () => {
     await screen.findByText('A trip to Kyoto')
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('optimistically toggles likes and reconciles with server counts', async () => {
+    let resolveLike
+    likePost.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveLike = () => resolve({ postId: post.id, liked: true, likeCount: 4 })
+      }),
+    )
+
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    await screen.findByText('A trip to Kyoto')
+
+    const likeButton = screen.getByRole('button', { name: 'Like post' })
+    expect(likeButton).toHaveTextContent('2')
+    expect(likeButton).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(likeButton)
+
+    // Optimistic update appears immediately before API resolves
+    const optimisticButton = screen.getByRole('button', { name: 'Unlike post' })
+    expect(optimisticButton).toHaveTextContent('3')
+    expect(optimisticButton).toHaveAttribute('aria-pressed', 'true')
+    expect(likePost).toHaveBeenCalledWith(post.id)
+
+    resolveLike()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Unlike post' })).toHaveTextContent('4'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unlike post' }))
+    await waitFor(() => expect(unlikePost).toHaveBeenCalledWith(post.id))
+    expect(await screen.findByRole('button', { name: 'Like post' })).toHaveTextContent('2')
+  })
+
+  it('rolls back optimistic like and save updates when mutations fail', async () => {
+    likePost.mockRejectedValueOnce(Object.assign(new Error('like failed'), { status: 500 }))
+    savePost.mockRejectedValueOnce(Object.assign(new Error('save failed'), { status: 500 }))
+
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    await screen.findByText('A trip to Kyoto')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Like post' }))
+    expect(screen.getByRole('button', { name: 'Unlike post' })).toHaveTextContent('3')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Like post' })).toHaveTextContent('2'))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save post' }))
+    expect(screen.getByRole('button', { name: 'Remove saved post' })).toHaveTextContent('Saved')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save post' })).toHaveTextContent('Save'))
+  })
+
+  it('switches to Saved posts, supports pagination, and rolls back failed unsave removals', async () => {
+    const savedOne = { ...post, id: 'saved-1', content: 'Bookmarked Sahara dunes', isSaved: true, likeCount: 5, isLiked: true }
+    const savedTwo = { ...post, id: 'saved-2', content: 'Bookmarked Jos plateau', isSaved: true, likeCount: 1, isLiked: false }
+    fetchSavedPosts
+      .mockResolvedValueOnce({ posts: [savedOne], pagination: { page: 1, limit: 20, total: 2, totalPages: 2, hasNextPage: true } })
+      .mockResolvedValueOnce({ posts: [savedTwo], pagination: { page: 2, limit: 20, total: 2, totalPages: 2, hasNextPage: false } })
+
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: true })
+    await screen.findByText('A trip to Kyoto')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved' }))
+    expect(await screen.findByText('Bookmarked Sahara dunes')).toBeInTheDocument()
+    expect(fetchSavedPosts).toHaveBeenCalledWith({ page: 1, limit: 20 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more saved posts' }))
+    expect(await screen.findByText('Bookmarked Jos plateau')).toBeInTheDocument()
+    expect(fetchSavedPosts).toHaveBeenCalledWith({ page: 2, limit: 20 })
+
+    unsavePost.mockRejectedValueOnce(new Error('Network error'))
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove saved post' })
+    fireEvent.click(removeButtons[0])
+
+    // Optimistically removed immediately
+    expect(screen.queryByText('Bookmarked Sahara dunes')).not.toBeInTheDocument()
+
+    // Rolled back when API rejects
+    expect(await screen.findByText('Bookmarked Sahara dunes')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('gates like, save, and Saved tab controls for unverified users', async () => {
+    renderFeed({ user, isAuthenticated: true, isEmailVerified: false })
+    await screen.findByText('A trip to Kyoto')
+
+    expect(screen.queryByRole('tab', { name: 'Saved' })).not.toBeInTheDocument()
+    const likeButton = screen.getByRole('button', { name: 'Verify your email to like posts' })
+    const saveButton = screen.getByRole('button', { name: 'Verify your email to save posts' })
+    expect(likeButton).toBeDisabled()
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.click(likeButton)
+    fireEvent.click(saveButton)
+    expect(likePost).not.toHaveBeenCalled()
+    expect(savePost).not.toHaveBeenCalled()
   })
 })
