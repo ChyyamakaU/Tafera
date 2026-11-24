@@ -47,7 +47,7 @@ const getSessionCookieOptions = (nodeEnv, maxAgeMs) => {
   const options = {
     httpOnly: true,
     secure: nodeEnv === 'production',
-    sameSite: 'lax',
+    sameSite: nodeEnv === 'production' ? 'none' : 'lax',
     path: '/',
     maxAge: maxAgeMs,
   }
@@ -64,7 +64,7 @@ const getSessionCookieClearOptions = (nodeEnv) => {
   const options = {
     httpOnly: true,
     secure: nodeEnv === 'production',
-    sameSite: 'lax',
+    sameSite: nodeEnv === 'production' ? 'none' : 'lax',
     path: '/',
   }
 
@@ -173,7 +173,7 @@ const applySessionCookie = (
 
   session.cookie.httpOnly = true
   session.cookie.secure = nodeEnv === 'production'
-  session.cookie.sameSite = 'lax'
+  session.cookie.sameSite = nodeEnv === 'production' ? 'none' : 'lax'
   session.cookie.path = '/'
   session.cookie.priority = nodeEnv === 'production' ? 'high' : undefined
   // Explicitly omit Domain. The __Host- prefix requires it in production.
