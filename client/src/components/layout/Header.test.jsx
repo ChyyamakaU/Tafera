@@ -143,14 +143,31 @@ describe('Header authenticated state', () => {
     expect(await within(mobileBar).findByRole('link', { name: 'Notifications (4 unread)' })).toHaveAttribute('href', '/notifications')
     expect(within(mobileBar).getByRole('button', { name: 'Toggle navigation menu' })).toBeInTheDocument()
 
-    // Mobile drawer groups My Profile (with name), My Travels, Notifications, and Appearance theme toggle
+    // Mobile drawer orders sections top-to-bottom:
+    // 1. Your Profile (name, My Profile, My Travels, Notifications)
+    // 2. Main Navigation Links (Feed, Explore, Group Trips, Scrapbook)
+    // 3. Appearance (theme toggle)
+    // 4. Settings & Log out
     const drawer = screen.getByRole('navigation', { name: 'Mobile navigation' })
     expect(within(drawer).getByText('Ada Traveller')).toBeInTheDocument()
     expect(within(drawer).getByRole('link', { name: /My Profile/i })).toHaveAttribute('href', '/profile')
     expect(within(drawer).getByRole('button', { name: 'My Travels' })).toBeInTheDocument()
     expect(within(drawer).getByRole('link', { name: /Notifications/i })).toHaveAttribute('href', '/notifications')
+    expect(within(drawer).getByRole('link', { name: 'Feed' })).toHaveAttribute('href', '/social')
+    expect(within(drawer).getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/destinations')
+    expect(within(drawer).getByRole('link', { name: 'Group Trips' })).toHaveAttribute('href', '/group-travel')
+    expect(within(drawer).getByRole('link', { name: 'Scrapbook' })).toHaveAttribute('href', '/scrapbooks')
     expect(within(drawer).getByText('Appearance')).toBeInTheDocument()
     expect(within(drawer).getByRole('button', { name: /Theme:/i })).toBeInTheDocument()
+    expect(within(drawer).getAllByRole('link', { name: 'Settings' })).toHaveLength(1)
+    expect(within(drawer).getAllByRole('button', { name: 'Log out' })).toHaveLength(1)
+
+    const drawerText = drawer.textContent
+    expect(drawerText.indexOf('Your Profile')).toBeLessThan(drawerText.indexOf('Feed'))
+    expect(drawerText.indexOf('Feed')).toBeLessThan(drawerText.indexOf('Scrapbook'))
+    expect(drawerText.indexOf('Scrapbook')).toBeLessThan(drawerText.indexOf('Appearance'))
+    expect(drawerText.indexOf('Appearance')).toBeLessThan(drawerText.indexOf('Settings'))
+    expect(drawerText.indexOf('Settings')).toBeLessThan(drawerText.indexOf('Log out'))
   })
 
   it('gives an unverified account public navigation plus verification and logout only', () => {

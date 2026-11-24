@@ -4,6 +4,13 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
 import { fetchUnreadCount } from '../../services/notifications'
 
+const MOBILE_MAIN_NAV = [
+  { label: 'Feed', to: '/social' },
+  { label: 'Explore', to: '/destinations' },
+  { label: 'Group Trips', to: '/group-travel' },
+  { label: 'Scrapbook', to: '/scrapbooks' },
+]
+
 const MOBILE_TRAVEL_LINKS = [
   { label: 'My Trips', to: '/trips' },
   { label: 'Scrapbooks', to: '/scrapbooks' },
@@ -436,85 +443,119 @@ export default function Header() {
       } transition-all duration-300 ease-in-out border-t border-tafera-border mt-0`}
       aria-label="Mobile navigation"
     >
-      <div className="app-container py-4 space-y-2">
-        {platformAuthenticated ? AUTHENTICATED_NAV.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            onClick={closeMenu}
-            aria-current={isActive(item.to) ? 'page' : undefined}
-            className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent"
-          >
-            {item.label}
-          </Link>
-        )) : PUBLIC_NAV.map((section) => (
-          section.to ? (
+      <div className="app-container py-4 space-y-4">
+        {/* 1. Your Profile section at the very top when authenticated */}
+        {isAuthenticated && renderMobileProfileSection()}
+
+        {/* 2. Main Navigation Links */}
+        <div className={isAuthenticated ? 'pt-3 border-t border-tafera-border space-y-1' : 'space-y-2'}>
+          {platformAuthenticated ? MOBILE_MAIN_NAV.map((item) => (
             <Link
-              key={section.label}
-              to={section.to}
+              key={item.to}
+              to={item.to}
               onClick={closeMenu}
-              className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-accent"
+              aria-current={isActive(item.to) ? 'page' : undefined}
+              className="block px-3 py-2.5 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary"
             >
-              {section.label}
+              {item.label}
             </Link>
-          ) : (
-            <div key={section.label}>
-              <button
-                type="button"
-                onClick={() => setMobileOpenSection((current) => current === section.label ? null : section.label)}
-                className="flex items-center justify-between w-full px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
-                aria-expanded={mobileOpenSection === section.label}
+          )) : PUBLIC_NAV.map((section) => (
+            section.to ? (
+              <Link
+                key={section.label}
+                to={section.to}
+                onClick={closeMenu}
+                className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-accent"
               >
                 {section.label}
-                <svg
-                  className="w-4 h-4 text-tafera-text-muted transition-transform duration-200"
-                  viewBox="0 0 24 24"
-                  strokeWidth="1.5"
-                  stroke="currentColor"
-                  fill="none"
-                  style={{ transform: mobileOpenSection === section.label ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                  aria-hidden="true"
+              </Link>
+            ) : (
+              <div key={section.label}>
+                <button
+                  type="button"
+                  onClick={() => setMobileOpenSection((current) => current === section.label ? null : section.label)}
+                  className="flex items-center justify-between w-full px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
+                  aria-expanded={mobileOpenSection === section.label}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {mobileOpenSection === section.label && section.items && (
-                <div className="ml-4 space-y-1 border-l border-tafera-border pl-4">
-                  {section.items.map((item) => (
-                    <Link
-                      key={`${item.label}-${item.to}`}
-                      to={item.to}
-                      onClick={closeMenu}
-                      className="block px-3 py-2 text-sm text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        ))}
-        <div className="pt-4 border-t border-tafera-border space-y-3">
-          {isAuthenticated ? renderMobileAuthLinks() : renderMobileGuestLinks()}
+                  {section.label}
+                  <svg
+                    className="w-4 h-4 text-tafera-text-muted transition-transform duration-200"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                    fill="none"
+                    style={{ transform: mobileOpenSection === section.label ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {mobileOpenSection === section.label && section.items && (
+                  <div className="ml-4 space-y-1 border-l border-tafera-border pl-4">
+                    {section.items.map((item) => (
+                      <Link
+                        key={`${item.label}-${item.to}`}
+                        to={item.to}
+                        onClick={closeMenu}
+                        className="block px-3 py-2 text-sm text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ))}
+        </div>
 
-          <div className="pt-3 border-t border-tafera-border">
-            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-tafera-text-muted">
-              Appearance
-            </p>
+        {/* Guest auth actions */}
+        {!isAuthenticated && (
+          <div className="pt-3 border-t border-tafera-border space-y-2">
+            {renderMobileGuestLinks()}
+          </div>
+        )}
+
+        {/* 3. Appearance (Light/Dark theme toggle) */}
+        <div className="pt-3 border-t border-tafera-border">
+          <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-tafera-text-muted">
+            Appearance
+          </p>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-pressed={isDark}
+            className="flex w-full items-center justify-between rounded-md border border-tafera-border bg-tafera-card px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
+          >
+            <span>Theme: {isDark ? 'Dark' : 'Light'}</span>
+            <span className="text-xs font-medium text-tafera-primary">
+              Switch to {isDark ? 'light' : 'dark'}
+            </span>
+          </button>
+        </div>
+
+        {/* 4. Settings and Log out at the bottom of the drawer */}
+        {isAuthenticated && (
+          <div className="pt-3 border-t border-tafera-border space-y-1">
+            {isEmailVerified && (
+              <Link
+                to="/settings"
+                onClick={closeMenu}
+                className="block rounded-md px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary"
+              >
+                Settings
+              </Link>
+            )}
             <button
               type="button"
-              onClick={toggleTheme}
-              aria-pressed={isDark}
-              className="flex w-full items-center justify-between rounded-md border border-tafera-border bg-tafera-card px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
+              onClick={handleLogout}
+              disabled={logoutLoading}
+              className="block w-full rounded-md px-3 py-2.5 text-left text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary"
             >
-              <span>Theme: {isDark ? 'Dark' : 'Light'}</span>
-              <span className="text-xs font-medium text-tafera-primary">
-                Switch to {isDark ? 'light' : 'dark'}
-              </span>
+              {logoutLoading ? 'Signing out...' : 'Log out'}
             </button>
           </div>
-        </div>
+        )}
       </div>
     </nav>
   )
@@ -544,7 +585,7 @@ export default function Header() {
 
   const userInitial = (user?.fullName || user?.email || 'U').slice(0, 1).toUpperCase()
 
-  const renderMobileAuthLinks = () => (
+  const renderMobileProfileSection = () => (
     <div className="space-y-2">
       <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-tafera-text-muted">
         Your Profile
@@ -580,7 +621,7 @@ export default function Header() {
             key="verify-email"
             to="/verify-email"
             onClick={closeMenu}
-            className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+            className="block px-3 py-2.5 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
           >
             Verify your email
           </Link>
@@ -589,18 +630,9 @@ export default function Header() {
             type="button"
             onClick={handleResendVerification}
             disabled={resendLoading}
-            className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
+            className="block px-3 py-2.5 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
           >
             {resendLoading ? 'Sending...' : 'Resend verification email'}
-          </button>
-          <button
-            key="log-out"
-            type="button"
-            onClick={handleLogout}
-            disabled={logoutLoading}
-            className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
-          >
-            {logoutLoading ? 'Signing out...' : 'Log out'}
           </button>
           {resendError && (
             <div className="mb-3 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-tafera-text text-sm">
@@ -691,31 +723,6 @@ export default function Header() {
                 </span>
               )}
             </Link>
-          </div>
-
-          <div className="border-t border-tafera-border pt-1">
-            {PROFILE_MENU_ITEMS.filter((item) => item.to !== '/profile' && item.to !== '/scrapbooks').map((item) =>
-              item.to ? (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={closeMenu}
-                  className="block rounded-md px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={handleLogout}
-                  disabled={logoutLoading}
-                  className="block w-full rounded-md px-3 py-2.5 text-left text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
-                >
-                  {logoutLoading ? 'Signing out...' : item.label}
-                </button>
-              ),
-            )}
           </div>
         </div>
       )}
