@@ -74,13 +74,13 @@ export default function Login() {
   const getFieldError = (field) => fieldErrors[field]
 
   return (
-    <div className="app-container max-w-3xl mx-auto py-8 sm:py-12 lg:py-16">
-      <div className="mb-6 text-center sm:mb-10">
+    <div className="mx-auto flex min-h-[calc(100svh-12rem)] w-full flex-col justify-center px-4 py-8 sm:px-6 sm:py-12 md:max-w-[460px] md:px-0 lg:py-16">
+      <div className="mb-6 text-center sm:mb-8">
         <p className="inline-flex rounded-full bg-tafera-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">Welcome back</p>
-        <h1 className="mt-3 text-2xl font-heading font-bold text-tafera-text sm:mt-4 sm:text-4xl lg:text-5xl">
+        <h1 className="mt-3 text-2xl font-heading font-bold text-tafera-text sm:mt-4 sm:text-4xl">
           Log in
         </h1>
-        <p className="mx-auto mt-2.5 max-w-xl text-sm text-tafera-text-muted sm:mt-3 sm:text-lg">
+        <p className="mx-auto mt-2.5 max-w-md text-sm text-tafera-text-muted sm:mt-3 sm:text-base">
           Sign in to your Tafera account to continue.
         </p>
       </div>
@@ -109,7 +109,7 @@ export default function Login() {
       )}
 
       <form
-        className="space-y-6 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-sm sm:[&_label]:text-base"
+        className="space-y-6 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:p-10 md:space-y-6 md:p-8 [&_label]:text-sm sm:[&_label]:text-base"
         onSubmit={handleLogin}
       >
         <div>

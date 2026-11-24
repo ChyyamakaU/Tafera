@@ -111,7 +111,7 @@ export default function Registration() {
 
   if (registrationComplete) {
     return (
-      <div className="app-container max-w-3xl mx-auto py-16 sm:py-24">
+      <div className="mx-auto flex min-h-[calc(100svh-12rem)] w-full flex-col justify-center px-4 py-12 sm:px-6 sm:py-16 md:max-w-[460px] md:px-0">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Account created!
@@ -195,13 +195,13 @@ export default function Registration() {
   }
 
   return (
-    <div className="app-container max-w-3xl mx-auto py-8 sm:py-12 lg:py-16">
-      <div className="mb-6 text-center sm:mb-10">
+    <div className="mx-auto flex min-h-[calc(100svh-12rem)] w-full flex-col justify-center px-4 py-8 sm:px-6 sm:py-12 md:max-w-[460px] md:px-0 lg:py-16">
+      <div className="mb-6 text-center sm:mb-8">
         <p className="inline-flex rounded-full bg-tafera-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">Join the community</p>
-        <h1 className="mt-3 text-2xl font-heading font-bold text-tafera-text sm:mt-4 sm:text-4xl lg:text-5xl">
+        <h1 className="mt-3 text-2xl font-heading font-bold text-tafera-text sm:mt-4 sm:text-4xl">
           Create an account
         </h1>
-        <p className="mx-auto mt-2.5 max-w-xl text-sm text-tafera-text-muted sm:mt-3 sm:text-lg">
+        <p className="mx-auto mt-2.5 max-w-md text-sm text-tafera-text-muted sm:mt-3 sm:text-base">
           Join Tafera and start planning your journeys.
         </p>
       </div>
@@ -213,7 +213,7 @@ export default function Registration() {
       )}
 
       <form
-        className="space-y-6 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-sm sm:[&_label]:text-base"
+        className="space-y-6 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:p-10 md:space-y-6 md:p-8 [&_label]:text-sm sm:[&_label]:text-base"
         onSubmit={handleSubmit}
       >
         <div>

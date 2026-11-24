@@ -91,7 +91,7 @@ export default function VerifyEmail() {
 
   if (loading) {
     return (
-      <div className="app-container max-w-md mx-auto py-24">
+      <div className="mx-auto flex min-h-[calc(100svh-12rem)] w-full flex-col justify-center px-4 py-16 sm:px-6 md:max-w-md md:px-0">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Verifying email...
@@ -106,7 +106,7 @@ export default function VerifyEmail() {
 
   if (verified) {
     return (
-      <div className="app-container max-w-md mx-auto py-24">
+      <div className="mx-auto flex min-h-[calc(100svh-12rem)] w-full flex-col justify-center px-4 py-16 sm:px-6 md:max-w-md md:px-0">
         <div className="text-center">
           <h2 className="text-2xl font-heading font-bold text-tafera-text">
             Email verified!
@@ -115,7 +115,7 @@ export default function VerifyEmail() {
             Your email address has been verified. You can now access all features.
           </p>
           <div className="mt-6 flex justify-center">
-            <Link asChild to="/">
+            <Link to="/">
               <Button variant="primary">Go to home</Button>
             </Link>
           </div>
@@ -125,7 +125,7 @@ export default function VerifyEmail() {
   }
 
   return (
-    <div className="app-container max-w-md mx-auto py-24">
+    <div className="mx-auto flex min-h-[calc(100svh-12rem)] w-full flex-col justify-center px-4 py-16 sm:px-6 md:max-w-md md:px-0">
       <div className="text-center">
         <h2 className="text-2xl font-heading font-bold text-tafera-text">
           Verify email

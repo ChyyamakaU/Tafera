@@ -98,23 +98,24 @@ html[data-theme="dark"] {
   }
 }
 
-.app-container {
-  width: 100%;
-  max-width: 100%;
-  margin-inline: auto;
-  padding-inline: 16px;
-}
-
-@media (min-width: 640px) {
+@layer components {
   .app-container {
-    padding-inline: 24px;
+    width: 100%;
+    margin-inline: auto;
+    padding-inline: 16px;
   }
-}
 
-/* Match the visitor homepage's section gutter (60px section + 15px inner). */
-@media (min-width: 768px) {
-  .app-container {
-    padding-inline: 75px;
+  @media (min-width: 640px) {
+    .app-container {
+      padding-inline: 24px;
+    }
+  }
+
+  /* Match the visitor homepage's section gutter (60px section + 15px inner). */
+  @media (min-width: 768px) {
+    .app-container {
+      padding-inline: 75px;
+    }
   }
 }
 
