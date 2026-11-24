@@ -129,7 +129,7 @@ export default function Notifications() {
         <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">Your account</p>
-            <h1 className="mt-1 text-3xl font-heading font-bold text-tafera-text">Notifications</h1>
+            <h1 className="mt-1 text-2xl font-heading font-bold text-tafera-text sm:text-3xl">Notifications</h1>
             <p className="mt-2 text-sm text-tafera-text-muted">Updates from your Tafera community.</p>
           </div>
           <button type="button" disabled={!unreadCount || busyId === 'all'} onClick={markAllRead} className="min-h-10 rounded-lg border border-tafera-border bg-tafera-card px-4 py-2 text-sm font-semibold text-tafera-text hover:bg-tafera-surface disabled:cursor-not-allowed disabled:opacity-50">

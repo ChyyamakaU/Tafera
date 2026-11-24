@@ -22,23 +22,23 @@ const FEATURES = [
 export default function GoTogetherSection() {
   return (
     <section
-      className="bg-tafera-bg py-14 sm:py-20 transition-colors"
+      className="bg-tafera-bg py-10 sm:py-20 transition-colors"
       aria-labelledby="go-together-heading"
     >
       <div className="app-container">
-        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-12">
+        <div className="grid grid-cols-1 items-center gap-8 sm:gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Left column — heading, copy, feature list */}
-          <div className="lg:col-span-6">
+          <div className="min-w-0 lg:col-span-6">
             <span className="inline-flex items-center rounded-full bg-tafera-lime px-3 py-1 text-xs font-semibold uppercase tracking-wider text-tafera-ink">
               Group travel
             </span>
             <h2
               id="go-together-heading"
-              className="mt-4 font-heading text-3xl font-bold tracking-tight text-tafera-text sm:text-4xl"
+              className="mt-4 font-heading text-2xl font-bold tracking-tight text-tafera-text sm:text-3xl lg:text-4xl"
             >
               Same dream destination? Let’s go together.
             </h2>
-            <p className="mt-4 text-base leading-relaxed text-tafera-text-muted sm:text-lg">
+            <p className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg leading-relaxed text-tafera-text-muted">
               You don’t have to wait for everyone in your group chat to align
               their calendars. Find people who want to see the same places—and
               turn a wish list into a shared itinerary.
@@ -67,9 +67,9 @@ export default function GoTogetherSection() {
               ))}
             </ul>
 
-            <div className="mt-8">
-              <Link to="/group-travel">
-                <Button variant="accent" size="lg">
+            <div className="mt-7 sm:mt-8">
+              <Link to="/group-travel" className="block sm:inline-block">
+                <Button variant="accent" size="lg" className="w-full sm:w-auto">
                   Explore group trips
                 </Button>
               </Link>
@@ -82,7 +82,7 @@ export default function GoTogetherSection() {
               <img
                 src="/hero%20tafera.jpeg"
                 alt="Travellers exploring a scenic destination together"
-                className="h-[300px] w-full object-cover sm:h-[380px] lg:h-[440px]"
+                className="h-[230px] w-full object-cover sm:h-[360px] lg:h-[440px]"
                 loading="lazy"
               />
             </div>

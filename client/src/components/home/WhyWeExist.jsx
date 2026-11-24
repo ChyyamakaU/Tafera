@@ -23,12 +23,12 @@ export default function WhyWeExist() {
 
   return (
     <section
-      className="border-t border-tafera-border bg-tafera-bg py-16 sm:py-24 transition-colors"
+      className="border-t border-tafera-border bg-tafera-bg py-12 sm:py-24 transition-colors"
       aria-labelledby="why-we-exist-heading"
     >
       <div className="app-container">
         <div
-          className={`rounded-2xl border border-tafera-border p-8 sm:p-12 lg:p-14 transition-colors ${
+          className={`rounded-2xl border border-tafera-border p-5 sm:p-10 lg:p-14 transition-colors ${
             isDark
               ? 'bg-[#1C2424] text-[#F7F5EF]'
               : 'bg-[#F7F5EF] text-[#171B20]'
@@ -40,14 +40,14 @@ export default function WhyWeExist() {
             </span>
             <h2
               id="why-we-exist-heading"
-              className={`mt-5 font-heading text-3xl font-bold tracking-tight sm:text-4xl leading-tight ${
+              className={`mt-4 sm:mt-5 font-heading text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl leading-tight ${
                 isDark ? 'text-[#F7F5EF]' : 'text-[#171B20]'
               }`}
             >
               Because great trips shouldn’t stay trapped in saved folders and
               unfinished group chats.
             </h2>
-            <p className="mt-4 text-base leading-relaxed text-tafera-text-muted sm:text-lg">
+            <p className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg leading-relaxed text-tafera-text-muted">
               Tafera brings discovery, honest traveller stories, group trip
               coordination, and personal scrapbooks into one calm place—so
               exploring closer to home or farther afield actually happens.

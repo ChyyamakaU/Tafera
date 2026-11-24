@@ -30,7 +30,7 @@ function CarouselSkeleton() {
       {[1, 2, 3, 4].map((item) => (
         <div
           key={item}
-          className="w-[270px] shrink-0 sm:w-[300px] lg:w-[320px]"
+          className="w-[min(82vw,270px)] shrink-0 sm:w-[300px] lg:w-[320px]"
         >
           <div className="aspect-[4/3] animate-pulse rounded-xl border border-tafera-border bg-tafera-surface" />
           <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-tafera-surface" />
@@ -203,7 +203,7 @@ export default function DestinationDiscoveryCarousel() {
             </p>
             <h2
               id="discover-home-heading"
-              className="mt-2 font-heading text-3xl font-bold tracking-tight text-tafera-text sm:text-4xl"
+              className="mt-2 font-heading text-2xl font-bold tracking-tight text-tafera-text sm:text-3xl lg:text-4xl"
             >
               So much to see. Right here at home.
             </h2>
@@ -323,7 +323,7 @@ export default function DestinationDiscoveryCarousel() {
               {filteredDestinations.map((destination) => (
                 <article
                   key={destination.id}
-                  className="group w-[270px] shrink-0 snap-start overflow-hidden rounded-xl border border-tafera-border bg-tafera-card shadow-soft transition-all hover:border-tafera-accent hover:shadow-card sm:w-[300px] lg:w-[320px]"
+                  className="group w-[min(82vw,270px)] shrink-0 snap-start overflow-hidden rounded-xl border border-tafera-border bg-tafera-card shadow-soft transition-all hover:border-tafera-accent hover:shadow-card sm:w-[300px] lg:w-[320px]"
                 >
                   <Link
                     to={`/destinations/${destination.slug}`}

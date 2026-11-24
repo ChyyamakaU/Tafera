@@ -42,10 +42,10 @@ export default function MyDestinations() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">
             Your contributions
           </p>
-          <h1 className="mt-1 text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
+          <h1 className="mt-1 text-2xl font-heading font-bold text-tafera-text sm:text-4xl">
             My Destinations
           </h1>
-          <p className="mt-3 text-base text-tafera-text-muted">
+          <p className="mt-2.5 text-sm text-tafera-text-muted sm:mt-3 sm:text-base">
             Destinations where you have shared photos, grouped by place. Manage
             your own contributions here.
           </p>

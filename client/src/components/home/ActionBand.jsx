@@ -18,13 +18,13 @@ export default function ActionBand({ isAuthenticated = false }) {
 
   return (
     <>
-      <section className="border-t border-tafera-border bg-tafera-surface py-16 transition-colors">
+      <section className="border-t border-tafera-border bg-tafera-surface py-12 sm:py-16 transition-colors">
         <div className="app-container">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="mb-4 font-heading text-3xl font-bold text-tafera-text sm:text-4xl">
+            <h2 className="mb-3 sm:mb-4 font-heading text-2xl font-bold text-tafera-text sm:text-3xl lg:text-4xl">
               Ready to share your journey?
             </h2>
-            <p className="mx-auto mb-10 max-w-xl leading-relaxed text-tafera-text-muted">
+            <p className="mx-auto mb-8 sm:mb-10 max-w-xl text-sm sm:text-base leading-relaxed text-tafera-text-muted">
               Whether you're writing about a place you've been or planning your
               next trip, Tafera is where your travel stories belong.
             </p>

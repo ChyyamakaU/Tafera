@@ -30,7 +30,7 @@ export default function PasswordInput({
     <div className="w-full">
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-tafera-text mb-1"
+        className="mb-2 block text-sm font-medium text-tafera-text"
       >
         {label}
       </label>

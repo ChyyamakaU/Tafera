@@ -58,12 +58,15 @@ html[data-theme="dark"] {
   html {
     color-scheme: light;
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
 
   body {
     font-family: var(--font-body);
     background-color: var(--color-tafera-bg);
     color: var(--color-tafera-text);
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
@@ -75,6 +78,7 @@ html[data-theme="dark"] {
   h6 {
     font-family: var(--font-heading);
     color: var(--color-tafera-text);
+    overflow-wrap: anywhere;
   }
 
   a {
@@ -96,8 +100,15 @@ html[data-theme="dark"] {
 
 .app-container {
   width: 100%;
+  max-width: 100%;
   margin-inline: auto;
-  padding-inline: 15px;
+  padding-inline: 16px;
+}
+
+@media (min-width: 640px) {
+  .app-container {
+    padding-inline: 24px;
+  }
 }
 
 /* Match the visitor homepage's section gutter (60px section + 15px inner). */

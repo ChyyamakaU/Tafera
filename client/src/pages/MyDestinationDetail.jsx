@@ -117,7 +117,7 @@ export default function MyDestinationDetail() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">
               Your contributions
             </p>
-            <h1 className="mt-1 text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
+            <h1 className="mt-1 text-2xl font-heading font-bold text-tafera-text sm:text-4xl">
               {destination.name}
             </h1>
             <p className="mt-2 text-sm text-tafera-text-muted">

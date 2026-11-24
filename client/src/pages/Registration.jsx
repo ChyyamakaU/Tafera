@@ -196,12 +196,12 @@ export default function Registration() {
 
   return (
     <div className="app-container max-w-3xl mx-auto py-8 sm:py-12 lg:py-16">
-      <div className="mb-8 text-center sm:mb-10">
+      <div className="mb-6 text-center sm:mb-10">
         <p className="inline-flex rounded-full bg-tafera-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">Join the community</p>
-        <h1 className="mt-4 text-3xl font-heading font-bold text-tafera-text sm:text-4xl lg:text-5xl">
+        <h1 className="mt-3 text-2xl font-heading font-bold text-tafera-text sm:mt-4 sm:text-4xl lg:text-5xl">
           Create an account
         </h1>
-        <p className="mx-auto mt-3 max-w-xl text-base text-tafera-text-muted sm:text-lg">
+        <p className="mx-auto mt-2.5 max-w-xl text-sm text-tafera-text-muted sm:mt-3 sm:text-lg">
           Join Tafera and start planning your journeys.
         </p>
       </div>
@@ -213,7 +213,7 @@ export default function Registration() {
       )}
 
       <form
-        className="space-y-7 rounded-2xl border border-tafera-border bg-tafera-surface p-6 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-base"
+        className="space-y-6 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-sm sm:[&_label]:text-base"
         onSubmit={handleSubmit}
       >
         <div>
@@ -265,9 +265,6 @@ export default function Registration() {
           )}
         </div>
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-tafera-text mb-1">
-            Password
-          </label>
           <PasswordInput
             id="password"
             value={form.password}
@@ -302,8 +299,8 @@ export default function Registration() {
         </p>
       </form>
 
-      <div className="mt-10 flex justify-end">
-        <Link asChild to="/">
+      <div className="mt-8 flex justify-end sm:mt-10">
+        <Link to="/">
           <Button variant="ghost">Back to home</Button>
         </Link>
       </div>

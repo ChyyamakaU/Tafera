@@ -21,17 +21,17 @@ const STEPS = [
 export default function HowItWorks() {
   return (
     <section
-      className="border-t border-tafera-border bg-tafera-bg py-14 sm:py-20 transition-colors"
+      className="border-t border-tafera-border bg-tafera-bg py-10 sm:py-20 transition-colors"
       aria-labelledby="how-it-works-heading"
     >
       <div className="app-container">
-        <div className="mx-auto mb-12 max-w-2xl text-center">
+        <div className="mx-auto mb-8 sm:mb-12 max-w-2xl text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tafera-primary">
             Simple from start to finish
           </p>
           <h2
             id="how-it-works-heading"
-            className="mt-2 font-heading text-3xl font-bold text-tafera-text sm:text-4xl"
+            className="mt-2 font-heading text-2xl font-bold text-tafera-text sm:text-3xl lg:text-4xl"
           >
             How it works
           </h2>

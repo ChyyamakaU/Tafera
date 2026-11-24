@@ -75,12 +75,12 @@ export default function Login() {
 
   return (
     <div className="app-container max-w-3xl mx-auto py-8 sm:py-12 lg:py-16">
-      <div className="mb-8 text-center sm:mb-10">
+      <div className="mb-6 text-center sm:mb-10">
         <p className="inline-flex rounded-full bg-tafera-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">Welcome back</p>
-        <h1 className="mt-4 text-3xl font-heading font-bold text-tafera-text sm:text-4xl lg:text-5xl">
+        <h1 className="mt-3 text-2xl font-heading font-bold text-tafera-text sm:mt-4 sm:text-4xl lg:text-5xl">
           Log in
         </h1>
-        <p className="mx-auto mt-3 max-w-xl text-base text-tafera-text-muted sm:text-lg">
+        <p className="mx-auto mt-2.5 max-w-xl text-sm text-tafera-text-muted sm:mt-3 sm:text-lg">
           Sign in to your Tafera account to continue.
         </p>
       </div>
@@ -109,7 +109,7 @@ export default function Login() {
       )}
 
       <form
-        className="space-y-7 rounded-2xl border border-tafera-border bg-tafera-surface p-6 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-base"
+        className="space-y-6 rounded-2xl border border-tafera-border bg-tafera-surface p-5 shadow-soft sm:space-y-8 sm:p-10 lg:p-12 [&_label]:text-sm sm:[&_label]:text-base"
         onSubmit={handleLogin}
       >
         <div>
@@ -152,7 +152,7 @@ export default function Login() {
             </p>
           )}
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-tafera-text-muted sm:text-base">
             <input type="checkbox" className="rounded border-tafera-border text-tafera-primary focus:ring-tafera-primary" />
             Remember me

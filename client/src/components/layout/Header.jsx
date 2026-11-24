@@ -210,7 +210,7 @@ export default function Header() {
           <div id={`${section.label.toLowerCase().replaceAll(' ', '-')}-menu`} className="absolute top-full left-0 mt-2 w-56 rounded-md border border-tafera-border bg-tafera-card shadow-card py-3 z-50">
             {section.items.map((item) => (
               <Link
-                key={item.to}
+                key={`${item.label}-${item.to}`}
                 to={item.to}
                 onClick={() => setOpenDropdown(null)}
                 className="block px-4 py-2.5 text-sm text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary"
@@ -341,17 +341,18 @@ export default function Header() {
 
   const mobileMenuButton = () => (
     <button
+      type="button"
       onClick={toggleMenu}
-      className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-md text-tafera-text hover:bg-tafera-surface focus:outline-none"
+      className="lg:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-tafera-border bg-tafera-card text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent"
       aria-expanded={menuOpen}
       aria-controls="tafera-mobile-menu"
       aria-label="Toggle navigation menu"
     >
       {menuOpen ? (
         <svg
-          className="w-5 h-5"
+          className="h-5 w-5"
           viewBox="0 0 24 24"
-          strokeWidth="1.5"
+          strokeWidth="1.75"
           stroke="currentColor"
           fill="none"
           aria-hidden="true"
@@ -360,9 +361,9 @@ export default function Header() {
         </svg>
       ) : (
         <svg
-          className="w-5 h-5"
+          className="h-5 w-5"
           viewBox="0 0 24 24"
-          strokeWidth="1.5"
+          strokeWidth="1.75"
           stroke="currentColor"
           fill="none"
           aria-hidden="true"
@@ -383,7 +384,7 @@ export default function Header() {
       } transition-all duration-300 ease-in-out border-t border-tafera-border mt-0`}
       aria-label="Mobile navigation"
     >
-      <div className="px-3 py-4 space-y-4">
+      <div className="app-container py-4 space-y-2">
         {platformAuthenticated ? AUTHENTICATED_NAV.map((item) => (
           <Link
             key={item.to}
@@ -395,40 +396,52 @@ export default function Header() {
             {item.label}
           </Link>
         )) : PUBLIC_NAV.map((section) => (
-          <div key={section.label}>
-            <button
-              onClick={() => setMobileOpenSection((current) => current === section.label ? null : section.label)}
-              className="flex items-center justify-between w-full px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
-              aria-expanded={mobileOpenSection === section.label}
+          section.to ? (
+            <Link
+              key={section.label}
+              to={section.to}
+              onClick={closeMenu}
+              className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-accent"
             >
               {section.label}
-              <svg
-                className="w-4 h-4 text-tafera-text-muted transition-transform duration-200"
-                viewBox="0 0 24 24"
-                strokeWidth="1.5"
-                stroke="currentColor"
-                fill="none"
-                style={{ transform: mobileOpenSection === section.label ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                aria-hidden="true"
+            </Link>
+          ) : (
+            <div key={section.label}>
+              <button
+                type="button"
+                onClick={() => setMobileOpenSection((current) => current === section.label ? null : section.label)}
+                className="flex items-center justify-between w-full px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
+                aria-expanded={mobileOpenSection === section.label}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {mobileOpenSection === section.label && section.items && (
-              <div className="ml-4 space-y-2 border-l border-tafera-border pl-4">
-                {section.items.map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={closeMenu}
-                    className="block px-3 py-2 text-sm text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+                {section.label}
+                <svg
+                  className="w-4 h-4 text-tafera-text-muted transition-transform duration-200"
+                  viewBox="0 0 24 24"
+                  strokeWidth="1.5"
+                  stroke="currentColor"
+                  fill="none"
+                  style={{ transform: mobileOpenSection === section.label ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {mobileOpenSection === section.label && section.items && (
+                <div className="ml-4 space-y-1 border-l border-tafera-border pl-4">
+                  {section.items.map((item) => (
+                    <Link
+                      key={`${item.label}-${item.to}`}
+                      to={item.to}
+                      onClick={closeMenu}
+                      className="block px-3 py-2 text-sm text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
         ))}
         <div className="pt-4 border-t border-tafera-border space-y-2">
           <button
@@ -548,7 +561,7 @@ export default function Header() {
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       aria-pressed={isDark}
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tafera-border bg-tafera-card text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-tafera-border bg-tafera-card text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent lg:h-9 lg:w-9"
     >
       {isDark ? (
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
@@ -568,16 +581,16 @@ export default function Header() {
         scrolled ? 'shadow-sm' : ''
       }`}
     >
-      <div className="app-container py-4">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-          <div className="justify-self-start">
+      <div className="app-container py-3 sm:py-4">
+        <div className="flex items-center justify-between gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:gap-4">
+          <div className="min-w-0 shrink-0 lg:justify-self-start">
             <Link
               to="/"
-              className="flex items-center gap-3 shrink-0"
+              className="flex items-center gap-2.5 shrink-0 sm:gap-3"
               aria-label="Tafera — travel platform home"
             >
-              <img src="/Tafera logo.svg" alt="Tafera" width="40" height="40" />
-              <span className="font-heading font-bold text-xl tracking-tight text-tafera-text">
+              <img src="/Tafera logo.svg" alt="Tafera" width="40" height="40" className="h-8 w-8 sm:h-10 sm:w-10" />
+              <span className="font-heading font-bold text-lg tracking-tight text-tafera-text sm:text-xl">
                 Tafera
               </span>
             </Link>
@@ -594,7 +607,7 @@ export default function Header() {
             {desktopAuth()}
           </div>
 
-          <div className="justify-self-end flex items-center gap-2 lg:hidden">
+          <div className="flex shrink-0 items-center gap-2.5 lg:hidden">
             {themeToggleButton()}
             {mobileMenuButton()}
           </div>

@@ -25,18 +25,18 @@ export default function UpcomingTrips() {
 
   return (
     <section
-      className="border-t border-tafera-border bg-tafera-surface py-14 sm:py-20 transition-colors"
+      className="border-t border-tafera-border bg-tafera-surface py-10 sm:py-20 transition-colors"
       aria-labelledby="trips-you-can-join-heading"
     >
       <div className="app-container">
-        <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-8 sm:mb-10 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tafera-primary">
               Open itineraries
             </p>
             <h2
               id="trips-you-can-join-heading"
-              className="mt-2 font-heading text-3xl font-bold text-tafera-text sm:text-4xl"
+              className="mt-2 font-heading text-2xl font-bold text-tafera-text sm:text-3xl lg:text-4xl"
             >
               Trips You Can Join
             </h2>

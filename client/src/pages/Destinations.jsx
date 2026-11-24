@@ -85,10 +85,10 @@ export default function Destinations() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-tafera-primary">
             Community gallery
           </p>
-          <h1 className="mt-1 text-3xl font-heading font-bold text-tafera-text sm:text-4xl">
+          <h1 className="mt-1 text-2xl font-heading font-bold text-tafera-text sm:text-4xl">
             Explore Destinations
           </h1>
-          <p className="mt-3 text-base text-tafera-text-muted">
+          <p className="mt-2.5 text-sm text-tafera-text-muted sm:mt-3 sm:text-base">
             Real places, shared by Tafera travellers. Discover a destination
             through the moments people have captured there.
           </p>

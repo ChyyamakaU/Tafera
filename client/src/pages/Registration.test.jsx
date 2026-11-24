@@ -73,6 +73,7 @@ describe('Registration rendering', () => {
     expect(screen.getByLabelText('Full name')).toBeInTheDocument()
     expect(screen.getByLabelText('Email address')).toBeInTheDocument()
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.getAllByText('Password')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument()
   })
 

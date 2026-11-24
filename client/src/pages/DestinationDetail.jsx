@@ -230,7 +230,7 @@ export default function DestinationDetail() {
           {/* Right column: content */}
           <div className="lg:col-span-5 flex flex-col">
             <h1
-              className="text-3xl sm:text-4xl font-heading font-bold text-tafera-text mb-2 leading-tight"
+              className="text-2xl sm:text-4xl font-heading font-bold text-tafera-text mb-2 leading-tight"
             >
               {destination.name}
             </h1>

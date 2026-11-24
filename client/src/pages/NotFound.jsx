@@ -5,10 +5,10 @@ export default function NotFound() {
   return (
     <div className="app-container max-w-2xl mx-auto">
       <div className="mb-8 text-center">
-        <h1 className="text-6xl font-heading font-bold text-tafera-primary">
+        <h1 className="text-5xl font-heading font-bold text-tafera-primary sm:text-6xl">
           404
         </h1>
-        <h2 className="mt-2 text-2xl font-heading font-bold text-tafera-text">
+        <h2 className="mt-2 text-xl font-heading font-bold text-tafera-text sm:text-2xl">
           Page not found
         </h2>
         <p className="mt-4 text-tafera-text-muted">
