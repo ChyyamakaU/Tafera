@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthContext } from '../../contexts/AuthContext'
 import Header from './Header'
+import { fetchUnreadCount } from '../../services/notifications'
+
+vi.mock('../../services/notifications', () => ({
+  fetchUnreadCount: vi.fn(),
+}))
+
+const mockFetchUnreadCount = vi.mocked(fetchUnreadCount)
 
 const renderWithAuth = (
   authState = { isAuthenticated: false, isLoading: false, user: null },
@@ -30,10 +37,12 @@ const renderWithAuth = (
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mockFetchUnreadCount.mockResolvedValue(0)
   sessionStorage.clear()
 })
 
 afterEach(() => {
+  cleanup()
   sessionStorage.clear()
 })
 
@@ -45,7 +54,7 @@ describe('Header unauthenticated state', () => {
 
   it('displays logo and guest auth actions when unauthenticated', () => {
     renderWithAuth({ isAuthenticated: false, isLoading: false, user: null })
-    expect(screen.getByAltText('Tafera')).toBeInTheDocument()
+    expect(screen.getAllByAltText('Tafera').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Join for Free' })).toBeInTheDocument()
     expect(screen.queryByText('Profile')).not.toBeInTheDocument()
@@ -106,13 +115,42 @@ describe('Header authenticated state', () => {
     expect(screen.getByText('Profile')).toBeInTheDocument()
   })
 
-  it('does not render Notifications in the header for authenticated users', () => {
+  it('keeps Notifications out of the desktop header bar while showing avatar, Notifications, and Hamburger on mobile only', async () => {
+    mockFetchUnreadCount.mockResolvedValue(4)
     renderWithAuth({
       isAuthenticated: true,
       isLoading: false,
-      user: { id: '1', email: 'test@example.com', role: 'user' },
+      user: {
+        id: '1',
+        fullName: 'Ada Traveller',
+        email: 'test@example.com',
+        profileImage: 'https://example.com/ada.jpg',
+        role: 'user',
+      },
     })
-    expect(screen.queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument()
+
+    const desktopBar = screen.getByTestId('desktop-header-bar')
+    expect(within(desktopBar).queryByRole('link', { name: /Notifications/i })).not.toBeInTheDocument()
+    expect(within(desktopBar).getAllByRole('button', { name: /Switch to (dark|light) mode/i }).length).toBeGreaterThan(0)
+
+    const mobileBar = screen.getByTestId('mobile-header-bar')
+    expect(mobileBar.className).toContain('md:hidden')
+    // Left: logo, Center: avatar only (no name / no My Travels), Far right: Notifications + Hamburger (no theme toggle)
+    expect(within(mobileBar).getByAltText("Ada Traveller's avatar")).toBeInTheDocument()
+    expect(within(mobileBar).queryByText('Ada Traveller')).not.toBeInTheDocument()
+    expect(within(mobileBar).queryByText('My Travels')).not.toBeInTheDocument()
+    expect(within(mobileBar).queryByRole('button', { name: /Switch to (dark|light) mode/i })).not.toBeInTheDocument()
+    expect(await within(mobileBar).findByRole('link', { name: 'Notifications (4 unread)' })).toHaveAttribute('href', '/notifications')
+    expect(within(mobileBar).getByRole('button', { name: 'Toggle navigation menu' })).toBeInTheDocument()
+
+    // Mobile drawer groups My Profile (with name), My Travels, Notifications, and Appearance theme toggle
+    const drawer = screen.getByRole('navigation', { name: 'Mobile navigation' })
+    expect(within(drawer).getByText('Ada Traveller')).toBeInTheDocument()
+    expect(within(drawer).getByRole('link', { name: /My Profile/i })).toHaveAttribute('href', '/profile')
+    expect(within(drawer).getByRole('button', { name: 'My Travels' })).toBeInTheDocument()
+    expect(within(drawer).getByRole('link', { name: /Notifications/i })).toHaveAttribute('href', '/notifications')
+    expect(within(drawer).getByText('Appearance')).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: /Theme:/i })).toBeInTheDocument()
   })
 
   it('gives an unverified account public navigation plus verification and logout only', () => {

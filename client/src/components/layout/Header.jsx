@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
+import { fetchUnreadCount } from '../../services/notifications'
+
+const MOBILE_TRAVEL_LINKS = [
+  { label: 'My Trips', to: '/trips' },
+  { label: 'Scrapbooks', to: '/scrapbooks' },
+  { label: 'My Destinations', to: '/my-destinations' },
+  { label: 'My Group Trips', to: '/group-travel' },
+]
 
 const PUBLIC_NAV = [
   {
@@ -59,6 +67,8 @@ export default function Header() {
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState(null)
   const [mobileOpenSection, setMobileOpenSection] = useState(null)
+  const [mobileTravelsOpen, setMobileTravelsOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [scrolled, setScrolled] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
@@ -159,9 +169,51 @@ export default function Header() {
     setOpenDropdown(null)
     setMenuOpen(false)
     setMobileOpenSection(null)
+    setMobileTravelsOpen(false)
     setProfileMenuOpen(false)
     setMobileAccountOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!platformAuthenticated) {
+      setUnreadCount(0)
+      return undefined
+    }
+
+    let active = true
+    let requestSeq = 0
+
+    const refreshUnreadCount = async () => {
+      const currentSeq = ++requestSeq
+      try {
+        const count = await fetchUnreadCount()
+        if (active && currentSeq === requestSeq && typeof count === 'number') {
+          setUnreadCount(count)
+        }
+      } catch {
+        // Unread badge failure should never disrupt navigation.
+      }
+    }
+
+    const handleNotificationsUpdated = (event) => {
+      const detail = event?.detail
+      if (typeof detail?.unreadCount === 'number') {
+        requestSeq += 1
+        setUnreadCount(Math.max(0, detail.unreadCount))
+      } else if (typeof detail?.delta === 'number') {
+        requestSeq += 1
+        setUnreadCount((count) => Math.max(0, count + detail.delta))
+      }
+      refreshUnreadCount()
+    }
+
+    refreshUnreadCount()
+    window.addEventListener('tafera:notifications-updated', handleNotificationsUpdated)
+    return () => {
+      active = false
+      window.removeEventListener('tafera:notifications-updated', handleNotificationsUpdated)
+    }
+  }, [platformAuthenticated])
 
   const navLinkItem = (section) => {
     if (section.to) {
@@ -443,17 +495,25 @@ export default function Header() {
             </div>
           )
         ))}
-        <div className="pt-4 border-t border-tafera-border space-y-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-pressed={isDark}
-            className="flex w-full items-center justify-between rounded-md border border-tafera-border bg-tafera-card px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
-          >
-            <span>{isDark ? 'Light mode' : 'Dark mode'}</span>
-            <span className="text-xs text-tafera-text-muted">{isDark ? 'Dark active' : 'Light active'}</span>
-          </button>
+        <div className="pt-4 border-t border-tafera-border space-y-3">
           {isAuthenticated ? renderMobileAuthLinks() : renderMobileGuestLinks()}
+
+          <div className="pt-3 border-t border-tafera-border">
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-tafera-text-muted">
+              Appearance
+            </p>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-pressed={isDark}
+              className="flex w-full items-center justify-between rounded-md border border-tafera-border bg-tafera-card px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-surface"
+            >
+              <span>Theme: {isDark ? 'Dark' : 'Light'}</span>
+              <span className="text-xs font-medium text-tafera-primary">
+                Switch to {isDark ? 'light' : 'dark'}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </nav>
@@ -482,19 +542,40 @@ export default function Header() {
     </>
   )
 
+  const userInitial = (user?.fullName || user?.email || 'U').slice(0, 1).toUpperCase()
+
   const renderMobileAuthLinks = () => (
-    <>
-      <div ref={mobileAccountRef}>
-        <button
-          type="button"
-          onClick={() => setMobileAccountOpen((open) => !open)}
-          className="block w-full rounded-md px-3 py-3 text-left text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface"
-          aria-expanded={mobileAccountOpen}
-        >Account</button>
-        {mobileAccountOpen && <div className="mx-3 mb-2 rounded-md border border-tafera-border bg-tafera-card py-1 shadow-card">{renderProfileLinks()}</div>}
-      </div>
-      {!mobileAccountOpen && !isEmailVerified && (
+    <div className="space-y-2">
+      <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-tafera-text-muted">
+        Your Profile
+      </p>
+
+      {!isEmailVerified ? (
         <>
+          <div className="flex items-center gap-3 rounded-lg border border-tafera-border bg-tafera-surface px-3 py-2.5">
+            {user?.profileImage ? (
+              <img
+                src={user.profileImage}
+                alt={user?.fullName || 'Your profile'}
+                className="h-9 w-9 shrink-0 rounded-full border border-tafera-border object-cover"
+              />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-tafera-border bg-tafera-card text-sm font-semibold text-tafera-primary"
+              >
+                {userInitial}
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-tafera-text">
+                {user?.fullName || 'Your account'}
+              </p>
+              {user?.email && (
+                <p className="truncate text-xs text-tafera-text-muted">{user.email}</p>
+              )}
+            </div>
+          </div>
           <Link
             key="verify-email"
             to="/verify-email"
@@ -505,6 +586,7 @@ export default function Header() {
           </Link>
           <button
             key="resend-verification"
+            type="button"
             onClick={handleResendVerification}
             disabled={resendLoading}
             className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
@@ -513,6 +595,7 @@ export default function Header() {
           </button>
           <button
             key="log-out"
+            type="button"
             onClick={handleLogout}
             disabled={logoutLoading}
             className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
@@ -525,33 +608,153 @@ export default function Header() {
             </div>
           )}
         </>
-      )}
-      {!mobileAccountOpen && isEmailVerified && (
-        <>
-          {PROFILE_MENU_ITEMS.map((item) =>
-            item.to ? (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={closeMenu}
-                className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors"
-              >
-                {item.label}
-              </Link>
+      ) : (
+        <div className="space-y-1 rounded-lg border border-tafera-border bg-tafera-surface p-2">
+          <Link
+            to="/profile"
+            onClick={closeMenu}
+            className="flex items-center gap-3 rounded-md px-2.5 py-2 transition-colors hover:bg-tafera-card"
+          >
+            {user?.profileImage ? (
+              <img
+                src={user.profileImage}
+                alt={user?.fullName || 'Your profile'}
+                className="h-9 w-9 shrink-0 rounded-full border border-tafera-border object-cover"
+              />
             ) : (
-              <button
-                key={item.label}
-                onClick={handleLogout}
-                disabled={logoutLoading}
-                className="block px-3 py-3 rounded-md text-sm font-nav font-medium text-tafera-text hover:bg-tafera-surface hover:text-tafera-accent transition-colors text-left w-full"
+              <span
+                aria-hidden="true"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-tafera-border bg-tafera-card text-sm font-semibold text-tafera-primary"
               >
-                {logoutLoading ? 'Signing out...' : item.label}
-              </button>
-            ),
-          )}
-        </>
+                {userInitial}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-tafera-text">
+                {user?.fullName || 'My Profile'}
+              </p>
+              <p className="text-xs font-medium text-tafera-primary">My Profile</p>
+            </div>
+          </Link>
+
+          <div className="border-t border-tafera-border pt-1">
+            <button
+              type="button"
+              onClick={() => setMobileTravelsOpen((open) => !open)}
+              aria-expanded={mobileTravelsOpen}
+              aria-controls="mobile-drawer-travels"
+              className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
+            >
+              <span>My Travels</span>
+              <svg
+                className="h-4 w-4 text-tafera-text-muted transition-transform duration-200"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden="true"
+                style={{ transform: mobileTravelsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {mobileTravelsOpen && (
+              <div
+                id="mobile-drawer-travels"
+                className="ml-3 mb-1 space-y-0.5 border-l border-tafera-border pl-3"
+              >
+                {MOBILE_TRAVEL_LINKS.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={closeMenu}
+                    className="block rounded-md px-3 py-2 text-sm text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            <Link
+              to="/notifications"
+              onClick={closeMenu}
+              className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
+            >
+              <span>Notifications</span>
+              {unreadCount > 0 && (
+                <span
+                  className="inline-flex min-w-5 items-center justify-center rounded-full bg-tafera-accent px-1.5 py-0.5 text-[10px] font-bold text-tafera-on-accent"
+                  aria-label={`${unreadCount} unread notifications`}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          </div>
+
+          <div className="border-t border-tafera-border pt-1">
+            {PROFILE_MENU_ITEMS.filter((item) => item.to !== '/profile' && item.to !== '/scrapbooks').map((item) =>
+              item.to ? (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={closeMenu}
+                  className="block rounded-md px-3 py-2.5 text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={logoutLoading}
+                  className="block w-full rounded-md px-3 py-2.5 text-left text-sm font-nav font-medium text-tafera-text transition-colors hover:bg-tafera-card hover:text-tafera-primary"
+                >
+                  {logoutLoading ? 'Signing out...' : item.label}
+                </button>
+              ),
+            )}
+          </div>
+        </div>
       )}
-    </>
+    </div>
+  )
+
+  const mobileNotificationsButton = () => (
+    <Link
+      to="/notifications"
+      aria-label={
+        unreadCount > 0
+          ? `Notifications (${unreadCount} unread)`
+          : 'Notifications'
+      }
+      className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-tafera-border bg-tafera-card text-tafera-text transition-colors hover:bg-tafera-surface hover:text-tafera-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent"
+    >
+      <svg
+        className="h-5 w-5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+        />
+      </svg>
+      {unreadCount > 0 && (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -top-1 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-tafera-accent px-1 py-0.5 text-[10px] font-bold leading-none text-tafera-on-accent"
+        >
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
+    </Link>
   )
 
   const themeToggleButton = () => (
@@ -582,15 +785,65 @@ export default function Header() {
       }`}
     >
       <div className="app-container py-3 sm:py-4">
-        <div className="flex items-center justify-between gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:gap-4">
+        {/* Mobile header bar (< 768px only) */}
+        <div
+          data-testid="mobile-header-bar"
+          className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:hidden"
+        >
+          <div className="min-w-0 justify-self-start">
+            <Link
+              to="/"
+              className="flex items-center gap-2 shrink-0"
+              aria-label="Tafera — travel platform home"
+            >
+              <img src="/Tafera logo.svg" alt="Tafera" width="32" height="32" className="h-8 w-8" />
+              <span className="font-heading font-bold text-lg tracking-tight text-tafera-text">
+                Tafera
+              </span>
+            </Link>
+          </div>
+
+          <div className="justify-self-center">
+            {isAuthenticated ? (
+              <Link
+                to="/profile"
+                aria-label="Open profile"
+                className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-tafera-border bg-tafera-surface text-sm font-semibold text-tafera-primary transition-colors hover:border-tafera-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-tafera-accent"
+              >
+                {user?.profileImage ? (
+                  <img
+                    src={user.profileImage}
+                    alt={user?.fullName ? `${user.fullName}'s avatar` : 'Profile avatar'}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span aria-hidden="true">{userInitial}</span>
+                )}
+              </Link>
+            ) : (
+              <span className="block h-9 w-9" aria-hidden="true" />
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2.5 justify-self-end">
+            {platformAuthenticated && mobileNotificationsButton()}
+            {mobileMenuButton()}
+          </div>
+        </div>
+
+        {/* Tablet & Desktop header bar (>= 768px — unchanged) */}
+        <div
+          data-testid="desktop-header-bar"
+          className="hidden md:flex md:items-center md:justify-between md:gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:gap-4"
+        >
           <div className="min-w-0 shrink-0 lg:justify-self-start">
             <Link
               to="/"
-              className="flex items-center gap-2.5 shrink-0 sm:gap-3"
+              className="flex items-center gap-3 shrink-0"
               aria-label="Tafera — travel platform home"
             >
-              <img src="/Tafera logo.svg" alt="Tafera" width="40" height="40" className="h-8 w-8 sm:h-10 sm:w-10" />
-              <span className="font-heading font-bold text-lg tracking-tight text-tafera-text sm:text-xl">
+              <img src="/Tafera logo.svg" alt="Tafera" width="40" height="40" className="h-10 w-10" />
+              <span className="font-heading font-bold text-xl tracking-tight text-tafera-text">
                 Tafera
               </span>
             </Link>
